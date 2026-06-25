@@ -516,6 +516,47 @@ struct SceneRenderer::Impl {
         return true;
     }
 
+    bool replayPreparedWithState(std::unique_ptr<PreparedRenderOps>& prepared,
+                                 SceneNode const& node,
+                                 Point translation,
+                                 Mat3 const* transform,
+                                 float opacity,
+                                 bool collectCounters) {
+        if (!prepared) {
+            return false;
+        }
+        bool const needsState = !isZeroOffset(translation) ||
+                                (transform && !isIdentityTransform(*transform)) ||
+                                opacity != 1.f;
+        if (needsState) {
+            renderer->save();
+            if (!isZeroOffset(translation)) {
+                renderer->translate(translation);
+            }
+            if (transform && !isIdentityTransform(*transform)) {
+                renderer->transform(*transform);
+            }
+            if (opacity != 1.f) {
+                renderer->setOpacity(opacity);
+            }
+        }
+        if (collectCounters) {
+            debug::perf::recordPreparedReplayCall();
+        }
+        bool const replayed = prepared->replay(*renderer);
+        if (collectCounters) {
+            debug::perf::recordPreparedReplayResult(replayed);
+        }
+        if (needsState) {
+            renderer->restore();
+        }
+        if (!replayed && !prepared->reusableAfterReplayFailure()) {
+            prepared.reset();
+            detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
+        }
+        return replayed;
+    }
+
     std::unique_ptr<PreparedRenderOps> prepareSubtree(SceneNode const &node) {
         Canvas *canvas = renderer->canvas();
         if (!canvas) {
@@ -608,27 +649,8 @@ struct SceneRenderer::Impl {
                 }
             }
             if (prepared) {
-                bool const needsState = !isZeroOffset(accumulatedTranslation) || nodeOpacity != 1.f;
-                if (needsState) {
-                    renderer->save();
-                    if (!isZeroOffset(accumulatedTranslation)) {
-                        renderer->translate(accumulatedTranslation);
-                    }
-                    if (nodeOpacity != 1.f) {
-                        renderer->setOpacity(nodeOpacity);
-                    }
-                }
-                if (collectCounters) {
-                    debug::perf::recordPreparedReplayCall();
-                }
-                bool const replayed = prepared->replay(*renderer);
-                if (collectCounters) {
-                    debug::perf::recordPreparedReplayResult(replayed);
-                }
-                if (needsState) {
-                    renderer->restore();
-                }
-                if (replayed) {
+                if (replayPreparedWithState(prepared, node, accumulatedTranslation, nullptr,
+                                            nodeOpacity, collectCounters)) {
                     return;
                 }
             }
@@ -667,42 +689,8 @@ struct SceneRenderer::Impl {
             std::unique_ptr<PreparedRenderOps> &prepared =
                 detail::SceneNodeAccess::preparedRenderOps(node);
             refreshPreparedLeafForCurrentKey(node);
-            auto replayPrepared = [&]() {
-                if (!prepared) {
-                    return false;
-                }
-                bool const needsState = !isZeroOffset(accumulatedTranslation) ||
-                                        !isIdentityTransform(node.transform()) ||
-                                        nodeOpacity != 1.f;
-                if (needsState) {
-                    renderer->save();
-                    if (!isZeroOffset(accumulatedTranslation)) {
-                        renderer->translate(accumulatedTranslation);
-                    }
-                    if (!isIdentityTransform(node.transform())) {
-                        renderer->transform(node.transform());
-                    }
-                    if (nodeOpacity != 1.f) {
-                        renderer->setOpacity(nodeOpacity);
-                    }
-                }
-                if (collectCounters) {
-                    debug::perf::recordPreparedReplayCall();
-                }
-                bool const replayed = prepared->replay(*renderer);
-                if (collectCounters) {
-                    debug::perf::recordPreparedReplayResult(replayed);
-                }
-                if (needsState) {
-                    renderer->restore();
-                }
-                if (!replayed && !prepared->reusableAfterReplayFailure()) {
-                    prepared.reset();
-                    detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
-                }
-                return replayed;
-            };
-            if (replayPrepared()) {
+            if (replayPreparedWithState(prepared, node, accumulatedTranslation, &node.transform(),
+                                        nodeOpacity, collectCounters)) {
                 return;
             }
         }
@@ -740,18 +728,8 @@ struct SceneRenderer::Impl {
                     }
                     node.render(*renderer);
                 } else {
-                    if (collectCounters) {
-                        debug::perf::recordPreparedReplayCall();
-                    }
-                    bool const replayed = prepared->replay(*renderer);
-                    if (collectCounters) {
-                        debug::perf::recordPreparedReplayResult(replayed);
-                    }
-                    if (!replayed) {
-                        if (!prepared->reusableAfterReplayFailure()) {
-                            prepared.reset();
-                            detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
-                        }
+                    if (!replayPreparedWithState(prepared, node, Point {}, nullptr, 1.f,
+                                                 collectCounters)) {
                         if (collectCounters) {
                             debug::perf::recordLiveLeafRender();
                         }
