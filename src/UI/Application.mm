@@ -764,7 +764,7 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
     if (hasFrameReady) {
       state.frameReady = false;
       state.frameBudgetPending = false;
-      w->platformWindow()->completeAnimationFrame((rendered && keepFramePump) || state.redrawRequested);
+      w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
     } else if (rendered && !requireFrameReady) {
       w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
     }

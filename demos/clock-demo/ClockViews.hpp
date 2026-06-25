@@ -70,7 +70,9 @@ inline lambdaui::Signal<ClockSnapshot> useClock() {
     if (next.rawSecondOfDay != lastRawSecond) {
       lastRawSecond = next.rawSecondOfDay;
       clock = std::move(next);
+      return lambdaui::FrameAction::ContinueAndRedraw;
     }
+    return lambdaui::FrameAction::Continue;
   });
 
   return clock;
