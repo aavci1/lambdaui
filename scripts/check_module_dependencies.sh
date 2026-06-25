@@ -1,17 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-LAMBDA_INCLUDE_DIR="lambda/include"
-LAMBDA_SOURCE_DIR="lambda/src"
+LAMBDA_INCLUDE_DIR="include"
+LAMBDA_SOURCE_DIR="src"
+
+require_dir() {
+  local path="$1"
+  if [[ ! -d "$path" ]]; then
+    printf 'required scan directory does not exist: %s\n' "$path" >&2
+    return 1
+  fi
+}
+
+scanned_header_files=0
+scanned_source_files=0
 
 check_module() {
   local name="$1"
   local path="$2"
   local allowed="$3"
   local violations
+  local count
+
+  require_dir "$path"
+  count="$(find "$path" -type f -name '*.hpp' | wc -l | tr -d '[:space:]')"
+  scanned_header_files=$((scanned_header_files + count))
 
   violations="$(grep -Rnh '^#include <Lambda/' "$path" | grep -v "$allowed" || true)"
   if [[ -n "$violations" ]]; then
@@ -25,10 +41,11 @@ check_source_module() {
   local path="$2"
   local allowed="$3"
   local violations
+  local count
 
-  if [[ ! -d "$path" ]]; then
-    return 0
-  fi
+  require_dir "$path"
+  count="$(find "$path" -type f \( -name '*.hpp' -o -name '*.cpp' -o -name '*.mm' -o -name '*.c' \) | wc -l | tr -d '[:space:]')"
+  scanned_source_files=$((scanned_source_files + count))
 
   violations="$(
     grep -RnE '^#include[[:space:]]+[<"]((Lambda/)?(Detail|Core|Reactive|Graphics|SceneGraph|Layout|UI)/)' "$path" |
@@ -52,3 +69,6 @@ check_source_module "Reactive" "$LAMBDA_SOURCE_DIR/Reactive/" '(<Lambda/(Core|De
 check_source_module "Graphics" "$LAMBDA_SOURCE_DIR/Graphics/" '(<Lambda/(Core|Detail|Graphics)/)|"(Core|Detail|Graphics)/'
 check_source_module "SceneGraph" "$LAMBDA_SOURCE_DIR/SceneGraph/" '(<Lambda/(Core|Reactive|Graphics|Detail|SceneGraph)/)|"(Core|Reactive|Graphics|Detail|SceneGraph)/'
 check_source_module "Layout" "$LAMBDA_SOURCE_DIR/Layout/" '(<Lambda/(Core|SceneGraph|Detail|Layout)/)|"(Core|SceneGraph|Detail|Layout)/'
+
+printf 'Module dependency scan passed (%d headers, %d source files inspected).\n' \
+  "$scanned_header_files" "$scanned_source_files"

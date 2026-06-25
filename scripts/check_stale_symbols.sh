@@ -2,18 +2,30 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-LAMBDA_INCLUDE_DIR="lambda/include"
-LAMBDA_SOURCE_DIR="lambda/src"
-LAMBDA_TESTS_DIR="lambda/tests"
+LAMBDA_INCLUDE_DIR="include"
+LAMBDA_SOURCE_DIR="src"
+LAMBDA_TESTS_DIR="tests"
 
 failures=()
 
 add_failure() {
   failures+=("$1")
 }
+
+require_dir() {
+  local path="$1"
+  if [[ ! -d "$path" ]]; then
+    printf 'required scan directory does not exist: %s\n' "$path" >&2
+    exit 1
+  fi
+}
+
+require_dir "$LAMBDA_INCLUDE_DIR"
+require_dir "$LAMBDA_SOURCE_DIR"
+require_dir "$LAMBDA_TESTS_DIR"
 
 is_allowed_header_only_class() {
   case "$1" in
@@ -116,4 +128,8 @@ if ((${#failures[@]} > 0)); then
   exit 1
 fi
 
-printf 'Stale symbol scan passed.\n'
+header_count="$(find "$LAMBDA_INCLUDE_DIR" -type f -name '*.hpp' | wc -l | tr -d '[:space:]')"
+source_count="$(find "$LAMBDA_SOURCE_DIR" -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.mm' \) | wc -l | tr -d '[:space:]')"
+test_count="$(find "$LAMBDA_TESTS_DIR" -type f \( -name '*.cpp' -o -name '*.mm' -o -name '*.hpp' \) | wc -l | tr -d '[:space:]')"
+printf 'Stale symbol scan passed (%d headers, %d source files, %d test files inspected).\n' \
+  "$header_count" "$source_count" "$test_count"
