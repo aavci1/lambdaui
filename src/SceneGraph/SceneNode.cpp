@@ -264,6 +264,7 @@ void SceneNode::appendChild(std::unique_ptr<SceneNode> child) {
     }
     child->parent_ = this;
     children_.push_back(std::move(child));
+    invalidateStructuralCaches();
     markSubtreeDirty();
 }
 
@@ -280,6 +281,7 @@ void SceneNode::insertChild(std::size_t index, std::unique_ptr<SceneNode> child)
     child->parent_ = this;
     children_.insert(children_.begin() + static_cast<std::ptrdiff_t>(index),
                            std::move(child));
+    invalidateStructuralCaches();
     markSubtreeDirty();
 }
 
@@ -295,6 +297,7 @@ std::unique_ptr<SceneNode> SceneNode::removeChild(SceneNode &child) {
     std::unique_ptr<SceneNode> removed = std::move(*it);
     children_.erase(it);
     removed->parent_ = nullptr;
+    invalidateStructuralCaches();
     markSubtreeDirty();
     return removed;
 }
@@ -305,6 +308,7 @@ std::vector<std::unique_ptr<SceneNode>> SceneNode::releaseChildren() {
         child->parent_ = nullptr;
     }
     children_.clear();
+    invalidateStructuralCaches();
     markSubtreeDirty();
     return released;
 }
@@ -328,6 +332,7 @@ void SceneNode::replaceChildren(std::vector<std::unique_ptr<SceneNode>> children
         child->parent_ = this;
         children_.push_back(std::move(child));
     }
+    invalidateStructuralCaches();
     markSubtreeDirty();
 }
 
@@ -361,6 +366,12 @@ void SceneNode::markSubtreeDirty() noexcept {
         } else {
             node->subtreeDirty_ = true;
         }
+    }
+}
+
+void SceneNode::invalidateStructuralCaches() noexcept {
+    for (SceneNode *node = this; node; node = node->parent_) {
+        node->cachedSubtreeHasRasterCache_.reset();
     }
 }
 

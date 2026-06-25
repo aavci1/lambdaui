@@ -69,15 +69,6 @@ bool canReplayPreparedLeaf(SceneNode const& node) {
            !static_cast<RectNode const&>(node).clipsContents();
 }
 
-bool subtreeContainsRasterCache(SceneNode const& node) {
-    for (std::unique_ptr<SceneNode> const& child : node.children()) {
-        if (child->kind() == SceneNodeKind::RasterCache || subtreeContainsRasterCache(*child)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool canReplayPreparedGroup(SceneNode const& node) {
     Rect const bounds = detail::subtreeLocalVisualBounds(node);
     return node.kind() == SceneNodeKind::Group &&
@@ -86,7 +77,7 @@ bool canReplayPreparedGroup(SceneNode const& node) {
            bounds.width > 0.f &&
            bounds.height > 0.f &&
            isIdentityTransform(node.transform()) &&
-           !subtreeContainsRasterCache(node);
+           !detail::subtreeHasRasterCache(node);
 }
 
 void clearSubtreeDirtyRecursive(SceneNode const& node) noexcept {

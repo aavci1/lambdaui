@@ -3,6 +3,7 @@
 #include <Lambda/SceneGraph/SceneNode.hpp>
 
 #include <algorithm>
+#include <cstdint>
 
 namespace lambdaui::scenegraph::detail {
 
@@ -50,6 +51,32 @@ inline Rect subtreeLocalVisualBounds(SceneNode const& node) noexcept {
   }
   node.cachedSubtreeVisualBounds_ = bounds;
   return bounds;
+}
+
+inline std::uint64_t& subtreeRasterCacheComputeCountForTesting() noexcept {
+  static std::uint64_t count = 0;
+  return count;
+}
+
+inline void resetSubtreeRasterCacheComputeCountForTesting() noexcept {
+  subtreeRasterCacheComputeCountForTesting() = 0;
+}
+
+inline bool subtreeHasRasterCache(SceneNode const& node) noexcept {
+  if (node.cachedSubtreeHasRasterCache_) {
+    return *node.cachedSubtreeHasRasterCache_;
+  }
+
+  ++subtreeRasterCacheComputeCountForTesting();
+  bool hasRasterCache = false;
+  for (std::unique_ptr<SceneNode> const& child : node.children()) {
+    if (child->kind() == SceneNodeKind::RasterCache || subtreeHasRasterCache(*child)) {
+      hasRasterCache = true;
+      break;
+    }
+  }
+  node.cachedSubtreeHasRasterCache_ = hasRasterCache;
+  return hasRasterCache;
 }
 
 } // namespace lambdaui::scenegraph::detail

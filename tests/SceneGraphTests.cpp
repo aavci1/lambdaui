@@ -788,6 +788,50 @@ TEST_CASE("subtree visual bounds are cached and invalidated by subtree mutations
     CHECK(childBoundsCalls == 2);
 }
 
+TEST_CASE("subtree raster-cache predicate is memoized until structural mutation") {
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 100.f, 100.f});
+    auto branch = std::make_unique<SceneNode>(Rect {0.f, 0.f, 80.f, 80.f});
+    SceneNode* branchNode = branch.get();
+    auto leaf = std::make_unique<RectNode>(
+        Rect {4.f, 5.f, 20.f, 12.f}, FillStyle::solid(Colors::red));
+    RectNode* leafNode = leaf.get();
+    branch->appendChild(std::move(leaf));
+    root->appendChild(std::move(branch));
+
+    lambdaui::scenegraph::detail::resetSubtreeRasterCacheComputeCountForTesting();
+    CHECK_FALSE(lambdaui::scenegraph::detail::subtreeHasRasterCache(*root));
+    std::uint64_t const firstComputeCount =
+        lambdaui::scenegraph::detail::subtreeRasterCacheComputeCountForTesting();
+    CHECK(firstComputeCount > 0);
+
+    CHECK_FALSE(lambdaui::scenegraph::detail::subtreeHasRasterCache(*root));
+    CHECK(lambdaui::scenegraph::detail::subtreeRasterCacheComputeCountForTesting() ==
+          firstComputeCount);
+
+    leafNode->setFill(FillStyle::solid(Colors::blue));
+    CHECK_FALSE(lambdaui::scenegraph::detail::subtreeHasRasterCache(*root));
+    CHECK(lambdaui::scenegraph::detail::subtreeRasterCacheComputeCountForTesting() ==
+          firstComputeCount);
+
+    auto raster = std::make_unique<RasterCacheNode>(Rect {0.f, 0.f, 10.f, 10.f});
+    RasterCacheNode* rasterNode = raster.get();
+    branchNode->appendChild(std::move(raster));
+    CHECK(lambdaui::scenegraph::detail::subtreeHasRasterCache(*root));
+    std::uint64_t const afterAddComputeCount =
+        lambdaui::scenegraph::detail::subtreeRasterCacheComputeCountForTesting();
+    CHECK(afterAddComputeCount > firstComputeCount);
+
+    CHECK(lambdaui::scenegraph::detail::subtreeHasRasterCache(*root));
+    CHECK(lambdaui::scenegraph::detail::subtreeRasterCacheComputeCountForTesting() ==
+          afterAddComputeCount);
+
+    std::unique_ptr<SceneNode> removed = branchNode->removeChild(*rasterNode);
+    REQUIRE(removed.get() == rasterNode);
+    CHECK_FALSE(lambdaui::scenegraph::detail::subtreeHasRasterCache(*root));
+    CHECK(lambdaui::scenegraph::detail::subtreeRasterCacheComputeCountForTesting() >
+          afterAddComputeCount);
+}
+
 TEST_CASE("SceneNode setBounds position changes dirty the owning subtree") {
     auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 100.f, 100.f});
     auto child = std::make_unique<SceneNode>(Rect {5.f, 6.f, 20.f, 20.f});

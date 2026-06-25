@@ -33,6 +33,7 @@ namespace detail {
 struct SceneNodeAccess;
 bool isTransientRelayout() noexcept;
 Rect subtreeLocalVisualBounds(SceneNode const& node) noexcept;
+bool subtreeHasRasterCache(SceneNode const& node) noexcept;
 }
 
 using RelayoutFn = Reactive::SmallFn<void(LayoutConstraints const&), 64>;
@@ -122,6 +123,7 @@ class SceneNode {
 
     void markDirty() noexcept;
     void markSubtreeDirty() noexcept;
+    void invalidateStructuralCaches() noexcept;
 
   private:
     SceneNodeKind kind_;
@@ -138,12 +140,14 @@ class SceneNode {
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
     mutable std::optional<Rect> cachedSubtreeVisualBounds_{};
+    mutable std::optional<bool> cachedSubtreeHasRasterCache_{};
     mutable std::uint8_t preparedGroupCacheCooldown_ = 0;
     mutable std::uint64_t preparedRenderOpsKey_ = 0;
     mutable std::unique_ptr<PreparedRenderOps> preparedRenderOps_{};
 
     friend struct detail::SceneNodeAccess;
     friend Rect detail::subtreeLocalVisualBounds(SceneNode const& node) noexcept;
+    friend bool detail::subtreeHasRasterCache(SceneNode const& node) noexcept;
 };
 
 } // namespace scenegraph
