@@ -267,6 +267,7 @@ struct SharedWaylandConnection {
   std::uint64_t repeatTimerId = 0;
   bool repeatDelayPhase = false;
   EventQueue* repeatHandlerQueue = nullptr;
+  EventSubscription repeatHandlerSubscription;
   std::uint32_t lastSelectionSerial = 0;
   wl_data_source* clipboardSource = nullptr;
   std::string clipboardText;
@@ -925,6 +926,8 @@ void releaseWaylandConnection() {
   --gWaylandConnection.refs;
   if (gWaylandConnection.refs != 0) return;
   stopKeyboardRepeat(&gWaylandConnection);
+  gWaylandConnection.repeatHandlerSubscription.reset();
+  gWaylandConnection.repeatHandlerQueue = nullptr;
   bool const destroyProxies = canSendWaylandRequests(&gWaylandConnection);
   if (gWaylandConnection.keyboard) {
     if (destroyProxies) wl_keyboard_destroy(gWaylandConnection.keyboard);
@@ -3115,10 +3118,11 @@ void installKeyboardRepeatHandler(SharedWaylandConnection* shared) {
     return;
   }
   EventQueue& queue = Application::instance().eventQueue();
-  if (shared->repeatHandlerQueue == &queue) {
+  if (shared->repeatHandlerQueue == &queue && shared->repeatHandlerSubscription) {
     return;
   }
-  queue.on<TimerEvent>([](TimerEvent const& event) {
+  shared->repeatHandlerSubscription.reset();
+  shared->repeatHandlerSubscription = queue.on<TimerEvent>([](TimerEvent const& event) {
     handleKeyboardRepeatTimer(&gWaylandConnection, event);
   });
   shared->repeatHandlerQueue = &queue;

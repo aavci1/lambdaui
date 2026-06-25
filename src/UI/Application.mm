@@ -214,6 +214,7 @@ struct Application::Impl {
   };
 
   EventQueue eventQueue_;
+  std::vector<EventSubscription> eventSubscriptions_;
   std::vector<std::unique_ptr<Window>> windows_;
   std::unordered_map<unsigned int, Window*> byHandle_;
   std::unordered_map<unsigned int, WindowRenderState> renderStates_;
@@ -351,13 +352,13 @@ Application::Application(int /*argc*/, char** /*argv*/) {
     }
   }
 
-  d->eventQueue_.on<WindowLifecycleEvent>([this](WindowLifecycleEvent const& e) {
+  d->eventSubscriptions_.push_back(d->eventQueue_.on<WindowLifecycleEvent>([this](WindowLifecycleEvent const& e) {
     if (e.kind == WindowLifecycleEvent::Kind::Registered && e.window != nullptr) {
       onWindowRegistered(e.window);
     }
-  });
+  }));
 
-  d->eventQueue_.on<WindowEvent>([this](WindowEvent const& ev) {
+  d->eventSubscriptions_.push_back(d->eventQueue_.on<WindowEvent>([this](WindowEvent const& ev) {
     if (ev.kind == WindowEvent::Kind::DpiChanged) {
       auto it = d->byHandle_.find(ev.handle);
       if (it != d->byHandle_.end() && it->second) {
@@ -397,12 +398,12 @@ Application::Application(int /*argc*/, char** /*argv*/) {
       }
       app->d->windows_.erase(it);
       if (app->d->windows_.empty()) {
-        app->quit();
+      app->quit();
       }
     });
-  });
+  }));
 
-  d->eventQueue_.on<FrameEvent>([this](FrameEvent const& ev) {
+  d->eventSubscriptions_.push_back(d->eventQueue_.on<FrameEvent>([this](FrameEvent const& ev) {
     if (!d->animationFramePulseQueued_ && AnimationClock::instance().needsFramePump()) {
       d->animationFramePulseQueued_ = true;
       d->eventQueue_.post(AnimationFramePulse{.deadlineNanos = ev.deadlineNanos});
@@ -422,12 +423,12 @@ Application::Application(int /*argc*/, char** /*argv*/) {
           std::chrono::nanoseconds{ev.deadlineNanos}};
     }
     eventPump(*windowIt->second).acknowledgeAnimationFrameTick();
-  });
+  }));
 
-  d->eventQueue_.on<AnimationFramePulse>([this](AnimationFramePulse const& pulse) {
+  d->eventSubscriptions_.push_back(d->eventQueue_.on<AnimationFramePulse>([this](AnimationFramePulse const& pulse) {
     d->animationFramePulseQueued_ = false;
     AnimationClock::instance().notifyFrame(pulse.deadlineNanos);
-  });
+  }));
 }
 
 Application::~Application() {

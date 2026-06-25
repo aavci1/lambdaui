@@ -10,6 +10,7 @@
 #include <Lambda/UI/Events.hpp>
 
 #include <any>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -20,6 +21,7 @@
 namespace lambdaui {
 
 class Application;
+class EventQueue;
 
 namespace detail {
 
@@ -38,6 +40,39 @@ inline std::uint32_t eventQueueCustomTypeId() {
 struct EventQueueImplAccess;
 
 } // namespace detail
+
+class EventSubscription {
+public:
+  EventSubscription() noexcept = default;
+  ~EventSubscription();
+
+  EventSubscription(EventSubscription const&) = delete;
+  EventSubscription& operator=(EventSubscription const&) = delete;
+
+  EventSubscription(EventSubscription&& other) noexcept;
+  EventSubscription& operator=(EventSubscription&& other) noexcept;
+
+  void reset() noexcept;
+  explicit operator bool() const noexcept { return queue_ != nullptr && id_ != 0; }
+
+private:
+  enum class Kind : std::uint8_t {
+    None,
+    Framework,
+    Custom,
+  };
+
+  EventSubscription(EventQueue* queue, Kind kind, std::type_index frameworkType,
+                    std::uint32_t customType, std::uint64_t id) noexcept;
+
+  EventQueue* queue_ = nullptr;
+  Kind kind_ = Kind::None;
+  std::type_index frameworkType_{typeid(void)};
+  std::uint32_t customType_ = 0;
+  std::uint64_t id_ = 0;
+
+  friend struct detail::EventQueueImplAccess;
+};
 
 /// Application-owned queue; obtain via `Application::instance().eventQueue()`.
 /// `post`, `dispatch`, and `on` are main-thread-only by contract (not enforced at runtime).
@@ -69,7 +104,7 @@ public:
   }
 
   template<typename T>
-  void on(Reactive::SmallFn<void(T const&)> handler);
+  [[nodiscard]] EventSubscription on(Reactive::SmallFn<void(T const&)> handler);
 
   void dispatch();
 
@@ -88,23 +123,30 @@ namespace detail {
 /// Internal; used by `EventQueue` templates and implementation. Do not call from application code.
 struct EventQueueImplAccess {
   static void postInner(EventQueue& q, Event&& event);
-  static void addFrameworkHandler(EventQueue& q, std::type_index idx, Reactive::SmallFn<void(std::any const&)> handler);
-  static void addCustomHandler(EventQueue& q, std::uint32_t tid, Reactive::SmallFn<void(std::any const&)> handler);
+  static EventSubscription addFrameworkHandler(EventQueue& q, std::type_index idx,
+                                               Reactive::SmallFn<void(std::any const&)> handler);
+  static EventSubscription addCustomHandler(EventQueue& q, std::uint32_t tid,
+                                            Reactive::SmallFn<void(std::any const&)> handler);
+  static void removeHandler(EventQueue& q, EventSubscription::Kind kind, std::type_index frameworkType,
+                            std::uint32_t customType, std::uint64_t id) noexcept;
   static void dispatchOne(EventQueue& q, Event& event);
+  static std::size_t liveHandlerCountForTesting(EventQueue const& q);
 };
 
 } // namespace detail
 
 template<typename T>
-void EventQueue::on(Reactive::SmallFn<void(T const&)> handler) {
+EventSubscription EventQueue::on(Reactive::SmallFn<void(T const&)> handler) {
   if constexpr (detail::isEventAlternativeV<T>) {
     auto wrapped = [h = std::move(handler)](std::any const& a) { h(std::any_cast<T const&>(a)); };
-    detail::EventQueueImplAccess::addFrameworkHandler(*this, std::type_index(typeid(T)), std::move(wrapped));
+    return detail::EventQueueImplAccess::addFrameworkHandler(*this, std::type_index(typeid(T)),
+                                                             std::move(wrapped));
   } else {
     std::uint32_t tid = detail::eventQueueCustomTypeId<T>();
-    detail::EventQueueImplAccess::addCustomHandler(*this, tid, [h = std::move(handler)](std::any const& a) {
-      h(std::any_cast<T const&>(a));
-    });
+    return detail::EventQueueImplAccess::addCustomHandler(
+        *this, tid, [h = std::move(handler)](std::any const& a) {
+          h(std::any_cast<T const&>(a));
+        });
   }
 }
 

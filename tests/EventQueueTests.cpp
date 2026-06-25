@@ -9,6 +9,7 @@
 #include <poll.h>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 namespace {
 
@@ -48,14 +49,15 @@ TEST_CASE("EventQueue snapshots first-class handlers registered during dispatch"
 
   int primaryCalls = 0;
   int addedCalls = 0;
-  queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
+  std::vector<lambdaui::EventSubscription> subscriptions;
+  subscriptions.push_back(queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
     ++primaryCalls;
     for (int i = 0; i < 64; ++i) {
-      queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
+      subscriptions.push_back(queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
         ++addedCalls;
-      });
+      }));
     }
-  });
+  }));
 
   queue.post(lambdaui::InputEvent{.kind = lambdaui::InputEvent::Kind::KeyDown});
   queue.dispatch();
@@ -109,14 +111,15 @@ TEST_CASE("EventQueue snapshots custom handlers registered during dispatch") {
 
   int primaryCalls = 0;
   int addedCalls = 0;
-  queue.on<EventQueuePayload>([&](EventQueuePayload const&) {
+  std::vector<lambdaui::EventSubscription> subscriptions;
+  subscriptions.push_back(queue.on<EventQueuePayload>([&](EventQueuePayload const&) {
     ++primaryCalls;
     for (int i = 0; i < 64; ++i) {
-      queue.on<EventQueuePayload>([&](EventQueuePayload const&) {
+      subscriptions.push_back(queue.on<EventQueuePayload>([&](EventQueuePayload const&) {
         ++addedCalls;
-      });
+      }));
     }
-  });
+  }));
 
   queue.post(EventQueuePayload{.value = 1});
   queue.dispatch();
@@ -127,4 +130,76 @@ TEST_CASE("EventQueue snapshots custom handlers registered during dispatch") {
   queue.dispatch();
   CHECK(primaryCalls == 2);
   CHECK(addedCalls == 64);
+}
+
+TEST_CASE("EventQueue subscriptions return listener count to baseline") {
+  lambdaui::Application app;
+  lambdaui::EventQueue& queue = app.eventQueue();
+  std::size_t const baseline =
+      lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue);
+
+  int calls = 0;
+  {
+    std::vector<lambdaui::EventSubscription> subscriptions;
+    for (int i = 0; i < 32; ++i) {
+      subscriptions.push_back(queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
+        ++calls;
+      }));
+    }
+    CHECK(lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue) == baseline + 32);
+  }
+
+  CHECK(lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue) == baseline);
+  queue.post(lambdaui::InputEvent{.kind = lambdaui::InputEvent::Kind::KeyDown});
+  queue.dispatch();
+  CHECK(calls == 0);
+}
+
+TEST_CASE("EventQueue skips destroyed subscription on later dispatch") {
+  lambdaui::Application app;
+  lambdaui::EventQueue& queue = app.eventQueue();
+  std::size_t const baseline =
+      lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue);
+
+  int calls = 0;
+  {
+    auto subscription = queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
+      ++calls;
+    });
+    CHECK(lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue) == baseline + 1);
+  }
+  CHECK(lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue) == baseline);
+
+  queue.post(lambdaui::InputEvent{.kind = lambdaui::InputEvent::Kind::KeyDown});
+  queue.dispatch();
+  CHECK(calls == 0);
+  CHECK(lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue) == baseline);
+}
+
+TEST_CASE("EventQueue supports unsubscribe during dispatch") {
+  lambdaui::Application app;
+  lambdaui::EventQueue& queue = app.eventQueue();
+  std::size_t const baseline =
+      lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue);
+
+  int firstCalls = 0;
+  int secondCalls = 0;
+  lambdaui::EventSubscription first;
+  lambdaui::EventSubscription second;
+  first = queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
+    ++firstCalls;
+    first.reset();
+  });
+  second = queue.on<lambdaui::InputEvent>([&](lambdaui::InputEvent const&) {
+    ++secondCalls;
+  });
+
+  queue.post(lambdaui::InputEvent{.kind = lambdaui::InputEvent::Kind::KeyDown});
+  queue.dispatch();
+  CHECK(firstCalls == 1);
+  CHECK(secondCalls == 1);
+  CHECK(lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue) == baseline + 1);
+
+  second.reset();
+  CHECK(lambdaui::detail::EventQueueImplAccess::liveHandlerCountForTesting(queue) == baseline);
 }

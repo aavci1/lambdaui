@@ -43,15 +43,14 @@ struct PopoverDemoRoot {
         auto autotestDismissed = useState<bool>(false);
 
         if (envEnabled("LAMBDA_POPOVER_DEMO_AUTOTEST") && Application::hasInstance()) {
-            auto alive = std::make_shared<bool>(true);
-            Application::instance().eventQueue().on<TimerEvent>(
-                [alive,
-                 autotestText,
+            auto timerSubscription = std::make_shared<EventSubscription>();
+            *timerSubscription = Application::instance().eventQueue().on<TimerEvent>(
+                [autotestText,
                  autotestStep,
                  autotestTimer,
                  autotestDismissed,
                  showPopover = showPopover](TimerEvent const &event) mutable {
-                    if (!*alive || event.timerId == 0 || event.timerId != autotestTimer.peek()) {
+                    if (event.timerId == 0 || event.timerId != autotestTimer.peek()) {
                         return;
                     }
 
@@ -116,8 +115,8 @@ struct PopoverDemoRoot {
                     autotestStep.set(step + 1);
                 });
 
-            Reactive::onCleanup([alive, autotestTimer] {
-                *alive = false;
+            Reactive::onCleanup([timerSubscription, autotestTimer] {
+                timerSubscription->reset();
                 if (Application::hasInstance() && autotestTimer.peek() != 0) {
                     Application::instance().cancelTimer(autotestTimer.peek());
                     autotestTimer.set(0);

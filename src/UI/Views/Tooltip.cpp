@@ -66,11 +66,11 @@ void useTooltip(TooltipConfig const& config) {
   auto [showPopover, hidePopover, isPresented] = usePopover();
   (void)isPresented;
 
-  auto alive = std::make_shared<bool>(true);
+  auto timerSubscription = std::make_shared<EventSubscription>();
   if (Application::hasInstance()) {
-    Application::instance().eventQueue().on<TimerEvent>(
-        [alive, timerId, ready](TimerEvent const& event) {
-          if (!*alive || event.timerId == 0 || event.timerId != timerId.peek()) {
+    *timerSubscription = Application::instance().eventQueue().on<TimerEvent>(
+        [timerId, ready](TimerEvent const& event) {
+          if (event.timerId == 0 || event.timerId != timerId.peek()) {
             return;
           }
           timerId.set(0);
@@ -79,8 +79,8 @@ void useTooltip(TooltipConfig const& config) {
           Application::instance().requestRedraw();
         });
   }
-  Reactive::onCleanup([alive, timerId] {
-    *alive = false;
+  Reactive::onCleanup([timerSubscription, timerId] {
+    timerSubscription->reset();
     cancelTooltipTimer(timerId);
   });
 

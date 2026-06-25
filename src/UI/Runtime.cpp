@@ -88,7 +88,9 @@ struct Runtime::Impl {
   std::unique_ptr<MountRoot> root;
   CommandRegistry commands;
   RuntimeInputState input;
-  std::shared_ptr<bool> alive = std::make_shared<bool>(true);
+  EventSubscription inputSubscription;
+  EventSubscription windowSubscription;
+  EventSubscription focusRequestSubscription;
 
   explicit Impl(Window& w) : window(w) {}
 };
@@ -99,33 +101,28 @@ Runtime::Runtime(Window& window)
     : d(std::make_unique<Impl>(window)) {
   if (Application::hasInstance()) {
     unsigned int const handle = window.handle();
-    std::shared_ptr<bool> alive = d->alive;
-    Application::instance().eventQueue().on<InputEvent>(
-        [this, handle, alive](InputEvent const& event) {
-          if (*alive && event.handle == handle) {
+    d->inputSubscription = Application::instance().eventQueue().on<InputEvent>(
+        [this, handle](InputEvent const& event) {
+          if (event.handle == handle) {
             handleInput(event);
           }
         });
-    Application::instance().eventQueue().on<WindowEvent>(
-        [this, handle, alive](WindowEvent const& event) {
-          if (*alive && event.handle == handle) {
+    d->windowSubscription = Application::instance().eventQueue().on<WindowEvent>(
+        [this, handle](WindowEvent const& event) {
+          if (event.handle == handle) {
             handleWindowEvent(event);
           }
         });
-    Application::instance().eventQueue().on<RuntimeFocusRequestEvent>(
-        [this, handle, alive](RuntimeFocusRequestEvent const& event) {
-          if (*alive && event.handle == handle) {
+    d->focusRequestSubscription = Application::instance().eventQueue().on<RuntimeFocusRequestEvent>(
+        [this, handle](RuntimeFocusRequestEvent const& event) {
+          if (event.handle == handle) {
             requestFocus(event.key);
           }
         });
   }
 }
 
-Runtime::~Runtime() {
-  if (d && d->alive) {
-    *d->alive = false;
-  }
-}
+Runtime::~Runtime() = default;
 
 void Runtime::setRoot(std::unique_ptr<RootHolder> holder) {
   d->commands.beginRebuild();
