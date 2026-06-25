@@ -89,6 +89,14 @@ bool canReplayPreparedGroup(SceneNode const& node) {
            !subtreeContainsRasterCache(node);
 }
 
+void clearSubtreeDirtyRecursive(SceneNode const& node) noexcept {
+    detail::SceneNodeAccess::clearDirty(node);
+    detail::SceneNodeAccess::clearSubtreeDirty(node);
+    for (std::unique_ptr<SceneNode> const& child : node.children()) {
+        clearSubtreeDirtyRecursive(*child);
+    }
+}
+
 enum class RenderTraversalMode : std::uint8_t {
     Normal,
     PreparedCacheBypass,
@@ -408,10 +416,7 @@ struct SceneRenderer::Impl {
             const_cast<RasterCacheNode&>(static_cast<RasterCacheNode const&>(node)).invalidateCache();
             detail::SceneNodeAccess::preparedRenderOps(node).reset();
             detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
-            if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
-                detail::SceneNodeAccess::clearDirty(node);
-            }
-            detail::SceneNodeAccess::clearSubtreeDirty(node);
+            clearSubtreeDirtyRecursive(node);
             return;
         }
         bool const hadPreparedGroup =

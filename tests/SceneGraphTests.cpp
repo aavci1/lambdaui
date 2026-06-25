@@ -941,4 +941,32 @@ TEST_CASE("SceneGraph invalidates raster cache boundaries") {
     CHECK_FALSE(rasterNode->isDirty());
 }
 
+TEST_CASE("RasterCacheNode prepare pass clears descendant dirty flags") {
+    auto root = std::make_unique<SceneNode>(Rect {0.f, 0.f, 240.f, 160.f});
+    auto raster = std::make_unique<RasterCacheNode>(Rect {20.f, 24.f, 120.f, 80.f});
+    auto leaf = std::make_unique<RectNode>(
+        Rect {0.f, 0.f, 80.f, 40.f}, FillStyle::solid(Colors::red));
+    RectNode* leafNode = leaf.get();
+    raster->setSubtree(std::move(leaf));
+    root->appendChild(std::move(raster));
+
+    SceneGraph graph {std::move(root)};
+    PreparedCountingRenderer renderer;
+    SceneRenderer sceneRenderer {renderer};
+
+    sceneRenderer.render(graph);
+
+    CHECK_FALSE(leafNode->isDirty());
+    CHECK_FALSE(leafNode->isSubtreeDirty());
+
+    leafNode->setFill(FillStyle::solid(Colors::blue));
+    REQUIRE(leafNode->isDirty());
+    REQUIRE(leafNode->isSubtreeDirty());
+
+    sceneRenderer.render(graph);
+
+    CHECK_FALSE(leafNode->isDirty());
+    CHECK_FALSE(leafNode->isSubtreeDirty());
+}
+
 } // namespace
