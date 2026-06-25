@@ -24,8 +24,8 @@ public:
     EnvironmentBinding environment;
     Size maxSize;
     bool useNativeShell = false;
-    std::function<void()> requestRedraw;
-    std::function<void()> requestDismiss;
+    Reactive::SmallFn<void()> requestRedraw;
+    Reactive::SmallFn<void()> requestDismiss;
   };
 
   explicit TransientPopoverHost(Config config);

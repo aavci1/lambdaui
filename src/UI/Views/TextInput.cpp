@@ -315,8 +315,8 @@ void drawCaret(Canvas& canvas, detail::TextEditLayoutResult const& layoutResult,
 void applyTextMutation(Signal<std::string> const& valueState,
                        Signal<detail::TextEditSelection> const& selectionState,
                        detail::TextEditMutation const& mutation,
-                       std::function<void(std::string const&)> const& onChangeHandler,
-                       std::function<void(std::string const&, detail::TextEditSelection)> const& onEditHandler) {
+                       Reactive::SmallFn<void(std::string const&)> const& onChangeHandler,
+                       Reactive::SmallFn<void(std::string const&, detail::TextEditSelection)> const& onEditHandler) {
   if (mutation.valueChanged) {
     valueState = mutation.text;
   }
@@ -437,8 +437,8 @@ std::unique_ptr<scenegraph::SceneNode> TextInput::mount(MountContext& ctx) const
     auto registerTextCommand = [runtime, &ctx, targetKey = interaction->stableTargetKey_,
                                 onPreviewCommandHandler](
                                    std::string commandId,
-                                   std::function<void()> handler,
-                                   std::function<bool()> isEnabled = {}) {
+                                   Reactive::SmallFn<void()> handler,
+                                   Reactive::SmallFn<bool()> isEnabled = {}) {
       std::string const registeredCommandId = commandId;
       auto commandHandler = [registeredCommandId, onPreviewCommandHandler,
                              handler = std::move(handler)] {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Dialog.hpp
 ///
 /// Part of the Lambda public API.
@@ -81,7 +83,7 @@ struct Dialog : ViewModifiers<Dialog> {
   std::string title;
   std::vector<Element> content;
   std::vector<Element> footer;
-  std::function<void()> onClose;
+  Reactive::SmallFn<void()> onClose;
   /// Optional token overrides. Defaults resolve from `Theme` like other controls.
   Style style {};
 

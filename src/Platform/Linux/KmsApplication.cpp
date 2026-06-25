@@ -894,7 +894,7 @@ void KmsApplication::setMenuBar(MenuBar const& menu, platform::MenuActionDispatc
   dispatcher_ = std::move(dispatcher);
 }
 
-void KmsApplication::setTerminateHandler(std::function<void()> handler) {
+void KmsApplication::setTerminateHandler(Reactive::SmallFn<void()> handler) {
   terminateHandler_ = std::move(handler);
 }
 
@@ -909,7 +909,7 @@ std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> KmsApplicat
   return claimedShortcuts_;
 }
 
-void KmsApplication::revalidateMenuItems(std::function<bool(std::string const&)>) {}
+void KmsApplication::revalidateMenuItems(Reactive::SmallFn<bool(std::string const&)>) {}
 
 std::string KmsApplication::userDataDir() const {
   return appDir(envOr("XDG_DATA_HOME", envOr("HOME", ".") + "/.local/share"), applicationName());

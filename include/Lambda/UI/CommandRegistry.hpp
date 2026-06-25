@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/CommandRegistry.hpp
 ///
 /// Part of the Lambda public API.
@@ -22,8 +24,8 @@ using CommandId = std::uint64_t;
 struct CommandHandler {
   CommandId id = 0;
   std::string commandId;
-  std::function<void()> trigger;
-  std::function<bool()> isEnabled; // empty = always enabled
+  Reactive::SmallFn<void()> trigger;
+  Reactive::SmallFn<bool()> isEnabled; // empty = always enabled
 };
 
 class CommandRegistry {
@@ -33,12 +35,12 @@ public:
 
   /// Registers a view command handler for the given component key.
   CommandId registerViewHandler(ComponentKey const& key, std::string const& commandId,
-                                std::function<void()> handler,
-                                std::function<bool()> isEnabled = {});
+                                Reactive::SmallFn<void()> handler,
+                                Reactive::SmallFn<bool()> isEnabled = {});
 
   /// Registers a window command handler. Last call for a given command id in build order wins.
-  CommandId registerWindowHandler(std::string const& commandId, std::function<void()> handler,
-                                  std::function<bool()> isEnabled = {});
+  CommandId registerWindowHandler(std::string const& commandId, Reactive::SmallFn<void()> handler,
+                                  Reactive::SmallFn<bool()> isEnabled = {});
 
   void unregister(CommandId id);
 
@@ -63,13 +65,13 @@ public:
 
   // Compatibility names for older action-based call sites.
   CommandId registerViewClaim(ComponentKey const& key, std::string const& actionName,
-                              std::function<void()> handler,
-                              std::function<bool()> isEnabled = {}) {
+                              Reactive::SmallFn<void()> handler,
+                              Reactive::SmallFn<bool()> isEnabled = {}) {
     return registerViewHandler(key, actionName, std::move(handler), std::move(isEnabled));
   }
 
-  CommandId registerWindowAction(std::string const& actionName, std::function<void()> handler,
-                                 std::function<bool()> isEnabled = {}) {
+  CommandId registerWindowAction(std::string const& actionName, Reactive::SmallFn<void()> handler,
+                                 Reactive::SmallFn<bool()> isEnabled = {}) {
     return registerWindowHandler(actionName, std::move(handler), std::move(isEnabled));
   }
 

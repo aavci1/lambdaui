@@ -1132,7 +1132,7 @@ std::unique_ptr<Clipboard> createWaylandClipboard() {
   return std::make_unique<WaylandClipboard>();
 }
 
-class WaylandWindow final : public platform::Window {
+class WaylandWindow final : public platform::Window, public platform::WindowEventPump {
 public:
   explicit WaylandWindow(WindowConfig const& config)
       : handle_(gNextHandle.fetch_add(1)), size_(config.size), title_(config.title),
@@ -1615,6 +1615,8 @@ public:
   bool isFullscreen() const override { return fullscreen_; }
   unsigned int handle() const override { return handle_; }
   void* nativeGraphicsSurface() const override { return const_cast<WaylandNativeSurface*>(&nativeSurface_); }
+  platform::WindowEventPump* eventPump() override { return this; }
+  platform::WindowEventPump const* eventPump() const override { return this; }
 
   void processEvents() override {
     drainWakePipe();

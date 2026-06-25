@@ -92,7 +92,7 @@ std::vector<Element> Alert::buildContent(Color titleC, Color msgC, Theme const& 
   return rows;
 }
 
-std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert() {
+std::tuple<Reactive::SmallFn<void(Alert)>, Reactive::SmallFn<void()>, bool> useAlert() {
   auto [showOverlay, hideOverlay, isPresented] = useOverlay();
   Runtime* runtime = Runtime::current();
   Window* window = runtime ? &runtime->window() : nullptr;

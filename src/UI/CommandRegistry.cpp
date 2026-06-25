@@ -10,8 +10,8 @@ void CommandRegistry::beginRebuild() {
 }
 
 CommandId CommandRegistry::registerViewHandler(ComponentKey const& key, std::string const& commandId,
-                                               std::function<void()> handler,
-                                               std::function<bool()> isEnabled) {
+                                               Reactive::SmallFn<void()> handler,
+                                               Reactive::SmallFn<bool()> isEnabled) {
   CommandHandler h;
   h.id = nextId_++;
   h.commandId = commandId;
@@ -23,8 +23,8 @@ CommandId CommandRegistry::registerViewHandler(ComponentKey const& key, std::str
 }
 
 CommandId CommandRegistry::registerWindowHandler(std::string const& commandId,
-                                                 std::function<void()> handler,
-                                                 std::function<bool()> isEnabled) {
+                                                 Reactive::SmallFn<void()> handler,
+                                                 Reactive::SmallFn<bool()> isEnabled) {
   CommandHandler h;
   h.id = nextId_++;
   h.commandId = commandId;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/TableView.hpp
 ///
 /// Part of the Lambda public API.
@@ -23,7 +25,7 @@ struct TableColumn {
         /// Initial direction when the user first sorts this column.
         bool initialAscending = true;
         /// Comparator for sort payloads stored in `SortValue`.
-        std::function<bool(std::any const &, std::any const &)> less;
+        Reactive::SmallFn<bool(std::any const &, std::any const &)> less;
 
         bool operator==(Sort const& other) const {
             return initialAscending == other.initialAscending &&
@@ -100,7 +102,7 @@ struct TableRow : ViewModifiers<TableRow> {
     /// Optional row token overrides.
     Style style {};
     /// Called when the row is activated.
-    std::function<void()> onTap;
+    Reactive::SmallFn<void()> onTap;
 
     Element body() const;
 };

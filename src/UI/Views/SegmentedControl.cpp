@@ -71,7 +71,7 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
     bool disabled = false;
     ResolvedStyle style {};
     Theme theme {};
-    std::function<void()> onTap;
+    Reactive::SmallFn<void()> onTap;
 
     bool operator==(SegmentedControlItem const &other) const {
         return option == other.option && selectedIndex == other.selectedIndex &&
@@ -160,9 +160,9 @@ struct SegmentedControlItem : ViewModifiers<SegmentedControlItem> {
             .cornerRadius(CornerRadius {std::max(0.f, style.cornerRadius - 2.f)})
             .cursor(isDisabled ? Cursor::Arrow : Cursor::Hand)
             .focusable(!isDisabled)
-            .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} :
-                                    std::function<void(KeyCode, Modifiers)> {handleKey})
-            .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+            .onKeyDown(isDisabled ? Reactive::SmallFn<void(KeyCode, Modifiers)> {} :
+                                    Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+            .onTap(isDisabled ? Reactive::SmallFn<void()> {} : Reactive::SmallFn<void()> {handleTap});
     }
 };
 
@@ -228,8 +228,8 @@ Element SegmentedControl::body() const {
         .stroke(StrokeStyle::solid(resolved.borderColor, 1.f))
         .cornerRadius(CornerRadius {resolved.cornerRadius})
         .focusable(!disabled)
-        .onKeyDown(disabled ? std::function<void(KeyCode, Modifiers)> {} :
-                              std::function<void(KeyCode, Modifiers)> {handleKey});
+        .onKeyDown(disabled ? Reactive::SmallFn<void(KeyCode, Modifiers)> {} :
+                              Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey});
 
     return root;
 }

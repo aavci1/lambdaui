@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/MenuItem.hpp
 ///
 /// Cross-platform application menu model.
@@ -42,10 +44,10 @@ struct MenuItem {
   MenuRole role = MenuRole::None;
   std::string label;
   std::string actionName;
-  std::function<void()> handler;
+  Reactive::SmallFn<void()> handler;
   Shortcut shortcut;
   std::vector<MenuItem> children;
-  std::function<bool()> isEnabled;
+  Reactive::SmallFn<bool()> isEnabled;
   bool checked = false;
 
   static MenuItem separator() {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Slider.hpp
 ///
 /// Part of the Lambda public API.
@@ -47,7 +49,7 @@ struct Slider : ViewModifiers<Slider> {
   // ── Events ───────────────────────────────────────────────────────────────
 
   /// Called whenever \c value changes from user interaction.
-  std::function<void(float)> onChange;
+  Reactive::SmallFn<void(float)> onChange;
 
   bool operator==(Slider const& other) const {
     return value == other.value && min == other.min && max == other.max && step == other.step &&

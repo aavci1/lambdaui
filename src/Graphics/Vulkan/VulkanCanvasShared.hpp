@@ -64,6 +64,23 @@ struct VulkanDrawPushConstants {
   float translation[2]{};
 };
 
+struct Buffer {
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VmaAllocation allocation = VK_NULL_HANDLE;
+  VkDeviceSize capacity = 0;
+  void* mapped = nullptr;
+};
+
+struct FrameGeometryResources {
+  VkDescriptorSet rectDescriptorSet = VK_NULL_HANDLE;
+  VkDescriptorSet calloutDescriptorSet = VK_NULL_HANDLE;
+  VkDescriptorSet quadDescriptorSet = VK_NULL_HANDLE;
+  Buffer rectBuffer;
+  Buffer calloutBuffer;
+  Buffer quadBuffer;
+  Buffer pathBuffer;
+};
+
 struct SharedVulkanCore {
   VkInstance instance = VK_NULL_HANDLE;
   VkPhysicalDevice physical = VK_NULL_HANDLE;

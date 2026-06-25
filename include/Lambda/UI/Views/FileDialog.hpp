@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/FileDialog.hpp
 ///
 /// Framework-provided file open/save dialog content.
@@ -23,8 +25,8 @@ struct FileDialog : ViewModifiers<FileDialog> {
   std::filesystem::path initialDirectory;
   std::string initialName;
   /// Return true when the selected path was accepted. Returning false keeps the dialog open.
-  std::function<bool(std::filesystem::path)> onAccept;
-  std::function<void()> onCancel;
+  Reactive::SmallFn<bool(std::filesystem::path)> onAccept;
+  Reactive::SmallFn<void()> onCancel;
 
   Element body() const;
 };

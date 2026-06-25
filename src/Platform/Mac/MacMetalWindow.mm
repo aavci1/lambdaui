@@ -16,6 +16,7 @@
 #include <Lambda/Reactive/Profile.hpp>
 
 #include "UI/Platform/Window.hpp"
+#include "UI/Platform/WindowEventPump.hpp"
 #include "UI/Platform/WindowFactory.hpp"
 #include "Graphics/Metal/MetalCanvas.hpp"
 #include "UI/DebugFlags.hpp"
@@ -406,7 +407,7 @@ std::int64_t nowSteadyClockNanos() {
 
 } // namespace
 
-class MacMetalWindow : public platform::Window {
+class MacMetalWindow : public platform::Window, public platform::WindowEventPump {
 public:
   explicit MacMetalWindow(const WindowConfig& config);
   ~MacMetalWindow() override;
@@ -434,6 +435,8 @@ public:
   bool isFullscreen() const override;
   unsigned int handle() const override;
   void* nativeGraphicsSurface() const override;
+  platform::WindowEventPump* eventPump() override { return this; }
+  platform::WindowEventPump const* eventPump() const override { return this; }
 
   std::unique_ptr<Canvas> createCanvas(::lambdaui::Window& owner) override;
 

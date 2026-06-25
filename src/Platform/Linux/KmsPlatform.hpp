@@ -2,6 +2,7 @@
 
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/Window.hpp"
+#include "UI/Platform/WindowEventPump.hpp"
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
 
 #include <Lambda/Platform/Linux/KmsOutput.hpp>
@@ -54,10 +55,10 @@ public:
   void setApplicationName(std::string name) override;
   std::string applicationName() const override;
   void setMenuBar(MenuBar const& menu, platform::MenuActionDispatcher dispatcher) override;
-  void setTerminateHandler(std::function<void()> handler) override;
+  void setTerminateHandler(Reactive::SmallFn<void()> handler) override;
   void requestTerminate() override;
   std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> menuClaimedShortcuts() const override;
-  void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) override;
+  void revalidateMenuItems(Reactive::SmallFn<bool(std::string const&)> isEnabled) override;
   std::string userDataDir() const override;
   std::string cacheDir() const override;
   std::vector<std::string> availableOutputs() const override;
@@ -154,7 +155,7 @@ private:
   KmsWindow* pointerFocus_ = nullptr;
   platform::MenuActionDispatcher dispatcher_;
   std::function<void(platform::KmsInputEvent const&)> rawInputHandler_;
-  std::function<void()> terminateHandler_;
+  Reactive::SmallFn<void()> terminateHandler_;
   std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
   std::string appName_ = "lambda";
   Point pointerPos_{};
@@ -182,7 +183,7 @@ private:
 
 KmsApplication& kmsApplication();
 
-class KmsWindow final : public platform::Window {
+class KmsWindow final : public platform::Window, public platform::WindowEventPump {
 public:
   KmsWindow(KmsApplication& app, KmsConnector connector, WindowConfig const& config);
   ~KmsWindow() override;
@@ -197,6 +198,8 @@ public:
   bool isFullscreen() const override;
   unsigned int handle() const override;
   void* nativeGraphicsSurface() const override;
+  platform::WindowEventPump* eventPump() override { return this; }
+  platform::WindowEventPump const* eventPump() const override { return this; }
   void processEvents() override;
   void waitForEvents(int timeoutMs) override;
   int eventFd() const override;

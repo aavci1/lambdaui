@@ -300,7 +300,7 @@ public:
     [NSApp setMainMenu:main];
   }
 
-  void setTerminateHandler(std::function<void()> handler) override {
+  void setTerminateHandler(Reactive::SmallFn<void()> handler) override {
     terminateHandler_ = std::move(handler);
   }
 
@@ -314,7 +314,7 @@ public:
     return claimedShortcuts_;
   }
 
-  void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) override {
+  void revalidateMenuItems(Reactive::SmallFn<bool(std::string const&)> isEnabled) override {
     isEnabled_ = std::move(isEnabled);
   }
 
@@ -450,8 +450,8 @@ private:
 
   __strong LambdaAppDelegate* delegate_{nil};
   platform::MenuActionDispatcher dispatcher_;
-  std::function<void()> terminateHandler_;
-  std::function<bool(std::string const&)> isEnabled_;
+  Reactive::SmallFn<void()> terminateHandler_;
+  Reactive::SmallFn<bool(std::string const&)> isEnabled_;
   std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
   std::string appName_;
 };

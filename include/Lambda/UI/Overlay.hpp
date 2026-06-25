@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 #include <Lambda/Core/Identity.hpp>
 #include <Lambda/Core/Geometry.hpp>
 #include <Lambda/Core/Color.hpp>
@@ -65,7 +67,7 @@ struct OverlayConfig {
   float backdropBlurRadius = kFloatFromTheme;
   bool dismissOnOutsideTap = true;
   bool dismissOnEscape = true;
-  std::function<void()> onDismiss{};
+  Reactive::SmallFn<void()> onDismiss{};
   std::string debugName{};
 };
 
@@ -73,7 +75,7 @@ LAMBDA_DEFINE_ENVIRONMENT_KEY(ResolvedOverlayPlacementKey,
                             std::optional<OverlayConfig::Placement>,
                             std::optional<OverlayConfig::Placement>{});
 
-std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, bool> useOverlay();
+std::tuple<Reactive::SmallFn<void(Element, OverlayConfig)>, Reactive::SmallFn<void()>, bool> useOverlay();
 
 struct OverlayEntry {
   OverlayId id{};

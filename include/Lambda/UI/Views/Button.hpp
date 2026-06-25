@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Button.hpp
 ///
 /// Part of the Lambda public API.
@@ -51,7 +53,7 @@ struct Button : ViewModifiers<Button> {
     /// Optional token overrides.
     Style style {};
     /// Called when the button is activated.
-    std::function<void()> onTap;
+    Reactive::SmallFn<void()> onTap;
 
     bool operator==(Button const& other) const {
         bool const sameLabel = label.isValue() && other.label.isValue() && label.value() == other.label.value();
@@ -81,7 +83,7 @@ struct LinkButton : ViewModifiers<LinkButton> {
     /// Optional token overrides.
     Style style {};
     /// Called when the link button is activated.
-    std::function<void()> onTap;
+    Reactive::SmallFn<void()> onTap;
 
     bool operator==(LinkButton const& other) const {
         bool const sameLabel = label.isValue() && other.label.isValue() && label.value() == other.label.value();
@@ -112,7 +114,7 @@ struct IconButton : ViewModifiers<IconButton> {
     /// Optional token overrides.
     Style style {};
     /// Called when the icon button is activated.
-    std::function<void()> onTap;
+    Reactive::SmallFn<void()> onTap;
 
     bool operator==(IconButton const& other) const {
         bool const sameDisabled = disabled.isValue() && other.disabled.isValue() &&

@@ -10,6 +10,7 @@
 
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/Window.hpp"
+#include "UI/Platform/WindowEventPump.hpp"
 #include "UI/MenuRoleDefaults.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "Debug/PerfCounters.hpp"
@@ -197,8 +198,8 @@ void saveWindowStatesToDisk(std::filesystem::path const& path,
   }
 }
 
-void collectMenuState(MenuItem& item, std::unordered_map<std::string, std::function<void()>>& handlers,
-                      std::unordered_map<std::string, std::function<bool()>>& enabled,
+void collectMenuState(MenuItem& item, std::unordered_map<std::string, Reactive::SmallFn<void()>>& handlers,
+                      std::unordered_map<std::string, Reactive::SmallFn<bool()>>& enabled,
                       std::unordered_map<platform::ShortcutKey, std::string, platform::ShortcutKeyHash>& shortcuts,
                       std::uint64_t& nextId) {
   if (item.actionName.empty()) {
@@ -246,8 +247,8 @@ struct Application::Impl {
   std::unique_ptr<platform::Application> platformApp_;
   std::thread::id mainThreadId_;
   MenuBar menuBar_;
-  std::unordered_map<std::string, std::function<void()>> menuHandlers_;
-  std::unordered_map<std::string, std::function<bool()>> menuEnabled_;
+  std::unordered_map<std::string, Reactive::SmallFn<void()>> menuHandlers_;
+  std::unordered_map<std::string, Reactive::SmallFn<bool()>> menuEnabled_;
   std::unordered_map<platform::ShortcutKey, std::string, platform::ShortcutKeyHash> menuShortcuts_;
   std::unordered_map<std::string, CommandDescriptor> commandDescriptors_;
   std::uint64_t nextMenuHandlerId_ = 1;
@@ -257,7 +258,7 @@ struct Application::Impl {
   bool quit_ = false;
   struct NextFrameEntry {
     std::uint64_t id = 0;
-    std::function<void()> callback;
+    Reactive::SmallFn<void()> callback;
   };
   std::vector<NextFrameEntry> nextFrame_;
   std::uint64_t nextFrameId_ = 1;
@@ -275,8 +276,8 @@ struct Application::Impl {
   struct PollSourceEntry {
     std::uint64_t id = 0;
     int fd = -1;
-    std::function<int()> eventMask;
-    std::function<void(int)> onReady;
+    Reactive::SmallFn<int()> eventMask;
+    Reactive::SmallFn<void(int)> onReady;
   };
   std::vector<PollSourceEntry> pollSources_;
   std::uint64_t nextPollSourceId_ = 1;
@@ -401,7 +402,7 @@ Application::Application(int argc, char** argv) {
       it->second.frameBudgetStartedAt = std::chrono::steady_clock::time_point{
           std::chrono::nanoseconds{ev.deadlineNanos}};
     }
-    windowIt->second->platformWindow()->acknowledgeAnimationFrameTick();
+    eventPump(*windowIt->second).acknowledgeAnimationFrameTick();
   });
 
   d->eventQueue_.on<AnimationFramePulse>([this](AnimationFramePulse const& pulse) {
@@ -428,7 +429,7 @@ void Application::adoptOwnedWindow(std::unique_ptr<Window> window) {
   if (d->pendingAdoptRedraws_.erase(h) > 0) {
     requestWindowRedraw(h);
   } else if (AnimationClock::instance().needsFramePump()) {
-    raw->platformWindow()->requestAnimationFrame();
+    eventPump(*raw).requestAnimationFrame();
   }
 }
 
@@ -607,7 +608,7 @@ void Application::saveWindowState(std::string const& restoreId, WindowState cons
 
 WindowConfig Application::resolveWindowConfig(WindowConfig config) { return config; }
 
-ObserverHandle Application::onNextFrameNeeded(std::function<void()> callback) {
+ObserverHandle Application::onNextFrameNeeded(Reactive::SmallFn<void()> callback) {
   std::uint64_t const id = d->nextFrameId_++;
   d->nextFrame_.push_back(Impl::NextFrameEntry{id, std::move(callback)});
   return ObserverHandle{id};
@@ -623,10 +624,14 @@ bool Application::isMainThread() const noexcept {
   return d && d->mainThreadId_ == std::this_thread::get_id();
 }
 
+platform::WindowEventPump& Application::eventPump(Window& window) const {
+  return *window.platformWindow()->eventPump();
+}
+
 void Application::wakeEventLoop() {
   for (auto& w : d->windows_) {
     if (w) {
-      w->platformWindow()->wakeEventLoop();
+      eventPump(*w).wakeEventLoop();
     }
   }
 }
@@ -634,7 +639,7 @@ void Application::wakeEventLoop() {
 void Application::requestAnimationFrames() {
   for (auto& w : d->windows_) {
     if (w) {
-      w->platformWindow()->requestAnimationFrame();
+      eventPump(*w).requestAnimationFrame();
     }
   }
   if (!isMainThread()) {
@@ -676,7 +681,7 @@ void Application::requestWindowRedraw(unsigned int handle) {
                         alreadyRequested ? 1 : 0,
                         stateIt->second.frameReady ? 1 : 0);
   }
-  windowIt->second->platformWindow()->requestAnimationFrame();
+  eventPump(*windowIt->second).requestAnimationFrame();
   if (!alreadyRequested && !isMainThread()) {
     wakeEventLoop();
   }
@@ -773,9 +778,9 @@ void Application::presentRequestedWindows(bool requireFrameReady, bool keepFrame
     if (hasFrameReady) {
       state.frameReady = false;
       state.frameBudgetPending = false;
-      w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
+      eventPump(*w).completeAnimationFrame(keepFramePump || state.redrawRequested);
     } else if (rendered && !requireFrameReady) {
-      w->platformWindow()->completeAnimationFrame(keepFramePump || state.redrawRequested);
+      eventPump(*w).completeAnimationFrame(keepFramePump || state.redrawRequested);
     }
   }
 }
@@ -797,7 +802,7 @@ void Application::cancelTimer(std::uint64_t timerId) {
   std::erase_if(d->timers_, [&](Impl::TimerEntry const& t) { return t.id == timerId; });
 }
 
-std::uint64_t Application::registerEventPollSource(int fd, std::function<void()> onReadable) {
+std::uint64_t Application::registerEventPollSource(int fd, Reactive::SmallFn<void()> onReadable) {
   return registerEventPollSource(
       fd,
       [] {
@@ -811,8 +816,8 @@ std::uint64_t Application::registerEventPollSource(int fd, std::function<void()>
 }
 
 std::uint64_t Application::registerEventPollSource(int fd,
-                                                   std::function<int()> eventMask,
-                                                   std::function<void(int)> onReady) {
+                                                   Reactive::SmallFn<int()> eventMask,
+                                                   Reactive::SmallFn<void(int)> onReady) {
   if (fd < 0) {
     return 0;
   }
@@ -889,7 +894,7 @@ int Application::exec() {
 
     for (auto& w : d->windows_) {
       if (w) {
-        w->platformWindow()->processEvents();
+        eventPump(*w).processEvents();
       }
     }
     d->eventQueue_.dispatch();
@@ -909,11 +914,11 @@ int Application::exec() {
         if (!window) {
           continue;
         }
-        int const eventFd = window->platformWindow()->eventFd();
+        int const eventFd = eventPump(*window).eventFd();
         if (eventFd >= 0 && !waitedEventFds.insert(eventFd).second) {
           continue;
         }
-        window->platformWindow()->waitForEvents(waited ? 0 : timeoutMs);
+        eventPump(*window).waitForEvents(waited ? 0 : timeoutMs);
         waited = true;
       }
       if (!waited && timeoutMs > 0) {
@@ -931,7 +936,7 @@ void Application::quit() {
   d->quit_ = true;
   for (auto& w : d->windows_) {
     if (w) {
-      w->platformWindow()->wakeEventLoop();
+      eventPump(*w).wakeEventLoop();
     }
   }
 }

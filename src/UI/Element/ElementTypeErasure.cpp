@@ -109,13 +109,6 @@ Theme activeTheme(EnvironmentBinding const& environment) {
   return environment.value<ThemeKey>();
 }
 
-std::unique_ptr<detail::LayoutOverrides> cloneLayoutOverrides(detail::LayoutOverrides const* overrides) {
-  if (!overrides) {
-    return nullptr;
-  }
-  return std::make_unique<detail::LayoutOverrides>(*overrides);
-}
-
 template <typename Gradient>
 Gradient resolveGradientStops(Gradient gradient, Theme const& theme) {
   for (std::uint8_t i = 0; i < gradient.stopCount; ++i) {
@@ -262,9 +255,8 @@ Element::Element(Element const& other)
     : impl_(other.impl_)
     , mountsWhenCollapsed_(other.mountsWhenCollapsed_)
     , envOverrides_(other.envOverrides_)
-    , modifiers_(other.modifiers_)
+    , options_(other.options_)
     , key_(other.key_)
-    , overrides_(cloneLayoutOverrides(other.overrides_.get()))
 {}
 
 Element& Element::operator=(Element const& other) {
@@ -274,47 +266,51 @@ Element& Element::operator=(Element const& other) {
   impl_ = other.impl_;
   mountsWhenCollapsed_ = other.mountsWhenCollapsed_;
   envOverrides_ = other.envOverrides_;
-  modifiers_ = other.modifiers_;
+  options_ = other.options_;
   key_ = other.key_;
-  overrides_ = cloneLayoutOverrides(other.overrides_.get());
   return *this;
 }
 
 Element::Element(Spacer spacer)
     : Element(spacer.body()) {}
 
-detail::ElementModifiers& Element::writableModifiers() {
-  if (!modifiers_) {
-    modifiers_ = std::make_shared<detail::ElementModifiers>();
-  } else if (modifiers_.use_count() != 1) {
-    modifiers_ = std::make_shared<detail::ElementModifiers>(*modifiers_);
+detail::ElementOptions& Element::writableOptions() {
+  if (!options_) {
+    options_ = std::make_shared<detail::ElementOptions>();
+  } else if (options_.use_count() != 1) {
+    options_ = std::make_shared<detail::ElementOptions>(*options_);
   }
-  return *modifiers_;
+  return *options_;
+}
+
+detail::ElementModifiers& Element::writableModifiers() {
+  detail::ElementOptions& options = writableOptions();
+  options.hasModifiers = true;
+  return options.modifiers;
 }
 
 detail::LayoutOverrides& Element::writableOverrides() {
-  if (!overrides_) {
-    overrides_ = std::make_unique<detail::LayoutOverrides>();
-  }
-  return *overrides_;
+  detail::ElementOptions& options = writableOptions();
+  options.hasLayoutOverrides = true;
+  return options.layout;
 }
 
 float Element::flexGrow() const {
-  if (overrides_ && overrides_->flexGrow) {
-    return *overrides_->flexGrow;
+  if (options_ && options_->hasLayoutOverrides && options_->layout.flexGrow) {
+    return *options_->layout.flexGrow;
   }
   return 0.f;
 }
 
 float Element::flexShrink() const {
-  if (overrides_ && overrides_->flexShrink) {
-    return *overrides_->flexShrink;
+  if (options_ && options_->hasLayoutOverrides && options_->layout.flexShrink) {
+    return *options_->layout.flexShrink;
   }
   return 0.f;
 }
 
 std::optional<float> Element::flexBasis() const {
-  return overrides_ ? overrides_->flexBasis : std::nullopt;
+  return options_ && options_->hasLayoutOverrides ? options_->layout.flexBasis : std::nullopt;
 }
 
 bool Element::mountsWhenCollapsed() const {
@@ -322,22 +318,22 @@ bool Element::mountsWhenCollapsed() const {
 }
 
 float Element::minMainSize() const {
-  if (overrides_ && overrides_->minMainSize) {
-    return *overrides_->minMainSize;
+  if (options_ && options_->hasLayoutOverrides && options_->layout.minMainSize) {
+    return *options_->layout.minMainSize;
   }
   return 0.f;
 }
 
 std::size_t Element::colSpan() const {
-  if (overrides_ && overrides_->colSpan) {
-    return *overrides_->colSpan;
+  if (options_ && options_->hasLayoutOverrides && options_->layout.colSpan) {
+    return *options_->layout.colSpan;
   }
   return 1u;
 }
 
 std::size_t Element::rowSpan() const {
-  if (overrides_ && overrides_->rowSpan) {
-    return *overrides_->rowSpan;
+  if (options_ && options_->hasLayoutOverrides && options_->layout.rowSpan) {
+    return *options_->layout.rowSpan;
   }
   return 1u;
 }
@@ -404,11 +400,12 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   MountContext& activeCtx = scopedEnvironmentContext ? *scopedEnvironmentContext : ctx;
   detail::CurrentMountContextScope const currentMountContext{activeCtx};
 
-  if (!modifiers_ || !modifiers_->needsModifierPass()) {
+  detail::ElementModifiers const* modifiersPtr = modifiers();
+  if (!modifiersPtr || !modifiersPtr->needsModifierPass()) {
     return impl_->mount(activeCtx);
   }
 
-  detail::ElementModifiers const& modifiers = *modifiers_;
+  detail::ElementModifiers const& modifiers = *modifiersPtr;
   EdgeInsets const padding = modifiers.padding.evaluate();
   float const width = modifiers.sizeWidth.evaluate();
   float const height = modifiers.sizeHeight.evaluate();

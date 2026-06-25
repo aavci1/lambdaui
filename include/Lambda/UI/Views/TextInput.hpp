@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/TextInput.hpp
 ///
 /// Part of the Lambda public API.
@@ -90,9 +92,9 @@ struct TextInput : ViewModifiers<TextInput> {
     std::string placeholder;
 
     /// Optional syntax / attributed-run builder for custom text styling.
-    std::function<std::vector<AttributedRun>(std::string_view)> styler;
+    Reactive::SmallFn<std::vector<AttributedRun>(std::string_view)> styler;
     /// Optional validation tint derived from the current text.
-    std::function<Color(std::string_view)> validationColor;
+    Reactive::SmallFn<Color(std::string_view)> validationColor;
 
     /// Optional token overrides.
     Style style {};
@@ -109,17 +111,17 @@ struct TextInput : ViewModifiers<TextInput> {
     TextInputHeight multilineHeight {};
 
     /// Called whenever the text changes.
-    std::function<void(std::string const &)> onChange;
+    Reactive::SmallFn<void(std::string const &)> onChange;
     /// Called whenever the text changes, after the caret/selection has been updated.
-    std::function<void(std::string const &, detail::TextEditSelection)> onEdit;
+    Reactive::SmallFn<void(std::string const &, detail::TextEditSelection)> onEdit;
     /// Called on submit/confirm action.
-    std::function<void(std::string const &)> onSubmit;
+    Reactive::SmallFn<void(std::string const &)> onSubmit;
     /// Called when Escape is pressed while the control is focused.
-    std::function<void(std::string const &)> onEscape;
+    Reactive::SmallFn<void(std::string const &)> onEscape;
     /// Called before built-in key handling. Return true to consume the key.
-    std::function<bool(KeyCode, Modifiers)> onPreviewKeyDown;
+    Reactive::SmallFn<bool(KeyCode, Modifiers)> onPreviewKeyDown;
     /// Called before built-in semantic command handling. Return true to consume the command.
-    std::function<bool(std::string const&)> onPreviewCommand;
+    Reactive::SmallFn<bool(std::string const&)> onPreviewCommand;
 
     bool operator==(TextInput const& other) const {
         bool const sameSelection =

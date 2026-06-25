@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Toggle.hpp
 ///
 /// Part of the Lambda public API.
@@ -47,7 +49,7 @@ struct Toggle : ViewModifiers<Toggle> {
   // ── Events ─────────────────────────────────────────────────────────────────
 
   /// Invoked after the toggle changes \c value (same as mutating \c value from handlers).
-  std::function<void(bool)> onChange;
+  Reactive::SmallFn<void(bool)> onChange;
 
   bool operator==(Toggle const& other) const {
     return value == other.value && disabled == other.disabled && style == other.style;

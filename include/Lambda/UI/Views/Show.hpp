@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Show.hpp
 ///
 /// Reactive conditional primitive for v5 build-once view trees.

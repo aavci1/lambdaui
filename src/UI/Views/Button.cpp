@@ -200,8 +200,8 @@ Element Button::body() const {
                      .focusable([disabledBinding] {
                          return !disabledBinding.evaluate();
                      })
-                     .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
-                     .onTap(std::function<void()> {handleTap})
+                     .onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+                     .onTap(Reactive::SmallFn<void()> {handleTap})
     };
 }
 
@@ -264,8 +264,8 @@ Element LinkButton::body() const {
         .focusable([disabledBinding] {
             return !disabledBinding.evaluate();
         })
-        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(std::function<void()> {handleTap});
+        .onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(Reactive::SmallFn<void()> {handleTap});
 }
 
 Element IconButton::body() const {
@@ -325,8 +325,8 @@ Element IconButton::body() const {
         .focusable([disabledBinding] {
             return !disabledBinding.evaluate();
         })
-        .onKeyDown(std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onTap(std::function<void()> {handleTap});
+        .onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+        .onTap(Reactive::SmallFn<void()> {handleTap});
 }
 
 } // namespace lambdaui

@@ -399,9 +399,9 @@ Element TableRow::body() const {
     }
         .cursor(interactive ? Cursor::Hand : Cursor::Arrow)
         .focusable(interactive)
-        .onKeyDown(interactive ? std::function<void(KeyCode, Modifiers)> {handleKey}
-                               : std::function<void(KeyCode, Modifiers)> {})
-        .onTap(interactive ? std::function<void()> {handleTap} : std::function<void()> {});
+        .onKeyDown(interactive ? Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey}
+                               : Reactive::SmallFn<void(KeyCode, Modifiers)> {})
+        .onTap(interactive ? Reactive::SmallFn<void()> {handleTap} : Reactive::SmallFn<void()> {});
 }
 
 Element TableView::body() const {

@@ -74,7 +74,7 @@ Color backgroundForTone(ToastTone tone, Theme const& theme) {
 
 struct ToastCard {
   Toast toast;
-  std::function<void(std::uint64_t)> dismiss;
+  Reactive::SmallFn<void(std::uint64_t)> dismiss;
 
   Element body() const {
     auto theme = useEnvironment<ThemeKey>();
@@ -223,7 +223,7 @@ Element ToastOverlay::body() const {
   };
 }
 
-std::tuple<std::function<std::uint64_t(Toast)>, std::function<void(std::uint64_t)>, std::function<void()>, bool>
+std::tuple<Reactive::SmallFn<std::uint64_t(Toast)>, Reactive::SmallFn<void(std::uint64_t)>, Reactive::SmallFn<void()>, bool>
 useToast() {
   Runtime* runtime = Runtime::current();
   Window* window = runtime ? &runtime->window() : nullptr;

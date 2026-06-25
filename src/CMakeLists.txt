@@ -210,6 +210,7 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     Graphics/Linux/FreeTypeTextSystem.cpp
     Graphics/Vulkan/VulkanAllocator.cpp
     Graphics/Vulkan/VulkanContext.cpp
+    Graphics/Vulkan/VulkanDrawCommands.cpp
     Graphics/Vulkan/VulkanFrameRecorder.cpp
     Graphics/Vulkan/VulkanGlyphAtlas.cpp
     Graphics/Vulkan/VulkanGpuCanvas.cpp
@@ -242,6 +243,7 @@ elseif(LAMBDAUI_PLATFORM_LINUX_KMS)
     Graphics/Linux/FreeTypeTextSystem.cpp
     Graphics/Vulkan/VulkanAllocator.cpp
     Graphics/Vulkan/VulkanContext.cpp
+    Graphics/Vulkan/VulkanDrawCommands.cpp
     Graphics/Vulkan/VulkanFrameRecorder.cpp
     Graphics/Vulkan/VulkanGlyphAtlas.cpp
     Graphics/Vulkan/VulkanGpuCanvas.cpp

@@ -182,13 +182,13 @@ Element Slider::body() const {
     }
         .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
         .focusable(!isDisabled)
-        .onBlur(std::function<void()> {[dragging] {
+        .onBlur(Reactive::SmallFn<void()> {[dragging] {
             dragging = false;
         }})
-        .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-        .onPointerDown(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleDown})
-        .onPointerUp(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleUp})
-        .onPointerMove(isDisabled ? std::function<void(Point)> {} : std::function<void(Point)> {handleMove});
+        .onKeyDown(isDisabled ? Reactive::SmallFn<void(KeyCode, Modifiers)> {} : Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+        .onPointerDown(isDisabled ? Reactive::SmallFn<void(Point)> {} : Reactive::SmallFn<void(Point)> {handleDown})
+        .onPointerUp(isDisabled ? Reactive::SmallFn<void(Point)> {} : Reactive::SmallFn<void(Point)> {handleUp})
+        .onPointerMove(isDisabled ? Reactive::SmallFn<void(Point)> {} : Reactive::SmallFn<void(Point)> {handleMove});
 }
 
 } // namespace lambdaui

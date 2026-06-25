@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Checkbox.hpp
 ///
 /// Part of the Lambda public API.
@@ -55,7 +57,7 @@ struct Checkbox : ViewModifiers<Checkbox> {
   // ── Events ───────────────────────────────────────────────────────────────
 
   /// Fires when the user toggles or activates via keyboard; update \c value and clear indeterminate as needed.
-  std::function<void(bool)> onChange;
+  Reactive::SmallFn<void(bool)> onChange;
 
   bool operator==(Checkbox const& other) const {
     bool const sameIndeterminate = indeterminate.isValue() && other.indeterminate.isValue() &&

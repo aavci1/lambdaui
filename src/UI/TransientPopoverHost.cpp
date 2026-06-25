@@ -260,8 +260,8 @@ struct TransientPopoverHost::Impl {
   scenegraph::SceneGraph sceneGraph;
   std::unique_ptr<MountRoot> root;
   std::unique_ptr<scenegraph::SceneRenderer> renderer;
-  std::function<void()> requestRedraw;
-  std::function<void()> requestDismiss;
+  Reactive::SmallFn<void()> requestRedraw;
+  Reactive::SmallFn<void()> requestDismiss;
   InputState input;
   bool dismissed = false;
 

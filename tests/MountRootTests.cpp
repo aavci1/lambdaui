@@ -7,6 +7,7 @@
 #include <Lambda/UI/InteractionData.hpp>
 #include <Lambda/SceneGraph/RectNode.hpp>
 #include <Lambda/SceneGraph/SceneGraph.hpp>
+#include <Lambda/UI/EnvironmentKeys.hpp>
 #include <Lambda/UI/MeasureContext.hpp>
 #include <Lambda/UI/MountRoot.hpp>
 #include <Lambda/UI/MountContext.hpp>
@@ -30,6 +31,12 @@
 #include <optional>
 #include <string_view>
 #include <vector>
+
+namespace lambdaui {
+
+LAMBDA_DEFINE_ENVIRONMENT_KEY(ElementCopyTestKey, int, 0);
+
+} // namespace lambdaui
 
 namespace {
 
@@ -125,6 +132,21 @@ struct IntrinsicBox {
   std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext&) const {
     return std::make_unique<lambdaui::scenegraph::RectNode>(
         lambdaui::Rect{0.f, 0.f, 24.f, 12.f});
+  }
+};
+
+struct EnvironmentSizedBox {
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const&,
+                         lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
+    ctx.advanceChildSlot();
+    return {static_cast<float>(ctx.environmentBinding().value<lambdaui::ElementCopyTestKey>()), 12.f};
+  }
+
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext& ctx) const {
+    float const width =
+        static_cast<float>(ctx.environmentBinding().value<lambdaui::ElementCopyTestKey>());
+    return std::make_unique<lambdaui::scenegraph::RectNode>(
+        lambdaui::Rect{0.f, 0.f, width, 12.f});
   }
 };
 
@@ -252,6 +274,46 @@ struct DeepRelayoutNode {
 };
 
 } // namespace
+
+TEST_CASE("Element copy preserves consolidated option storage independently") {
+  int taps = 0;
+  lambdaui::Element original =
+      lambdaui::Element{EnvironmentSizedBox{}}
+          .environment<lambdaui::ElementCopyTestKey>(48)
+          .flex(2.f, 1.f, 0.f)
+          .key("copy-source")
+          .onTap([&] {
+            ++taps;
+          });
+  lambdaui::Element copy = original;
+  lambdaui::Element mutated =
+      std::move(original)
+          .environment<lambdaui::ElementCopyTestKey>(24)
+          .flex(1.f, 1.f, 0.f)
+          .key("mutated");
+
+  CHECK(copy.flexGrow() == doctest::Approx(2.f));
+  CHECK(copy.flexShrink() == doctest::Approx(1.f));
+  REQUIRE(copy.flexBasis().has_value());
+  CHECK(*copy.flexBasis() == doctest::Approx(0.f));
+  REQUIRE(copy.explicitKey().has_value());
+  CHECK(*copy.explicitKey() == "copy-source");
+  REQUIRE(copy.modifiers() != nullptr);
+  REQUIRE(copy.modifiers()->onTap);
+  copy.modifiers()->onTap(lambdaui::MouseButton::Left);
+  CHECK(taps == 1);
+
+  CHECK(mutated.flexGrow() == doctest::Approx(1.f));
+  REQUIRE(mutated.explicitKey().has_value());
+  CHECK(*mutated.explicitKey() == "mutated");
+
+  FakeTextSystem textSystem;
+  lambdaui::MeasureContext copyMeasure{textSystem, testEnvironment()};
+  lambdaui::MeasureContext mutatedMeasure{textSystem, testEnvironment()};
+  lambdaui::LayoutConstraints constraints{.maxWidth = 100.f, .maxHeight = 100.f};
+  CHECK(copy.measure(copyMeasure, constraints, {}, textSystem).width == doctest::Approx(48.f));
+  CHECK(mutated.measure(mutatedMeasure, constraints, {}, textSystem).width == doctest::Approx(24.f));
+}
 
 TEST_CASE("MountRoot mounts a static root once") {
   int bodyCalls = 0;

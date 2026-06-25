@@ -71,7 +71,7 @@ ShadowStyle shadowStyle(Dialog::Style const& style) {
 }
 
 struct DialogCloseButton : ViewModifiers<DialogCloseButton> {
-  std::function<void()> onTap;
+  Reactive::SmallFn<void()> onTap;
   Dialog::Style style {};
 
   Element body() const {
@@ -104,7 +104,7 @@ struct DialogCloseButton : ViewModifiers<DialogCloseButton> {
         }.size(style.closeButtonSize, style.closeButtonSize)
              .cursor(Cursor::Hand)
              .focusable(true)
-             .onTap(std::function<void()>{handleTap}),
+             .onTap(Reactive::SmallFn<void()>{handleTap}),
     };
   }
 };

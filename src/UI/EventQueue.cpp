@@ -50,12 +50,12 @@ constexpr std::size_t bucketFor() {
 } // namespace
 
 struct EventQueue::Impl {
-  using AnyHandler = std::function<void(std::any const&)>;
+  using AnyHandler = Reactive::SmallFn<void(std::any const&)>;
 
   std::mutex mutex_{};
   std::array<std::deque<Event>, kBucketCount> buckets_{};
   std::unordered_map<std::type_index, std::vector<AnyHandler>> frameworkHandlers_;
-  std::unordered_map<std::uint32_t, std::vector<std::function<void(std::any const&)>>> customPayloadHandlers_;
+  std::unordered_map<std::uint32_t, std::vector<Reactive::SmallFn<void(std::any const&)>>> customPayloadHandlers_;
 
   bool dispatching_ = false;
 };
@@ -99,12 +99,12 @@ void EventQueue::post(Event event) {
 }
 
 void detail::EventQueueImplAccess::addFrameworkHandler(EventQueue& q, std::type_index idx,
-                                                         std::function<void(std::any const&)> handler) {
+                                                         Reactive::SmallFn<void(std::any const&)> handler) {
   q.d->frameworkHandlers_[idx].push_back(std::move(handler));
 }
 
 void detail::EventQueueImplAccess::addCustomHandler(EventQueue& q, std::uint32_t tid,
-                                                    std::function<void(std::any const&)> handler) {
+                                                    Reactive::SmallFn<void(std::any const&)> handler) {
   q.d->customPayloadHandlers_[tid].push_back(std::move(handler));
 }
 
@@ -123,7 +123,7 @@ void detail::EventQueueImplAccess::dispatchOne(EventQueue& q, Event& event) {
   std::visit(
       [&q](auto& ev) {
         using T = std::decay_t<decltype(ev)>;
-        std::vector<std::function<void(std::any const&)>> handlers;
+        std::vector<Reactive::SmallFn<void(std::any const&)>> handlers;
         auto it = q.d->frameworkHandlers_.find(std::type_index(typeid(T)));
         if (it != q.d->frameworkHandlers_.end()) {
           handlers = it->second;
@@ -135,7 +135,7 @@ void detail::EventQueueImplAccess::dispatchOne(EventQueue& q, Event& event) {
           }
         }
         if constexpr (std::is_same_v<T, CustomEvent>) {
-          std::vector<std::function<void(std::any const&)>> customHandlers;
+          std::vector<Reactive::SmallFn<void(std::any const&)>> customHandlers;
           auto pit = q.d->customPayloadHandlers_.find(ev.type);
           if (pit != q.d->customPayloadHandlers_.end()) {
             customHandlers = pit->second;

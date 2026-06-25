@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Select.hpp
 ///
 /// Part of the Lambda public API.
@@ -102,7 +104,7 @@ struct Select : ViewModifiers<Select> {
     Style style {};
 
     /// Called after user selection changes. Receives the selected option index.
-    std::function<void(int)> onChange;
+    Reactive::SmallFn<void(int)> onChange;
 
     bool operator==(Select const& other) const {
         return selectedIndex == other.selectedIndex && options == other.options &&

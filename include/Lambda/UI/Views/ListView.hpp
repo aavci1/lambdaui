@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/ListView.hpp
 ///
 /// Part of the Lambda public API.
@@ -34,9 +36,9 @@ struct ListRow : ViewModifiers<ListRow> {
     /// Optional row token overrides.
     Style style {};
     /// Called when the row is activated.
-    std::function<void()> onTap;
+    Reactive::SmallFn<void()> onTap;
     /// Called for keys not handled by the row's default activation behavior.
-    std::function<void(KeyCode, Modifiers)> onKeyDown;
+    Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyDown;
 
     Element body() const;
 };

@@ -116,7 +116,7 @@ Element Popover::body() const {
   };
 }
 
-std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover() {
+std::tuple<Reactive::SmallFn<void(Popover)>, Reactive::SmallFn<void()>, bool> usePopover() {
   Runtime* runtime = Runtime::current();
   Window* window = runtime ? &runtime->window() : nullptr;
   auto id = std::make_shared<PopoverSurfaceId>(kInvalidPopoverSurfaceId);

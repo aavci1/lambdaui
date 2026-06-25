@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/For.hpp
 ///
 /// Reactive keyed list primitive for v5 build-once view trees.

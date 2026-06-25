@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Switch.hpp
 ///
 /// Reactive multi-branch primitive for v5 build-once view trees.
@@ -20,7 +22,7 @@ namespace lambdaui {
 template<typename T>
 struct SwitchCase {
   T value;
-  std::function<Element()> factory;
+  Reactive::SmallFn<Element()> factory;
 };
 
 template<typename T, typename Factory>
@@ -41,7 +43,7 @@ public:
   static constexpr bool mountsWhenCollapsed = true;
 
   SwitchView(Selector selector, std::vector<SwitchCase<Value>> cases,
-             std::function<Element()> defaultFactory)
+             Reactive::SmallFn<Element()> defaultFactory)
       : selector_(std::move(selector))
       , cases_(std::move(cases))
       , defaultFactory_(std::move(defaultFactory)) {}
@@ -97,7 +99,7 @@ private:
   struct State {
     Selector selector;
     std::vector<SwitchCase<Value>> cases;
-    std::function<Element()> defaultFactory;
+    Reactive::SmallFn<Element()> defaultFactory;
     Size frameSize{};
     EnvironmentBinding environment;
     TextSystem& textSystem;
@@ -110,7 +112,7 @@ private:
     std::shared_ptr<Reactive::Scope> branchScope;
 
     State(Selector selectorIn, std::vector<SwitchCase<Value>> casesIn,
-          std::function<Element()> defaultFactoryIn, Size frameSizeIn,
+          Reactive::SmallFn<Element()> defaultFactoryIn, Size frameSizeIn,
           EnvironmentBinding environmentIn, TextSystem& textSystemIn,
           LayoutConstraints constraintsIn, LayoutHints hintsIn,
           Reactive::SmallFn<void()> requestRedrawIn,
@@ -219,13 +221,13 @@ private:
 
   Selector selector_;
   std::vector<SwitchCase<Value>> cases_;
-  std::function<Element()> defaultFactory_;
+  Reactive::SmallFn<Element()> defaultFactory_;
 };
 
 template<typename Selector, typename Value = std::decay_t<std::invoke_result_t<Selector&>>>
 SwitchView<Value, std::decay_t<Selector>>
 Switch(Selector&& selector, std::vector<SwitchCase<Value>> cases,
-       std::function<Element()> defaultFactory = [] {
+       Reactive::SmallFn<Element()> defaultFactory = [] {
          return Element{Rectangle{}}.size(0.f, 0.f);
        }) {
   return SwitchView<Value, std::decay_t<Selector>>{

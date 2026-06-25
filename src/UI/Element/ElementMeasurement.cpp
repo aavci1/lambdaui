@@ -38,8 +38,8 @@ struct EnvironmentBindingScope {
   EnvironmentBinding previous;
   bool active = false;
 
-  EnvironmentBindingScope(MeasureContext& context,
-                          std::vector<std::shared_ptr<detail::EnvironmentOverride const>> const& overrides)
+  template <typename Overrides>
+  EnvironmentBindingScope(MeasureContext& context, Overrides const& overrides)
       : ctx(context)
       , previous(context.environmentBinding())
       , active(!overrides.empty()) {
@@ -64,7 +64,7 @@ struct EnvironmentBindingScope {
 
 Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints const& constraints,
                                        LayoutHints const& hints, TextSystem& textSystem) const {
-  detail::ElementModifiers const& m = *modifiers_;
+  detail::ElementModifiers const& m = *modifiers();
   EdgeInsets const padding = m.padding.evaluate();
   float const padL = std::max(0.f, padding.left);
   float const padR = std::max(0.f, padding.right);
@@ -149,8 +149,10 @@ Size Element::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   EnvironmentBindingScope const environmentBindingScope{ctx, envOverrides_};
   Element const* const prevEl = ctx.currentElement();
   ctx.setCurrentElement(this);
-  Size const sz = modifiers_ && modifiers_->needsModifierPass() ? measureWithModifiersImpl(ctx, constraints, hints, textSystem)
-                                                                : impl_->measure(ctx, constraints, hints, textSystem);
+  detail::ElementModifiers const* modifiersPtr = modifiers();
+  Size const sz = modifiersPtr && modifiersPtr->needsModifierPass()
+                      ? measureWithModifiersImpl(ctx, constraints, hints, textSystem)
+                      : impl_->measure(ctx, constraints, hints, textSystem);
   ctx.setCurrentElement(prevEl);
   layoutDebugRecordMeasure(constraints, sz);
 #ifndef NDEBUG

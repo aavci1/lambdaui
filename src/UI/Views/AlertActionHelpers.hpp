@@ -1,15 +1,17 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 #include <functional>
 #include <utility>
 
 namespace lambdaui::detail {
 
-inline std::function<void()> wrapDismissThenInvoke(std::function<void()> dismiss,
-                                                   std::function<void()> action) {
+inline Reactive::SmallFn<void()> wrapDismissThenInvoke(Reactive::SmallFn<void()> dismiss,
+                                                   Reactive::SmallFn<void()> action) {
   return [dismiss = std::move(dismiss), action = std::move(action)]() {
-    std::function<void()> const dismissCopy = dismiss;
-    std::function<void()> const actionCopy = action;
+    Reactive::SmallFn<void()> const dismissCopy = dismiss;
+    Reactive::SmallFn<void()> const actionCopy = action;
     if (dismissCopy) {
       dismissCopy();
     }

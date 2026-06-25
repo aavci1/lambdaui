@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 #include <Lambda/UI/MenuItem.hpp>
 #include <Lambda/UI/Input.hpp>
 #include <Lambda/UI/Clipboard.hpp>
@@ -28,7 +30,7 @@ struct ShortcutKeyHash {
   }
 };
 
-using MenuActionDispatcher = std::function<bool(std::string const&)>;
+using MenuActionDispatcher = Reactive::SmallFn<bool(std::string const&)>;
 
 class Application {
 public:
@@ -38,10 +40,10 @@ public:
   virtual void setApplicationName(std::string name) = 0;
   virtual std::string applicationName() const = 0;
   virtual void setMenuBar(MenuBar const& menu, MenuActionDispatcher dispatcher) = 0;
-  virtual void setTerminateHandler(std::function<void()> handler) = 0;
+  virtual void setTerminateHandler(Reactive::SmallFn<void()> handler) = 0;
   virtual void requestTerminate() = 0;
   virtual std::unordered_set<ShortcutKey, ShortcutKeyHash> menuClaimedShortcuts() const = 0;
-  virtual void revalidateMenuItems(std::function<bool(std::string const&)> isEnabled) = 0;
+  virtual void revalidateMenuItems(Reactive::SmallFn<bool(std::string const&)> isEnabled) = 0;
   virtual std::string userDataDir() const = 0;
   virtual std::string cacheDir() const = 0;
   virtual std::unique_ptr<Clipboard> createClipboard() { return nullptr; }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/ViewModifiers.hpp
 ///
 /// CRTP base providing modifier methods on all view types, removing the need for
@@ -62,22 +64,22 @@ struct ViewModifiers {
   Element overlay(Element over) &&;
   Element key(std::string key) &&;
 
-  Element onTap(std::function<void()> handler, MouseButton button = MouseButton::Left) &&;
-  Element onTap(std::function<void(MouseButton)> handler) &&;
-  Element onTap(std::function<void(MouseButton, Modifiers)> handler) &&;
-  Element onPointerEnter(std::function<void()> handler) &&;
-  Element onPointerExit(std::function<void()> handler) &&;
-  Element onFocus(std::function<void()> handler) &&;
-  Element onBlur(std::function<void()> handler) &&;
-  Element onPointerDown(std::function<void(Point)> handler, MouseButton button = MouseButton::Left) &&;
-  Element onPointerDown(std::function<void(Point, MouseButton)> handler) &&;
-  Element onPointerUp(std::function<void(Point)> handler, MouseButton button = MouseButton::Left) &&;
-  Element onPointerUp(std::function<void(Point, MouseButton)> handler) &&;
-  Element onPointerMove(std::function<void(Point)> handler) &&;
-  Element onScroll(std::function<void(Vec2)> handler) &&;
-  Element onKeyDown(std::function<void(KeyCode, Modifiers)> handler) &&;
-  Element onKeyUp(std::function<void(KeyCode, Modifiers)> handler) &&;
-  Element onTextInput(std::function<void(std::string const&)> handler) &&;
+  Element onTap(Reactive::SmallFn<void()> handler, MouseButton button = MouseButton::Left) &&;
+  Element onTap(Reactive::SmallFn<void(MouseButton)> handler) &&;
+  Element onTap(Reactive::SmallFn<void(MouseButton, Modifiers)> handler) &&;
+  Element onPointerEnter(Reactive::SmallFn<void()> handler) &&;
+  Element onPointerExit(Reactive::SmallFn<void()> handler) &&;
+  Element onFocus(Reactive::SmallFn<void()> handler) &&;
+  Element onBlur(Reactive::SmallFn<void()> handler) &&;
+  Element onPointerDown(Reactive::SmallFn<void(Point)> handler, MouseButton button = MouseButton::Left) &&;
+  Element onPointerDown(Reactive::SmallFn<void(Point, MouseButton)> handler) &&;
+  Element onPointerUp(Reactive::SmallFn<void(Point)> handler, MouseButton button = MouseButton::Left) &&;
+  Element onPointerUp(Reactive::SmallFn<void(Point, MouseButton)> handler) &&;
+  Element onPointerMove(Reactive::SmallFn<void(Point)> handler) &&;
+  Element onScroll(Reactive::SmallFn<void(Vec2)> handler) &&;
+  Element onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)> handler) &&;
+  Element onKeyUp(Reactive::SmallFn<void(KeyCode, Modifiers)> handler) &&;
+  Element onTextInput(Reactive::SmallFn<void(std::string const&)> handler) &&;
   Element focusable(bool enabled) &&;
   Element focusable(Reactive::Bindable<bool> enabled) &&;
   Element cursor(Cursor c) &&;

@@ -363,7 +363,7 @@ struct FileDialogNavSegmentButton : ViewModifiers<FileDialogNavSegmentButton> {
   std::string tooltip;
   Reactive::Bindable<bool> enabled{true};
   CornerRadius radius{};
-  std::function<void()> onTap;
+  Reactive::SmallFn<void()> onTap;
 
   Element body() const {
     auto theme = useEnvironment<ThemeKey>();
@@ -411,16 +411,16 @@ struct FileDialogNavSegmentButton : ViewModifiers<FileDialogNavSegmentButton> {
         .focusable([enabledBinding] {
           return enabledBinding.evaluate();
         })
-        .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleKey})
-        .onTap(std::function<void()>{handleTap});
+        .onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)>{handleKey})
+        .onTap(Reactive::SmallFn<void()>{handleTap});
   }
 };
 
 struct FileDialogNavSegmentedControl : ViewModifiers<FileDialogNavSegmentedControl> {
   Reactive::Bindable<bool> canGoBack{false};
   Reactive::Bindable<bool> canGoForward{false};
-  std::function<void()> goBack;
-  std::function<void()> goForward;
+  Reactive::SmallFn<void()> goBack;
+  Reactive::SmallFn<void()> goForward;
 
   Element body() const {
     return HStack{
@@ -453,7 +453,7 @@ struct FileDialogBreadcrumbCrumbView : ViewModifiers<FileDialogBreadcrumbCrumbVi
   FileDialogCrumb crumb;
   bool showHomeIcon = false;
   Reactive::Bindable<bool> isLast{false};
-  std::function<void()> onTap;
+  Reactive::SmallFn<void()> onTap;
 
   Element body() const {
     auto theme = useEnvironment<ThemeKey>();
@@ -497,7 +497,7 @@ struct FileDialogBreadcrumbCrumbView : ViewModifiers<FileDialogBreadcrumbCrumbVi
         .cursor([isLastBinding] {
           return isLastBinding.evaluate() ? Cursor::Inherit : Cursor::Hand;
         })
-        .onTap(std::function<void()>{handleTap});
+        .onTap(Reactive::SmallFn<void()>{handleTap});
   }
 };
 
@@ -509,7 +509,7 @@ struct FileDialogBreadcrumbSeparatorView {
 
 struct FileDialogBreadcrumbBar : ViewModifiers<FileDialogBreadcrumbBar> {
   Reactive::Signal<std::vector<FileDialogCrumb>> crumbs;
-  std::function<void(std::filesystem::path)> navigateToPath;
+  Reactive::SmallFn<void(std::filesystem::path)> navigateToPath;
 
   Element body() const {
     Reactive::Signal<std::vector<FileDialogCrumb>> const crumbsSignal = crumbs;
@@ -587,9 +587,9 @@ Element fileDialogRow(FileDialogEntry entry,
                       Reactive::Signal<std::filesystem::path> overwriteConfirmPath,
                       Reactive::Signal<std::string> status,
                       Reactive::Bindable<float> rowWidth,
-                      std::function<void(std::filesystem::path)> refreshDirectory,
-                      std::function<void(FileDialogEntry)> onFileActivate,
-                      std::function<void(KeyCode, Modifiers)> onRowKeyDown) {
+                      Reactive::SmallFn<void(std::filesystem::path)> refreshDirectory,
+                      Reactive::SmallFn<void(FileDialogEntry)> onFileActivate,
+                      Reactive::SmallFn<void(KeyCode, Modifiers)> onRowKeyDown) {
   auto navigate = [entry = entry, refreshDirectory = std::move(refreshDirectory)] {
     if (refreshDirectory) {
       refreshDirectory(entry.path);
@@ -639,7 +639,7 @@ Element fileDialogRow(FileDialogEntry entry,
                return !selectedPath().empty() && selectedPath() == entry.path;
              },
              .style = ListRow::Style{.paddingH = 9.f, .paddingV = 7.f},
-             .onTap = entry.directory ? std::function<void()>{navigate} : std::function<void()>{select},
+             .onTap = entry.directory ? Reactive::SmallFn<void()>{navigate} : Reactive::SmallFn<void()>{select},
              .onKeyDown = std::move(onRowKeyDown),
          }
       .width(rowWidth);
@@ -647,7 +647,7 @@ Element fileDialogRow(FileDialogEntry entry,
 
 Element fileDialogPlaceRow(FileDialogPlace place,
                            Reactive::Signal<std::filesystem::path> directory,
-                           std::function<void(std::filesystem::path)> refreshDirectory) {
+                           Reactive::SmallFn<void(std::filesystem::path)> refreshDirectory) {
   return ListRow{
       .content = HStack{
           .spacing = 8.f,
@@ -979,7 +979,7 @@ Element FileDialog::body() const {
                                            fileListWidth,
                                            navigateToDirectory,
                                            activateFileFromClick,
-                                           std::function<void(KeyCode, Modifiers)>{
+                                           Reactive::SmallFn<void(KeyCode, Modifiers)>{
                                                std::move(rowKey)});
                     },
                     0.f,
@@ -1051,7 +1051,7 @@ Element FileDialog::body() const {
                                   fileListScrollView,
                                   fileListScrollView))
                               .focusable(true)
-                              .onKeyDown(std::function<void(KeyCode, Modifiers)>{handleListKey})
+                              .onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)>{handleListKey})
                               .flex(1.f, 1.f, 0.f),
                           Show(
                               [status] {

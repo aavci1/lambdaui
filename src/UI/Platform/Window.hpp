@@ -21,6 +21,8 @@ struct Popover;
 
 namespace platform {
 
+class WindowEventPump;
+
 /// Internal abstract platform window; implemented in platform translation units. Not part of the public API.
 class Window {
 public:
@@ -65,25 +67,8 @@ public:
 
   virtual void* nativeGraphicsSurface() const = 0;
 
-  /// Drain queued AppKit/SDL events without blocking (used when a redraw is already pending).
-  virtual void processEvents() {}
-
-  /// Block until the next event or `timeoutMs` elapses; `timeoutMs < 0` waits indefinitely.
-  virtual void waitForEvents(int /*timeoutMs*/) {}
-  virtual int eventFd() const { return -1; }
-  virtual int wakeFd() const { return -1; }
-
-  /// Wake `waitForEvents` (e.g. after `requestRedraw`).
-  virtual void wakeEventLoop() {}
-
-  /// Arm the platform frame pump for the next display boundary.
-  virtual void requestAnimationFrame() {}
-
-  /// Marks the most recent frame boundary event as handled by the application loop.
-  virtual void acknowledgeAnimationFrameTick() {}
-
-  /// Called after a frame has been presented. `needsAnotherFrame` keeps the frame pump running.
-  virtual void completeAnimationFrame(bool /*needsAnotherFrame*/) {}
+  virtual WindowEventPump* eventPump() { return nullptr; }
+  virtual WindowEventPump const* eventPump() const { return nullptr; }
 
   virtual void setCursor(Cursor /*kind*/) {}
 

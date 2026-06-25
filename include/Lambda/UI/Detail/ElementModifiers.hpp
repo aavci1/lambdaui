@@ -12,11 +12,11 @@
 #include <Lambda/Detail/SmallVector.hpp>
 #include <Lambda/Graphics/Styles.hpp>
 #include <Lambda/Reactive/Bindable.hpp>
+#include <Lambda/Reactive/SmallFn.hpp>
 #include <Lambda/UI/Environment.hpp>
 #include <Lambda/Layout/LayoutEngine.hpp>
 
 #include <cmath>
-#include <functional>
 #include <memory>
 #include <vector>
 
@@ -63,19 +63,19 @@ struct ElementModifiers {
   std::vector<Reactive::BindingFn> rasterizeInvalidators;
   std::unique_ptr<Element> overlay;
 
-  std::function<void(MouseButton)> onTap;
-  std::function<void()> onPointerEnter;
-  std::function<void()> onPointerExit;
-  std::function<void()> onFocus;
-  std::function<void()> onBlur;
-  std::function<void(Point, MouseButton)> onPointerDown;
-  std::function<void(Point, MouseButton)> onPointerUp;
-  std::function<void(Point)> onPointerMove;
-  std::function<void(Vec2)> onScroll;
-  std::function<void(KeyCode, Modifiers)> onKeyDown;
-  std::function<void(KeyCode, Modifiers)> onKeyUp;
-  std::function<void(std::string const&)> onTextInput;
-  std::function<void(MouseButton, Modifiers)> onTapWithModifiers;
+  Reactive::SmallFn<void(MouseButton)> onTap;
+  Reactive::SmallFn<void()> onPointerEnter;
+  Reactive::SmallFn<void()> onPointerExit;
+  Reactive::SmallFn<void()> onFocus;
+  Reactive::SmallFn<void()> onBlur;
+  Reactive::SmallFn<void(Point, MouseButton)> onPointerDown;
+  Reactive::SmallFn<void(Point, MouseButton)> onPointerUp;
+  Reactive::SmallFn<void(Point)> onPointerMove;
+  Reactive::SmallFn<void(Vec2)> onScroll;
+  Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyDown;
+  Reactive::SmallFn<void(KeyCode, Modifiers)> onKeyUp;
+  Reactive::SmallFn<void(std::string const&)> onTextInput;
+  Reactive::SmallFn<void(MouseButton, Modifiers)> onTapWithModifiers;
   Reactive::Bindable<bool> focusable{false};
   Reactive::Bindable<Cursor> cursor{Cursor::Inherit};
   bool windowDragRegion = false;

@@ -128,8 +128,8 @@ Element Toggle::body() const {
         }
                      .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                      .focusable(!isDisabled)
-                     .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-                     .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleToggle}),
+                     .onKeyDown(isDisabled ? Reactive::SmallFn<void(KeyCode, Modifiers)> {} : Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+                     .onTap(isDisabled ? Reactive::SmallFn<void()> {} : Reactive::SmallFn<void()> {handleToggle}),
     };
 }
 

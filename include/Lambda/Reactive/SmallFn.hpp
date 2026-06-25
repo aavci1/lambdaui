@@ -76,6 +76,20 @@ public:
     return *this;
   }
 
+  SmallFn& operator=(std::nullptr_t) {
+    reset();
+    return *this;
+  }
+
+  template <typename Fn>
+    requires(!std::is_same_v<std::decay_t<Fn>, SmallFn> &&
+             std::is_invocable_r_v<R, std::decay_t<Fn>&, Args...>)
+  SmallFn& operator=(Fn&& fn) {
+    SmallFn next(std::forward<Fn>(fn));
+    *this = std::move(next);
+    return *this;
+  }
+
   explicit operator bool() const {
     return table_ != nullptr;
   }

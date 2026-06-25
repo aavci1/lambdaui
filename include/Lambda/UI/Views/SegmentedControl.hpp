@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/SegmentedControl.hpp
 ///
 /// Part of the Lambda public API.
@@ -54,7 +56,7 @@ struct SegmentedControl : ViewModifiers<SegmentedControl> {
     /// Optional token overrides.
     Style style {};
     /// Called after the user changes selection.
-    std::function<void(int)> onChange;
+    Reactive::SmallFn<void(int)> onChange;
 
     bool operator==(SegmentedControl const& other) const {
         return selectedIndex == other.selectedIndex && options == other.options &&

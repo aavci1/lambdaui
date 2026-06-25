@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Toast.hpp
 ///
 /// Part of the Lambda public API.
@@ -42,7 +44,7 @@ struct ToastAction {
   /// Dismisses the toast before running `action` when true.
   bool dismissOnTap = true;
   /// Action callback.
-  std::function<void()> action;
+  Reactive::SmallFn<void()> action;
 
   bool operator==(ToastAction const& other) const {
     return label == other.label && variant == other.variant && dismissOnTap == other.dismissOnTap &&
@@ -78,7 +80,7 @@ struct Toast {
   float maxWidth = 420.f;
 
   /// Called when the toast is dismissed by any path.
-  std::function<void()> onDismiss;
+  Reactive::SmallFn<void()> onDismiss;
 
   bool operator==(Toast const& other) const {
     return id == other.id && title == other.title && message == other.message &&
@@ -94,7 +96,7 @@ struct ToastOverlay : ViewModifiers<ToastOverlay> {
   /// Visible toasts to render.
   std::vector<Toast> toasts;
   /// Called to dismiss a toast by id.
-  std::function<void(std::uint64_t)> onDismiss;
+  Reactive::SmallFn<void(std::uint64_t)> onDismiss;
 
   bool operator==(ToastOverlay const& other) const {
     return toasts == other.toasts &&
@@ -110,7 +112,7 @@ struct ToastOverlay : ViewModifiers<ToastOverlay> {
 /// `dismiss(id)` removes one toast.
 /// `clear()` removes all visible toasts.
 /// `hasVisibleToasts` is true while any toast is currently shown.
-std::tuple<std::function<std::uint64_t(Toast)>, std::function<void(std::uint64_t)>, std::function<void()>, bool>
+std::tuple<Reactive::SmallFn<std::uint64_t(Toast)>, Reactive::SmallFn<void(std::uint64_t)>, Reactive::SmallFn<void()>, bool>
 useToast();
 
 } // namespace lambdaui

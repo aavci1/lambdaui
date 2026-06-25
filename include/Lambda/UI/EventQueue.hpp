@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/EventQueue.hpp
 ///
 /// Part of the Lambda public API.
@@ -67,7 +69,7 @@ public:
   }
 
   template<typename T>
-  void on(std::function<void(T const&)> handler);
+  void on(Reactive::SmallFn<void(T const&)> handler);
 
   void dispatch();
 
@@ -86,15 +88,15 @@ namespace detail {
 /// Internal; used by `EventQueue` templates and implementation. Do not call from application code.
 struct EventQueueImplAccess {
   static void postInner(EventQueue& q, Event&& event);
-  static void addFrameworkHandler(EventQueue& q, std::type_index idx, std::function<void(std::any const&)> handler);
-  static void addCustomHandler(EventQueue& q, std::uint32_t tid, std::function<void(std::any const&)> handler);
+  static void addFrameworkHandler(EventQueue& q, std::type_index idx, Reactive::SmallFn<void(std::any const&)> handler);
+  static void addCustomHandler(EventQueue& q, std::uint32_t tid, Reactive::SmallFn<void(std::any const&)> handler);
   static void dispatchOne(EventQueue& q, Event& event);
 };
 
 } // namespace detail
 
 template<typename T>
-void EventQueue::on(std::function<void(T const&)> handler) {
+void EventQueue::on(Reactive::SmallFn<void(T const&)> handler) {
   if constexpr (detail::isEventAlternativeV<T>) {
     auto wrapped = [h = std::move(handler)](std::any const& a) { h(std::any_cast<T const&>(a)); };
     detail::EventQueueImplAccess::addFrameworkHandler(*this, std::type_index(typeid(T)), std::move(wrapped));

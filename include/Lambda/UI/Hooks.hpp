@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Hooks.hpp
 ///
 /// Scope-owned v5 hooks and environment accessors.
@@ -532,8 +534,8 @@ inline Rect useBounds() {
   return bounds;
 }
 
-inline void useViewCommand(std::string const& name, std::function<void()> handler,
-                           std::function<bool()> isEnabled = {}) {
+inline void useViewCommand(std::string const& name, Reactive::SmallFn<void()> handler,
+                           Reactive::SmallFn<bool()> isEnabled = {}) {
   Runtime* runtime = Runtime::current();
   if (!runtime) {
     return;
@@ -547,13 +549,13 @@ inline void useViewCommand(std::string const& name, std::function<void()> handle
   });
 }
 
-inline void useViewAction(std::string const& name, std::function<void()> handler,
-                          std::function<bool()> isEnabled = {}) {
+inline void useViewAction(std::string const& name, Reactive::SmallFn<void()> handler,
+                          Reactive::SmallFn<bool()> isEnabled = {}) {
   useViewCommand(name, std::move(handler), std::move(isEnabled));
 }
 
-inline void useWindowCommand(std::string const& name, std::function<void()> handler,
-                             std::function<bool()> isEnabled = {}) {
+inline void useWindowCommand(std::string const& name, Reactive::SmallFn<void()> handler,
+                             Reactive::SmallFn<bool()> isEnabled = {}) {
   Runtime* runtime = Runtime::current();
   if (!runtime) {
     return;
@@ -565,18 +567,18 @@ inline void useWindowCommand(std::string const& name, std::function<void()> hand
   });
 }
 
-inline void useWindowAction(std::string const& name, std::function<void()> handler,
-                            std::function<bool()> isEnabled = {}) {
+inline void useWindowAction(std::string const& name, Reactive::SmallFn<void()> handler,
+                            Reactive::SmallFn<bool()> isEnabled = {}) {
   useWindowCommand(name, std::move(handler), std::move(isEnabled));
 }
 
-inline void useWindowCommand(std::string const& name, std::function<void()> handler,
+inline void useWindowCommand(std::string const& name, Reactive::SmallFn<void()> handler,
                              CommandDescriptor descriptor) {
   Runtime* runtime = Runtime::current();
   if (!runtime) {
     return;
   }
-  std::function<bool()> isEnabled = descriptor.isEnabled;
+  Reactive::SmallFn<bool()> isEnabled = descriptor.isEnabled;
   descriptor.isEnabled = {};
   runtime->window().registerCommand(name, std::move(descriptor));
   CommandId const id = runtime->commandRegistry().registerWindowHandler(
@@ -586,7 +588,7 @@ inline void useWindowCommand(std::string const& name, std::function<void()> hand
   });
 }
 
-inline void useWindowAction(std::string const& name, std::function<void()> handler,
+inline void useWindowAction(std::string const& name, Reactive::SmallFn<void()> handler,
                             ActionDescriptor descriptor) {
   useWindowCommand(name, std::move(handler), std::move(descriptor));
 }

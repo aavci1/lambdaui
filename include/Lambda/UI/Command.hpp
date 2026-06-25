@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Command.hpp
 ///
 /// Part of the Lambda public API.
@@ -43,7 +45,7 @@ struct CommandDescriptor {
   /// When set, called every rebuild to determine if the command is currently available.
   /// Return false to suppress both shortcut dispatch and visual enabled state.
   /// When not set the command is always considered enabled.
-  std::function<bool()> isEnabled{};
+  Reactive::SmallFn<bool()> isEnabled{};
 
   [[nodiscard]] std::string displayTitle() const {
     if (!title.empty()) return title;

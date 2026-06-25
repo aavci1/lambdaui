@@ -66,7 +66,7 @@ public:
     dispatcher_ = std::move(dispatcher);
   }
 
-  void setTerminateHandler(std::function<void()> handler) override {
+  void setTerminateHandler(Reactive::SmallFn<void()> handler) override {
     terminateHandler_ = std::move(handler);
   }
 
@@ -80,7 +80,7 @@ public:
     return claimedShortcuts_;
   }
 
-  void revalidateMenuItems(std::function<bool(std::string const&)>) override {}
+  void revalidateMenuItems(Reactive::SmallFn<bool(std::string const&)>) override {}
 
   std::string userDataDir() const override {
     return appDir(envOr("XDG_DATA_HOME", envOr("HOME", ".") + "/.local/share"), applicationName());
@@ -140,7 +140,7 @@ private:
   }
 
   platform::MenuActionDispatcher dispatcher_;
-  std::function<void()> terminateHandler_;
+  Reactive::SmallFn<void()> terminateHandler_;
   std::unordered_set<platform::ShortcutKey, platform::ShortcutKeyHash> claimedShortcuts_;
   std::string appName_ = "lambda";
 };

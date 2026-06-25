@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Alert.hpp
 ///
 /// Part of the Lambda public API.
@@ -28,7 +30,7 @@ struct AlertButton {
   bool disabled = false;
   /// Called when this button is tapped or activated by keyboard.
   /// The alert is dismissed automatically before this is called.
-  std::function<void()> action{};
+  Reactive::SmallFn<void()> action{};
 
   bool operator==(AlertButton const& other) const {
     return label == other.label && variant == other.variant && disabled == other.disabled &&
@@ -92,6 +94,6 @@ private:
 ///
 /// Alert uses useOverlay internally; the overlay config is managed here.
 /// Must be called inside body() like other hooks.
-std::tuple<std::function<void(Alert)>, std::function<void()>, bool> useAlert();
+std::tuple<Reactive::SmallFn<void(Alert)>, Reactive::SmallFn<void()>, bool> useAlert();
 
 } // namespace lambdaui

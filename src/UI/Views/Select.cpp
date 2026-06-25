@@ -183,7 +183,7 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
     bool showCheckmark = true;
     SelectResolvedStyle style {};
     Theme theme {};
-    std::function<void()> onTap;
+    Reactive::SmallFn<void()> onTap;
 
     bool operator==(SelectMenuRow const& other) const {
         return option == other.option && selectedIndex == other.selectedIndex &&
@@ -334,10 +334,10 @@ struct SelectMenuRow : ViewModifiers<SelectMenuRow> {
             .cornerRadius(CornerRadius {style.cornerRadius})
             .cursor(disabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!disabled)
-            .onKeyDown(disabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-            .onPointerEnter(disabled ? std::function<void()> {} : std::function<void()> {activateHover})
-            .onPointerExit(disabled ? std::function<void()> {} : std::function<void()> {deactivateHover})
-            .onTap(disabled ? std::function<void()> {} : std::function<void()> {activate});
+            .onKeyDown(disabled ? Reactive::SmallFn<void(KeyCode, Modifiers)> {} : Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+            .onPointerEnter(disabled ? Reactive::SmallFn<void()> {} : Reactive::SmallFn<void()> {activateHover})
+            .onPointerExit(disabled ? Reactive::SmallFn<void()> {} : Reactive::SmallFn<void()> {deactivateHover})
+            .onTap(disabled ? Reactive::SmallFn<void()> {} : Reactive::SmallFn<void()> {activate});
     }
 };
 
@@ -350,7 +350,7 @@ struct SelectMenuContent {
     std::optional<float> menuWidth;
     SelectResolvedStyle style {};
     Theme theme {};
-    std::function<void(int)> onSelect;
+    Reactive::SmallFn<void(int)> onSelect;
 
     bool operator==(SelectMenuContent const& other) const {
         return selectedIndex == other.selectedIndex && activeIndex == other.activeIndex &&
@@ -424,7 +424,7 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
     SelectTriggerMode triggerMode = SelectTriggerMode::Field;
     PopoverPlacement placement = PopoverPlacement::Below;
     SelectResolvedStyle style {};
-    std::function<void(int)> onChange;
+    Reactive::SmallFn<void(int)> onChange;
 
     bool operator==(SelectTrigger const& other) const {
         return selectedIndex == other.selectedIndex && options == other.options &&
@@ -794,8 +794,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
                 .cornerRadius(CornerRadius {theme().radiusXSmall})
                 .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
                 .focusable(!isDisabled)
-                .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-                .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+                .onKeyDown(isDisabled ? Reactive::SmallFn<void(KeyCode, Modifiers)> {} : Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+                .onTap(isDisabled ? Reactive::SmallFn<void()> {} : Reactive::SmallFn<void()> {handleTap});
         }
 
         Element fieldTrigger = std::move(trigger)
@@ -811,8 +811,8 @@ struct SelectTrigger : ViewModifiers<SelectTrigger> {
             .cornerRadius(CornerRadius {fieldChrome.cornerRadius})
             .cursor(isDisabled ? Cursor::Inherit : Cursor::Hand)
             .focusable(!isDisabled)
-            .onKeyDown(isDisabled ? std::function<void(KeyCode, Modifiers)> {} : std::function<void(KeyCode, Modifiers)> {handleKey})
-            .onTap(isDisabled ? std::function<void()> {} : std::function<void()> {handleTap});
+            .onKeyDown(isDisabled ? Reactive::SmallFn<void(KeyCode, Modifiers)> {} : Reactive::SmallFn<void(KeyCode, Modifiers)> {handleKey})
+            .onTap(isDisabled ? Reactive::SmallFn<void()> {} : Reactive::SmallFn<void()> {handleTap});
 
         if (isDisabled) {
             Color overlay = fieldChrome.disabledColor;

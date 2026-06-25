@@ -326,7 +326,7 @@ void mountOverlay(OverlayEntry& entry, Size windowSize, Runtime& runtime,
 
 } // namespace
 
-std::tuple<std::function<void(Element, OverlayConfig)>, std::function<void()>, bool> useOverlay() {
+std::tuple<Reactive::SmallFn<void(Element, OverlayConfig)>, Reactive::SmallFn<void()>, bool> useOverlay() {
   Runtime* runtime = Runtime::current();
   assert(runtime && "useOverlay must be called while mounting a Lambda view");
 
@@ -424,7 +424,7 @@ bool OverlayManager::hasTrackedAnchors() const noexcept {
 }
 
 void OverlayManager::remove(OverlayId id, Runtime* runtime) {
-  std::function<void()> onDismiss;
+  Reactive::SmallFn<void()> onDismiss;
   std::erase_if(overlays_, [&](std::unique_ptr<OverlayEntry> const& entry) {
     if (entry && entry->id == id) {
       onDismiss = entry->config.onDismiss;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Views/Popover.hpp
 ///
 /// Part of the Lambda public API.
@@ -73,7 +75,7 @@ struct Popover : ViewModifiers<Popover> {
 
   bool dismissOnEscape = true;
   bool dismissOnOutsideTap = true;
-  std::function<void()> onDismiss{};
+  Reactive::SmallFn<void()> onDismiss{};
 
   /// When true (default), \ref usePopover prefers the last pointer-down tap anchor (same resolution
   /// as popover-demo: \c forLeafKeyPrefix on the tap leaf). Set false when using \ref useHoverLeafAnchor
@@ -118,7 +120,7 @@ struct Popover : ViewModifiers<Popover> {
 /// isPresented   — true while the popover is on screen.
 ///
 /// Must be called inside body() like other hooks.
-std::tuple<std::function<void(Popover)>, std::function<void()>, bool> usePopover();
+std::tuple<Reactive::SmallFn<void(Popover)>, Reactive::SmallFn<void()>, bool> usePopover();
 
 /// Resolves preferred placement (flip above/below or start/end) from anchor and window size.
 PopoverPlacement resolvePopoverPlacement(PopoverPlacement preferred, std::optional<Rect> const& anchor,

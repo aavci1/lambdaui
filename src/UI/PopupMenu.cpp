@@ -7,7 +7,7 @@
 
 namespace lambdaui {
 
-std::function<bool(PopupMenu)> usePopupMenu() {
+Reactive::SmallFn<bool(PopupMenu)> usePopupMenu() {
   Runtime* runtime = Runtime::current();
   Window* window = runtime ? &runtime->window() : nullptr;
   return [runtime, window](PopupMenu menu) mutable {

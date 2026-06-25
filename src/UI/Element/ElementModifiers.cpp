@@ -326,7 +326,7 @@ Element Element::overlay(Element over) && {
   return std::move(*this);
 }
 
-Element Element::onTap(std::function<void()> handler, MouseButton button) && {
+Element Element::onTap(Reactive::SmallFn<void()> handler, MouseButton button) && {
   if (!handler) {
     writableModifiers().onTap = {};
     return std::move(*this);
@@ -339,37 +339,37 @@ Element Element::onTap(std::function<void()> handler, MouseButton button) && {
   return std::move(*this);
 }
 
-Element Element::onTap(std::function<void(MouseButton)> handler) && {
+Element Element::onTap(Reactive::SmallFn<void(MouseButton)> handler) && {
   writableModifiers().onTap = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onTap(std::function<void(MouseButton, Modifiers)> handler) && {
+Element Element::onTap(Reactive::SmallFn<void(MouseButton, Modifiers)> handler) && {
   writableModifiers().onTapWithModifiers = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onPointerEnter(std::function<void()> handler) && {
+Element Element::onPointerEnter(Reactive::SmallFn<void()> handler) && {
   writableModifiers().onPointerEnter = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onPointerExit(std::function<void()> handler) && {
+Element Element::onPointerExit(Reactive::SmallFn<void()> handler) && {
   writableModifiers().onPointerExit = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onFocus(std::function<void()> handler) && {
+Element Element::onFocus(Reactive::SmallFn<void()> handler) && {
   writableModifiers().onFocus = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onBlur(std::function<void()> handler) && {
+Element Element::onBlur(Reactive::SmallFn<void()> handler) && {
   writableModifiers().onBlur = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onPointerDown(std::function<void(Point)> handler, MouseButton button) && {
+Element Element::onPointerDown(Reactive::SmallFn<void(Point)> handler, MouseButton button) && {
   if (!handler) {
     writableModifiers().onPointerDown = {};
     return std::move(*this);
@@ -382,12 +382,12 @@ Element Element::onPointerDown(std::function<void(Point)> handler, MouseButton b
   return std::move(*this);
 }
 
-Element Element::onPointerDown(std::function<void(Point, MouseButton)> handler) && {
+Element Element::onPointerDown(Reactive::SmallFn<void(Point, MouseButton)> handler) && {
   writableModifiers().onPointerDown = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onPointerUp(std::function<void(Point)> handler, MouseButton button) && {
+Element Element::onPointerUp(Reactive::SmallFn<void(Point)> handler, MouseButton button) && {
   if (!handler) {
     writableModifiers().onPointerUp = {};
     return std::move(*this);
@@ -400,32 +400,32 @@ Element Element::onPointerUp(std::function<void(Point)> handler, MouseButton but
   return std::move(*this);
 }
 
-Element Element::onPointerUp(std::function<void(Point, MouseButton)> handler) && {
+Element Element::onPointerUp(Reactive::SmallFn<void(Point, MouseButton)> handler) && {
   writableModifiers().onPointerUp = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onPointerMove(std::function<void(Point)> handler) && {
+Element Element::onPointerMove(Reactive::SmallFn<void(Point)> handler) && {
   writableModifiers().onPointerMove = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onScroll(std::function<void(Vec2)> handler) && {
+Element Element::onScroll(Reactive::SmallFn<void(Vec2)> handler) && {
   writableModifiers().onScroll = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onKeyDown(std::function<void(KeyCode, Modifiers)> handler) && {
+Element Element::onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)> handler) && {
   writableModifiers().onKeyDown = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onKeyUp(std::function<void(KeyCode, Modifiers)> handler) && {
+Element Element::onKeyUp(Reactive::SmallFn<void(KeyCode, Modifiers)> handler) && {
   writableModifiers().onKeyUp = std::move(handler);
   return std::move(*this);
 }
 
-Element Element::onTextInput(std::function<void(std::string const&)> handler) && {
+Element Element::onTextInput(Reactive::SmallFn<void(std::string const&)> handler) && {
   writableModifiers().onTextInput = std::move(handler);
   return std::move(*this);
 }

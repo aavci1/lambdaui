@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 /// \file Lambda/UI/Application.hpp
 ///
 /// Part of the Lambda public API.
@@ -29,6 +31,7 @@ class EventQueue;
 class TextSystem;
 namespace platform {
 class Application;
+class WindowEventPump;
 }
 
 namespace detail {
@@ -169,15 +172,15 @@ public:
   void saveWindowState(std::string const& restoreId, WindowState const& state);
 
   /// Batched callback: runs at most once per `exec()` iteration after any reactive update.
-  ObserverHandle onNextFrameNeeded(std::function<void()> callback);
+  ObserverHandle onNextFrameNeeded(Reactive::SmallFn<void()> callback);
   void unobserveNextFrame(ObserverHandle handle);
 
   /// Registers a non-blocking file descriptor polled each `exec()` iteration before platform I/O.
   /// Returns an opaque id for `unregisterEventPollSource`. `fd` must stay valid until unregister.
-  std::uint64_t registerEventPollSource(int fd, std::function<void()> onReadable);
+  std::uint64_t registerEventPollSource(int fd, Reactive::SmallFn<void()> onReadable);
   std::uint64_t registerEventPollSource(int fd,
-                                        std::function<int()> eventMask,
-                                        std::function<void(int)> onReady);
+                                        Reactive::SmallFn<int()> eventMask,
+                                        Reactive::SmallFn<void(int)> onReady);
   void unregisterEventPollSource(std::uint64_t id);
 
   friend class Window;
@@ -194,6 +197,7 @@ private:
   void onWindowRegistered(Window* window);
   /// Removes `handle` from the running window list before `Window` is destroyed (synchronous; avoids dangling `Window*`).
   void unregisterWindowHandle(unsigned int handle);
+  platform::WindowEventPump& eventPump(Window& window) const;
 
   void processFrameCallbacks();
   void presentRequestedWindows(bool requireFrameReady, bool keepFramePump);

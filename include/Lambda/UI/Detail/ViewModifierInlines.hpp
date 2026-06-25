@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Reactive/SmallFn.hpp>
+
 #include <Lambda/UI/ViewModifiers.hpp>
 
 namespace lambdaui {
@@ -152,82 +154,82 @@ Element ViewModifiers<Derived>::key(std::string key) && {
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onTap(std::function<void()> handler, MouseButton button) && {
+Element ViewModifiers<Derived>::onTap(Reactive::SmallFn<void()> handler, MouseButton button) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onTap(std::move(handler), button);
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onTap(std::function<void(MouseButton)> handler) && {
+Element ViewModifiers<Derived>::onTap(Reactive::SmallFn<void(MouseButton)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onTap(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onTap(std::function<void(MouseButton, Modifiers)> handler) && {
+Element ViewModifiers<Derived>::onTap(Reactive::SmallFn<void(MouseButton, Modifiers)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onTap(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onPointerEnter(std::function<void()> handler) && {
+Element ViewModifiers<Derived>::onPointerEnter(Reactive::SmallFn<void()> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerEnter(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onPointerExit(std::function<void()> handler) && {
+Element ViewModifiers<Derived>::onPointerExit(Reactive::SmallFn<void()> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerExit(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onFocus(std::function<void()> handler) && {
+Element ViewModifiers<Derived>::onFocus(Reactive::SmallFn<void()> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onFocus(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onBlur(std::function<void()> handler) && {
+Element ViewModifiers<Derived>::onBlur(Reactive::SmallFn<void()> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onBlur(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onPointerDown(std::function<void(Point)> handler, MouseButton button) && {
+Element ViewModifiers<Derived>::onPointerDown(Reactive::SmallFn<void(Point)> handler, MouseButton button) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerDown(std::move(handler), button);
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onPointerDown(std::function<void(Point, MouseButton)> handler) && {
+Element ViewModifiers<Derived>::onPointerDown(Reactive::SmallFn<void(Point, MouseButton)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerDown(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onPointerUp(std::function<void(Point)> handler, MouseButton button) && {
+Element ViewModifiers<Derived>::onPointerUp(Reactive::SmallFn<void(Point)> handler, MouseButton button) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerUp(std::move(handler), button);
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onPointerUp(std::function<void(Point, MouseButton)> handler) && {
+Element ViewModifiers<Derived>::onPointerUp(Reactive::SmallFn<void(Point, MouseButton)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerUp(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onPointerMove(std::function<void(Point)> handler) && {
+Element ViewModifiers<Derived>::onPointerMove(Reactive::SmallFn<void(Point)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onPointerMove(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onScroll(std::function<void(Vec2)> handler) && {
+Element ViewModifiers<Derived>::onScroll(Reactive::SmallFn<void(Vec2)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onScroll(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onKeyDown(std::function<void(KeyCode, Modifiers)> handler) && {
+Element ViewModifiers<Derived>::onKeyDown(Reactive::SmallFn<void(KeyCode, Modifiers)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onKeyDown(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onKeyUp(std::function<void(KeyCode, Modifiers)> handler) && {
+Element ViewModifiers<Derived>::onKeyUp(Reactive::SmallFn<void(KeyCode, Modifiers)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onKeyUp(std::move(handler));
 }
 
 template<typename Derived>
-Element ViewModifiers<Derived>::onTextInput(std::function<void(std::string const&)> handler) && {
+Element ViewModifiers<Derived>::onTextInput(Reactive::SmallFn<void(std::string const&)> handler) && {
   return Element{std::move(static_cast<Derived&>(*this))}.onTextInput(std::move(handler));
 }
 
