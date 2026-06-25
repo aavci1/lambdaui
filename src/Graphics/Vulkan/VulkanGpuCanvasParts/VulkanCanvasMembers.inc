@@ -1,6 +1,7 @@
   unsigned int handle_ = 0;
   TextSystem &textSystem_;
   VulkanGlyphAtlas glyphAtlas_;
+  VulkanPipelines pipelines_;
   VulkanSwapchain swapchainController_;
   VulkanRenderTargetSpec targetSpec_{};
   int width_ = 1;

@@ -59,6 +59,11 @@ struct VulkanGlyphSlot {
   std::vector<std::uint8_t> alpha;
 };
 
+struct VulkanDrawPushConstants {
+  float viewport[2]{};
+  float translation[2]{};
+};
+
 struct SharedVulkanCore {
   VkInstance instance = VK_NULL_HANDLE;
   VkPhysicalDevice physical = VK_NULL_HANDLE;

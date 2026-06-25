@@ -1,3 +1,65 @@
+  void createCommandObjects() {
+    VulkanCommandObjectsContext context{
+        .device = device_,
+        .queueFamily = queueFamily_,
+        .commandPool = commandPool_,
+        .commandBuffers = commandBuffers_,
+        .imageAvailable = imageAvailable_,
+        .frameFences = frameFences_,
+    };
+    pipelines_.createCommandObjects(context);
+  }
+
+  void recoverResetFrameFence() {
+    VulkanResetFrameFenceContext context{
+        .device = device_,
+        .resetFrameFenceIndex = resetFrameFenceIndex_,
+        .noResetFrameFence = kNoResetFrameFence,
+        .frameFences = frameFences_,
+        .imageInFlightFences = imageInFlightFences_,
+    };
+    pipelines_.recoverResetFrameFence(context);
+  }
+
+  SharedVulkanCore::Resources &resources() {
+    if (!shared_) {
+      throw std::runtime_error("Vulkan shared resources are unavailable");
+    }
+    return shared_->resources;
+  }
+
+  SharedVulkanCore::Resources const &resources() const {
+    if (!shared_) {
+      throw std::runtime_error("Vulkan shared resources are unavailable");
+    }
+    return shared_->resources;
+  }
+
+  void ensureSharedResources() {
+    auto &res = resources();
+    VkFormat const format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM
+                                                                         : surfaceFormat_.format;
+    VkFormat const backdropFormat = backdropRenderTargetFormat();
+    if (res.initialized) {
+      if (res.renderFormat != format || res.backdropRenderFormat != backdropFormat) {
+        throw std::runtime_error("Shared Vulkan resources cannot be reused with a different surface format");
+      }
+      return;
+    }
+    res.renderFormat = format;
+    res.backdropRenderFormat = backdropFormat;
+    pipelines_.createDescriptors(device_, res);
+    pipelines_.createSampler(device_, res);
+    createPipelineCache(*shared_);
+    pipelines_.createPipelines(device_, res);
+    createAtlas();
+    res.initialized = true;
+  }
+
+  void chooseSurfaceFormat() {
+    surfaceFormat_ = pipelines_.chooseSurfaceFormat(physical_, surface_);
+  }
+
   void markFrameFenceComplete(std::size_t index) {
     swapchainController_.markFrameFenceComplete(frameFenceSubmitGenerations_,
                                                 frameFenceCompleteGenerations_,

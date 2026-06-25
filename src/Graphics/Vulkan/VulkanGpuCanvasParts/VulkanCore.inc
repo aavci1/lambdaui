@@ -12,19 +12,9 @@
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 #include "Graphics/Vulkan/VulkanGlyphAtlas.hpp"
+#include "Graphics/Vulkan/VulkanPipelines.hpp"
 #include "Graphics/Vulkan/VulkanSwapchain.hpp"
 #include "Detail/ResizeTrace.hpp"
-#include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/callout_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/callout_vert_spv.hpp"
-#include "Graphics/Vulkan/generated/image_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/image_unpremultiply_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/image_vert_spv.hpp"
-#include "Graphics/Vulkan/generated/path_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/path_vert_spv.hpp"
-#include "Graphics/Vulkan/generated/rect_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/rect_vert_spv.hpp"
 
 #include <cassert>
 #include <drm_fourcc.h>
@@ -78,8 +68,6 @@ constexpr std::uint32_t kMinBackdropBlurBaseDownsample = 1;
 constexpr std::uint32_t kMaxBackdropBlurBaseDownsample = 8;
 constexpr std::uint32_t kMaxBackdropBlurDownsample = 16;
 constexpr float kBackdropBlurRadiusBoost = 1.35f;
-constexpr std::uint32_t kDescriptorPoolStorageBufferSets = 4096;
-constexpr std::uint32_t kDescriptorPoolImageSamplerSets = 8192;
 
 bool renderTargetFrameCacheDisabled() {
   static bool const disabled = [] {
@@ -333,11 +321,6 @@ struct ImageBatch {
   Texture *texture = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
-};
-
-struct VulkanDrawPushConstants {
-  float viewport[2]{};
-  float translation[2]{};
 };
 
 struct PathCacheKey {
@@ -953,15 +936,6 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
 CornerRadius clampRadii(CornerRadius r, float w, float h) {
   clampRoundRectCornerRadii(w, h, r);
   return r;
-}
-
-VkShaderModule shaderModule(VkDevice device, unsigned char const *bytes, unsigned int len) {
-  auto info = vkStructure<VkShaderModuleCreateInfo>(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO);
-  info.codeSize = len;
-  info.pCode = reinterpret_cast<std::uint32_t const *>(bytes);
-  VkShaderModule module = VK_NULL_HANDLE;
-  vkCheck(vkCreateShaderModule(device, &info, nullptr, &module), "vkCreateShaderModule");
-  return module;
 }
 
 bool representativeFillColor(FillStyle const &fill, Color *out) {
