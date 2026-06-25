@@ -12,6 +12,7 @@
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
 #include "Graphics/Vulkan/VulkanGlyphAtlas.hpp"
+#include "Graphics/Vulkan/VulkanSwapchain.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
@@ -70,7 +71,7 @@ namespace {
 
 class VulkanCanvas;
 
-constexpr std::size_t kMaxFramesInFlight = 3;
+constexpr std::size_t kMaxFramesInFlight = kVulkanMaxFramesInFlight;
 constexpr int kBackdropBlurIterations = 2;
 constexpr std::uint32_t kDefaultBackdropBlurBaseDownsample = 2;
 constexpr std::uint32_t kMinBackdropBlurBaseDownsample = 1;

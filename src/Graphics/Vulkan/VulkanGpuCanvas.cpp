@@ -2,7 +2,6 @@
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCanvasLifecycle.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCanvasDrawOps.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanPipelines.inc"
-#include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanSwapchain.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCanvasResources.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCommandRecording.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanImages.inc"

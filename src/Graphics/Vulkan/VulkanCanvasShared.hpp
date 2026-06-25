@@ -6,6 +6,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -17,6 +19,8 @@ struct VmaAllocator_T;
 using VmaAllocator = VmaAllocator_T*;
 
 namespace lambdaui {
+
+inline constexpr std::size_t kVulkanMaxFramesInFlight = 3;
 
 struct Rgba {
   std::uint8_t r = 0;
@@ -104,6 +108,14 @@ struct SharedVulkanCore {
   VkDriverId driverId = VK_DRIVER_ID_MAX_ENUM;
   std::string driverName;
   std::string driverInfo;
+};
+
+struct RetiredSwapchain {
+  VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+  std::vector<VkImageView> views;
+  std::vector<VkSemaphore> renderFinished;
+  std::vector<VkFence> presentFences;
+  std::array<std::uint64_t, kVulkanMaxFramesInFlight> frameFenceGenerations{};
 };
 
 } // namespace lambdaui

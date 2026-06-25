@@ -634,28 +634,3 @@
     pollFrameCapture(wait);
     pollScreenshot(wait);
   }
-
-  VkCompositeAlphaFlagBitsKHR chooseCompositeAlpha(VkCompositeAlphaFlagsKHR supported) const {
-    auto supports = [supported](VkCompositeAlphaFlagBitsKHR mode) {
-      return (supported & mode) == mode;
-    };
-    if (!transparentSurface_) {
-      if (supports(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)) {
-        return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-      }
-      if (supports(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) {
-        return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-      }
-    } else {
-      if (supports(VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)) {
-        return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
-      }
-      if (supports(VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)) {
-        return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
-      }
-      if (supports(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) {
-        return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-      }
-    }
-    return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  }

@@ -1,3 +1,97 @@
+  void markFrameFenceComplete(std::size_t index) {
+    swapchainController_.markFrameFenceComplete(frameFenceSubmitGenerations_,
+                                                frameFenceCompleteGenerations_,
+                                                index);
+  }
+
+  void markFrameFenceComplete(VkFence fence) {
+    swapchainController_.markFrameFenceComplete(frameFences_,
+                                                frameFenceSubmitGenerations_,
+                                                frameFenceCompleteGenerations_,
+                                                fence);
+  }
+
+  void markFrameFenceSubmitted(std::size_t index) {
+    swapchainController_.markFrameFenceSubmitted(frameFenceSubmitGenerations_, index);
+  }
+
+  VkFence createPresentFence(bool signaled, char const* label) {
+    return swapchainController_.createPresentFence(device_, signaled, label);
+  }
+
+  void retireSwapchains(bool force) {
+    swapchainController_.retireSwapchains(device_,
+                                          retiredSwapchains_,
+                                          frameFenceCompleteGenerations_,
+                                          force);
+  }
+
+  void retireSwapchainResources(VkSwapchainKHR swapchain,
+                                std::vector<VkImageView> views,
+                                std::vector<VkSemaphore> renderFinished,
+                                std::vector<VkFence> presentFences) {
+    swapchainController_.retireSwapchainResources(retiredSwapchains_,
+                                                  frameFenceSubmitGenerations_,
+                                                  swapchain,
+                                                  std::move(views),
+                                                  std::move(renderFinished),
+                                                  std::move(presentFences));
+  }
+
+  void retirePresentFence(VkFence fence) {
+    swapchainController_.retirePresentFence(retiredSwapchains_, fence);
+  }
+
+  void recreateSwapchain() {
+    if (!device_) {
+      return;
+    }
+    VulkanSwapchainRecreateContext context{
+        .device = device_,
+        .physical = physical_,
+        .surface = surface_,
+        .shared = shared_,
+        .handle = handle_,
+        .framebufferWidth = framebufferWidth_,
+        .framebufferHeight = framebufferHeight_,
+        .swapchainTargetWidth = swapchainTargetWidth_,
+        .swapchainTargetHeight = swapchainTargetHeight_,
+        .surfaceFormat = surfaceFormat_,
+        .forceFifoPresentMode = vulkanForceFifoPresentMode(),
+        .presentFencesEnabled = vulkanPresentFencesEnabled(),
+        .presentFenceRuntimeDisabled = presentFenceRuntimeDisabled_,
+        .transparentSurface = transparentSurface_,
+        .swapchain = swapchain_,
+        .presentMode = presentMode_,
+        .swapExtent = swapExtent_,
+        .swapchainImages = swapchainImages_,
+        .swapchainViews = swapchainViews_,
+        .imageInFlightFences = imageInFlightFences_,
+        .imageRenderFinished = imageRenderFinished_,
+        .imagePresentFences = imagePresentFences_,
+        .retiredSwapchains = retiredSwapchains_,
+        .frameFenceSubmitGenerations = frameFenceSubmitGenerations_,
+    };
+    swapchainController_.recreate(context);
+    swapchainDirty_ = false;
+  }
+
+  void destroySwapchain() {
+    VulkanSwapchainDestroyContext context{
+        .device = device_,
+        .swapchain = swapchain_,
+        .swapchainImages = swapchainImages_,
+        .swapchainViews = swapchainViews_,
+        .imageInFlightFences = imageInFlightFences_,
+        .imageRenderFinished = imageRenderFinished_,
+        .imagePresentFences = imagePresentFences_,
+        .retiredSwapchains = retiredSwapchains_,
+        .frameFenceSubmitGenerations = frameFenceSubmitGenerations_,
+        .frameFenceCompleteGenerations = frameFenceCompleteGenerations_,
+    };
+    swapchainController_.destroy(context);
+  }
+
   VulkanGlyphSlot const* glyphSlot(std::uint32_t fontId, std::uint32_t glyphId, float fontSize) {
     return glyphAtlas_.glyphSlot(resources(), dpiScaleY_, fontId, glyphId, fontSize);
   }

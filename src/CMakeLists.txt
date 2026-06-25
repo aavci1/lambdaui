@@ -214,6 +214,7 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     Graphics/Vulkan/VulkanGlyphAtlas.cpp
     Graphics/Vulkan/VulkanGpuCanvas.cpp
     Graphics/Vulkan/VulkanRenderTarget.cpp
+    Graphics/Vulkan/VulkanSwapchain.cpp
     Platform/Linux/Common/XkbState.cpp
     Platform/Linux/WaylandApplication.cpp
     Platform/Linux/WaylandWindow.cpp
@@ -243,6 +244,7 @@ elseif(LAMBDAUI_PLATFORM_LINUX_KMS)
     Graphics/Vulkan/VulkanGlyphAtlas.cpp
     Graphics/Vulkan/VulkanGpuCanvas.cpp
     Graphics/Vulkan/VulkanRenderTarget.cpp
+    Graphics/Vulkan/VulkanSwapchain.cpp
     Platform/Linux/Common/XkbState.cpp
     Platform/Linux/KmsApplication.cpp
     Platform/Linux/KmsWindow.cpp
