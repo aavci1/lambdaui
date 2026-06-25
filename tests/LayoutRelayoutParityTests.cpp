@@ -8,6 +8,7 @@
 #include <Lambda/UI/Element.hpp>
 #include <Lambda/UI/EnvironmentBinding.hpp>
 #include <Lambda/UI/MeasureContext.hpp>
+#include <Lambda/UI/MountContext.hpp>
 #include <Lambda/UI/MountRoot.hpp>
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/Views/Grid.hpp>
@@ -175,6 +176,22 @@ struct RelayoutProbeFrame {
   }
 };
 
+struct CollapsedMountedBox {
+  static constexpr bool mountsWhenCollapsed = true;
+
+  lambdaui::Size mountedSize{};
+
+  lambdaui::Size measure(lambdaui::MeasureContext&, lambdaui::LayoutConstraints const&,
+                         lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
+    return {};
+  }
+
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext&) const {
+    return std::make_unique<lambdaui::scenegraph::SceneNode>(
+        lambdaui::Rect{0.f, 0.f, mountedSize.width, mountedSize.height});
+  }
+};
+
 } // namespace
 
 TEST_CASE("stack, grid, and scroll mount geometry matches same-constraint relayout") {
@@ -232,6 +249,26 @@ TEST_CASE("stack, grid, and scroll mount geometry matches same-constraint relayo
               .columns = 2,
               .children = lambdaui::children(box(20.f, 14.f), box(30.f, 18.f), box(26.f, 12.f)),
           }),
+  });
+}
+
+TEST_CASE("mounted collapsed stack children keep active siblings in the same position on relayout") {
+  checkRelayoutParity(lambdaui::VStack{
+      .spacing = 5.f,
+      .alignment = lambdaui::Alignment::Start,
+      .children = lambdaui::children(
+          box(16.f, 10.f),
+          CollapsedMountedBox{.mountedSize = {12.f, 14.f}},
+          box(20.f, 8.f)),
+  });
+
+  checkRelayoutParity(lambdaui::HStack{
+      .spacing = 6.f,
+      .alignment = lambdaui::Alignment::Start,
+      .children = lambdaui::children(
+          box(10.f, 16.f),
+          CollapsedMountedBox{.mountedSize = {18.f, 12.f}},
+          box(8.f, 20.f)),
   });
 }
 
