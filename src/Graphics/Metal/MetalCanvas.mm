@@ -2348,8 +2348,57 @@ private:
     }
   }
 
+  static MetalFrameRecorder* asMetalRecordedOps(RecordedOps* recorded) noexcept {
+    return recorded && recorded->backend() == Backend::Metal
+               ? static_cast<MetalFrameRecorder*>(recorded)
+               : nullptr;
+  }
+
+  static MetalFrameRecorder const* asMetalRecordedOps(RecordedOps const& recorded) noexcept {
+    return recorded.backend() == Backend::Metal
+               ? static_cast<MetalFrameRecorder const*>(&recorded)
+               : nullptr;
+  }
+
+  static MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const& recorded) noexcept {
+    return MetalRecorderSlice{
+        .orderStart = 0,
+        .orderCount = static_cast<std::uint32_t>(recorded.opOrder.size()),
+        .rectStart = 0,
+        .rectCount = static_cast<std::uint32_t>(recorded.rectOps.size()),
+        .imageStart = 0,
+        .imageCount = static_cast<std::uint32_t>(recorded.imageOps.size()),
+        .pathOpStart = 0,
+        .pathOpCount = static_cast<std::uint32_t>(recorded.pathOps.size()),
+        .glyphOpStart = 0,
+        .glyphOpCount = static_cast<std::uint32_t>(recorded.glyphOps.size()),
+        .backdropBlurOpStart = 0,
+        .backdropBlurOpCount = static_cast<std::uint32_t>(recorded.backdropBlurOps.size()),
+        .pathVertexStart = 0,
+        .pathVertexCount = static_cast<std::uint32_t>(recorded.pathVerts.size()),
+        .glyphVertexStart = 0,
+        .glyphVertexCount = recorded.glyphVertexCount,
+    };
+  }
+
+  static MetalRecorderSlice const* asMetalReplaySlice(RecordedOpsReplaySlice const* slice) noexcept {
+    if (!slice || slice->backend != Backend::Metal || !slice->native) {
+      return nullptr;
+    }
+    return static_cast<MetalRecorderSlice const*>(slice->native);
+  }
+
 public:
   float dpiScale() const noexcept override { return dpiScale_; }
+
+  bool beginRecordedOpsCapture(RecordedOps* target) override {
+    MetalFrameRecorder* recorded = asMetalRecordedOps(target);
+    if (!recorded) {
+      return false;
+    }
+    beginRecordedOpsCapture(recorded);
+    return true;
+  }
 
   void beginRecordedOpsCapture(MetalFrameRecorder* target) {
     if (!target) {
@@ -2361,12 +2410,25 @@ public:
     updateClipScissor();
   }
 
-  void endRecordedOpsCapture() {
+  void endRecordedOpsCapture() override {
     captureRecorder_ = nullptr;
     if (!stateStack_.empty()) {
       stateStack_.pop_back();
     }
     updateClipScissor();
+  }
+
+  bool prepareRecordedOps(RecordedOps* recorded) override {
+    return asMetalRecordedOps(recorded) != nullptr;
+  }
+
+  bool recordedOpsGlyphAtlasCurrent(RecordedOps const& recorded) const override {
+    MetalFrameRecorder const* metalRecorded = asMetalRecordedOps(recorded);
+    if (!metalRecorded) {
+      return false;
+    }
+    MetalRecorderSlice const slice = fullRecordedSlice(*metalRecorded);
+    return recordedGlyphAtlasCurrent(*metalRecorded, slice);
   }
 
   std::shared_ptr<Image> rasterizeWithRenderTarget(Size logicalSize, RasterizeDrawCallback const& draw,
@@ -2632,6 +2694,24 @@ public:
     recordRecorderCapacityIncreases(capacityBefore, frame);
   }
 
+  bool replayRecordedOps(RecordedOps const& recorded,
+                         RecordedOpsReplaySlice const* slice = nullptr) override {
+    MetalFrameRecorder const* metalRecorded = asMetalRecordedOps(recorded);
+    if (!metalRecorded) {
+      return false;
+    }
+    MetalRecorderSlice const fullSlice = fullRecordedSlice(*metalRecorded);
+    MetalRecorderSlice const* selectedSlice = asMetalReplaySlice(slice);
+    if (!selectedSlice) {
+      selectedSlice = &fullSlice;
+    }
+    if (!recordedGlyphAtlasCurrent(*metalRecorded, *selectedSlice)) {
+      return false;
+    }
+    replayRecordedOps(*metalRecorded, *selectedSlice);
+    return true;
+  }
+
   bool replayRecordedLocalOps(MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
     if (!inFrame_) {
       return false;
@@ -2840,6 +2920,20 @@ public:
     return true;
   }
 
+  bool replayRecordedLocalOps(RecordedOps const& recorded,
+                              RecordedOpsReplaySlice const* slice = nullptr) override {
+    MetalFrameRecorder const* metalRecorded = asMetalRecordedOps(recorded);
+    if (!metalRecorded) {
+      return false;
+    }
+    MetalRecorderSlice const fullSlice = fullRecordedSlice(*metalRecorded);
+    MetalRecorderSlice const* selectedSlice = asMetalReplaySlice(slice);
+    if (!selectedSlice) {
+      selectedSlice = &fullSlice;
+    }
+    return replayRecordedLocalOps(*metalRecorded, *selectedSlice);
+  }
+
   void presentRenderTarget() {
     id<MTLTexture> texture = targetTexture();
     if (!texture || frameDrawablePixelsW_ == 0 || frameDrawablePixelsH_ == 0) {
@@ -2938,9 +3032,12 @@ public:
     [lastSubmittedCmdBuf_ waitUntilCompleted];
   }
 
-  void requestNextFrameCapture() { captureNextFrame_ = true; }
+  bool requestNextFrameCapture() override {
+    captureNextFrame_ = true;
+    return true;
+  }
 
-  bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width, std::uint32_t& height) {
+  bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width, std::uint32_t& height) override {
     if (!captureBuffer_ || captureWidth_ == 0 || captureHeight_ == 0) {
       return false;
     }
@@ -2998,77 +3095,6 @@ std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize,
   }
   float const resolvedDpiScale = dpiScale > 0.f ? dpiScale : mc->dpiScale();
   return mc->rasterizeWithRenderTarget(logicalSize, draw, resolvedDpiScale);
-}
-
-bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, MetalFrameRecorder* target) {
-  if (!canvas || !target) {
-    return false;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    mc->beginRecordedOpsCapture(target);
-    return true;
-  }
-  return false;
-}
-
-void endRecordedOpsCaptureForCanvas(Canvas* canvas) {
-  if (!canvas) {
-    return;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    mc->endRecordedOpsCapture();
-  }
-}
-
-void replayRecordedOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
-  if (!canvas) {
-    return;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    mc->replayRecordedOps(recorded, slice);
-  }
-}
-
-bool replayRecordedLocalOpsForCanvas(Canvas* canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
-  if (!canvas) {
-    return false;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    return mc->replayRecordedLocalOps(recorded, slice);
-  }
-  return false;
-}
-
-float dpiScaleForCanvas(Canvas* canvas) {
-  if (!canvas) {
-    return 1.f;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    return mc->dpiScale();
-  }
-  return 1.f;
-}
-
-bool requestNextFrameCaptureForCanvas(Canvas* canvas) {
-  if (!canvas) {
-    return false;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    mc->requestNextFrameCapture();
-    return true;
-  }
-  return false;
-}
-
-bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, std::uint32_t& width,
-                                std::uint32_t& height) {
-  if (!canvas) {
-    return false;
-  }
-  if (auto* mc = dynamic_cast<MetalCanvas*>(canvas)) {
-    return mc->takeCapturedFrame(out, width, height);
-  }
-  return false;
 }
 
 } // namespace lambdaui

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Graphics/Canvas.hpp>
+
 #include "Graphics/Metal/MetalCanvasTypes.hpp"
 #include "Graphics/PathFlattener.hpp"
 
@@ -9,7 +11,7 @@
 namespace lambdaui {
 
 /// Per-frame CPU-side display list: primitive ops + accumulated path mesh vertices.
-struct MetalFrameRecorder {
+struct MetalFrameRecorder : RecordedOps {
   std::vector<MetalRectOp> rectOps;
   std::vector<MetalImageOp> imageOps;
   std::vector<MetalPathOp> pathOps;
@@ -38,6 +40,7 @@ struct MetalFrameRecorder {
   MetalFrameRecorder& operator=(MetalFrameRecorder&& other) noexcept;
 
   void clear();
+  Backend backend() const noexcept override { return Backend::Metal; }
 };
 
 } // namespace lambdaui

@@ -65,6 +65,11 @@ static MetalRecorderSlice fullSlice(MetalFrameRecorder const& recorded) {
   };
 }
 
+static bool replayLocal(Canvas& canvas, MetalFrameRecorder const& recorded, MetalRecorderSlice const& slice) {
+  RecordedOpsReplaySlice const replaySlice{Backend::Metal, &slice};
+  return canvas.replayRecordedLocalOps(recorded, &replaySlice);
+}
+
 struct StressScene {
   std::unique_ptr<SceneGraph> graph;
   SceneNode* animatedGroup = nullptr;
@@ -472,9 +477,9 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
 
     MetalFrameRecorder recorded;
     target.begin(Colors::black);
-    REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
+    REQUIRE(canvas.beginRecordedOpsCapture(&recorded));
     canvas.drawTextLayout(*cachedLayout, lambdaui::Point{12.f, 12.f});
-    endRecordedOpsCaptureForCanvas(&canvas);
+    canvas.endRecordedOpsCapture();
     target.end();
 
     REQUIRE(recorded.glyphVertexCount > 0);
@@ -490,7 +495,7 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
     target.end();
 
     target.begin(Colors::black);
-    CHECK_FALSE(replayRecordedLocalOpsForCanvas(&canvas, recorded, fullSlice(recorded)));
+    CHECK_FALSE(replayLocal(canvas, recorded, fullSlice(recorded)));
     target.end();
   }
 #endif
@@ -524,9 +529,9 @@ TEST_CASE("MetalCanvas retries glyphs after deferred atlas growth") {
 
     MetalFrameRecorder recorded;
     target.begin(Colors::black);
-    REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
+    REQUIRE(canvas.beginRecordedOpsCapture(&recorded));
     canvas.drawTextLayout(*pressureLayout, lambdaui::Point{0.f, 300.f});
-    endRecordedOpsCaptureForCanvas(&canvas);
+    canvas.endRecordedOpsCapture();
     target.end();
 
     CHECK(recorded.glyphVertexCount >= 180u);
@@ -574,10 +579,10 @@ TEST_CASE("MetalCanvas replays image and path prepared buffers with shader trans
 
     MetalFrameRecorder recorded;
     target.begin(Colors::black);
-    REQUIRE(beginRecordedOpsCaptureForCanvas(&canvas, &recorded));
+    REQUIRE(canvas.beginRecordedOpsCapture(&recorded));
     canvas.drawPath(path, FillStyle::solid(Colors::red), StrokeStyle::none(), ShadowStyle::none());
     canvas.drawImage(*image, lambdaui::Rect{0.f, 0.f, 8.f, 8.f}, lambdaui::Rect{28.f, 4.f, 8.f, 8.f});
-    endRecordedOpsCaptureForCanvas(&canvas);
+    canvas.endRecordedOpsCapture();
     target.end();
 
     CHECK(!recorded.pathVerts.empty());
@@ -586,7 +591,7 @@ TEST_CASE("MetalCanvas replays image and path prepared buffers with shader trans
     target.begin(Colors::black);
     canvas.save();
     canvas.translate(lambdaui::Point{16.f, 8.f});
-    REQUIRE(replayRecordedLocalOpsForCanvas(&canvas, recorded, fullSlice(recorded)));
+    REQUIRE(replayLocal(canvas, recorded, fullSlice(recorded)));
     canvas.restore();
     CHECK(recorded.preparedPathVertexBuffer != nullptr);
     CHECK(recorded.preparedImageInstanceBuffer != nullptr);

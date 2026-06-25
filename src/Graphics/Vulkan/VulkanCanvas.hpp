@@ -46,18 +46,6 @@ std::unique_ptr<Canvas> createVulkanRenderTargetCanvas(VulkanRenderTargetSpec co
                                                        TextSystem& textSystem);
 bool setVulkanRenderTargetSpecForCanvas(Canvas* canvas, VulkanRenderTargetSpec const& spec);
 bool markVulkanRenderTargetCanvasSubmitted(Canvas* canvas);
-
-/// Requests a CPU readback of the next presented Vulkan frame as BGRA8.
-bool requestNextFrameCaptureForCanvas(Canvas* canvas);
-/// Retrieves the most recent captured Vulkan frame bytes as BGRA8.
-bool takeCapturedFrameForCanvas(Canvas* canvas, std::vector<std::uint8_t>& out, std::uint32_t& width,
-                                std::uint32_t& height);
-bool beginRecordedOpsCaptureForCanvas(Canvas* canvas, VulkanFrameRecorder* target);
-void endRecordedOpsCaptureForCanvas(Canvas* canvas);
-bool prepareRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder* recorded);
-bool recordedOpsGlyphAtlasCurrentForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
-bool replayRecordedOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
-bool replayRecordedLocalOpsForCanvas(Canvas* canvas, VulkanFrameRecorder const& recorded);
 void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logicalHeight);
 bool setVulkanCanvasBackdropBlurBaseDownsample(Canvas* canvas, std::uint32_t downsample);
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled);

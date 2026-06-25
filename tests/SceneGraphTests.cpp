@@ -114,6 +114,14 @@ class DpiOnlyCanvas final : public Canvas {
     void drawImageTiled(Image const&, Rect const&, CornerRadius const&, float) override {}
     void drawBackdropBlur(Rect const&, float, Color, CornerRadius const&) override {}
     void* gpuDevice() const override { return nullptr; }
+    bool requestNextFrameCapture() override { return false; }
+    bool takeCapturedFrame(std::vector<std::uint8_t>&, std::uint32_t&, std::uint32_t&) override { return false; }
+    bool beginRecordedOpsCapture(RecordedOps*) override { return false; }
+    void endRecordedOpsCapture() override {}
+    bool prepareRecordedOps(RecordedOps*) override { return false; }
+    bool recordedOpsGlyphAtlasCurrent(RecordedOps const&) const override { return false; }
+    bool replayRecordedOps(RecordedOps const&, RecordedOpsReplaySlice const* = nullptr) override { return false; }
+    bool replayRecordedLocalOps(RecordedOps const&, RecordedOpsReplaySlice const* = nullptr) override { return false; }
     void clear(Color) override {}
 
   private:

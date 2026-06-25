@@ -575,14 +575,14 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   canvas->clear(Colors::black);
 
   VulkanFrameRecorder recorded;
-  REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
+  REQUIRE(canvas->beginRecordedOpsCapture(&recorded));
   canvas->drawRect(lambdaui::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
                    FillStyle::solid(Color{1.f, 0.f, 0.f, 1.f}), StrokeStyle::none(), ShadowStyle::none());
-  endRecordedOpsCaptureForCanvas(canvas.get());
+  canvas->endRecordedOpsCapture();
   CHECK(recorded.ops.size() == 1);
   CHECK(recorded.rects.size() == 1);
 
-  REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
+  REQUIRE(canvas->replayRecordedLocalOps(recorded));
   checkPreparedRectState(recorded, expectPreparedGeometry);
   canvas->present();
 
@@ -617,7 +617,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   secondCanvas->clear(Colors::black);
   secondCanvas->save();
   secondCanvas->translate(lambdaui::Point{16.f, 0.f});
-  REQUIRE(replayRecordedLocalOpsForCanvas(secondCanvas.get(), recorded));
+  REQUIRE(secondCanvas->replayRecordedLocalOps(recorded));
   secondCanvas->restore();
   checkPreparedRectState(recorded, expectPreparedGeometry);
   secondCanvas->present();
@@ -663,7 +663,7 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   mutatedCanvas->resize(static_cast<int>(width), static_cast<int>(height));
   mutatedCanvas->beginFrame();
   mutatedCanvas->clear(Colors::black);
-  REQUIRE(replayRecordedLocalOpsForCanvas(mutatedCanvas.get(), recorded));
+  REQUIRE(mutatedCanvas->replayRecordedLocalOps(recorded));
   checkPreparedRectState(recorded, expectPreparedGeometry);
   mutatedCanvas->present();
 
@@ -705,7 +705,7 @@ TEST_CASE("VulkanFrameRecorder local replay preserves translated non-root clip")
   canvas->clear(Colors::black);
 
   VulkanFrameRecorder recorded;
-  REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
+  REQUIRE(canvas->beginRecordedOpsCapture(&recorded));
   canvas->save();
   canvas->clipRect(Rect::sharp(0.f, 0.f, 24.f, 64.f));
   canvas->drawRect(Rect::sharp(16.f, 16.f, 32.f, 32.f),
@@ -714,15 +714,15 @@ TEST_CASE("VulkanFrameRecorder local replay preserves translated non-root clip")
                    StrokeStyle::none(),
                    ShadowStyle::none());
   canvas->restore();
-  endRecordedOpsCaptureForCanvas(canvas.get());
+  canvas->endRecordedOpsCapture();
   REQUIRE(recorded.ops.size() == 1);
   CHECK(recorded.ops[0].clip.width == doctest::Approx(24.f));
   CHECK(recorded.rootClip.width == doctest::Approx(64.f));
-  REQUIRE(prepareRecordedOpsForCanvas(canvas.get(), &recorded));
+  REQUIRE(canvas->prepareRecordedOps(&recorded));
 
   canvas->save();
   canvas->translate(Point{16.f, 0.f});
-  REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
+  REQUIRE(canvas->replayRecordedLocalOps(recorded));
   canvas->restore();
   canvas->present();
 
@@ -773,18 +773,18 @@ TEST_CASE("VulkanFrameRecorder replays captured image texture") {
   canvas->clear(Colors::black);
 
   VulkanFrameRecorder recorded;
-  REQUIRE(beginRecordedOpsCaptureForCanvas(canvas.get(), &recorded));
+  REQUIRE(canvas->beginRecordedOpsCapture(&recorded));
   Size const imageSize = image->size();
   canvas->drawImage(*image,
                     lambdaui::Rect{0.f, 0.f, imageSize.width, imageSize.height},
                     lambdaui::Rect{8.f, 8.f, 24.f, 24.f},
                     CornerRadius{},
                     1.f);
-  endRecordedOpsCaptureForCanvas(canvas.get());
+  canvas->endRecordedOpsCapture();
 
   CHECK(recorded.replayable);
   CHECK(recorded.ops.size() == 1);
-  CHECK(prepareRecordedOpsForCanvas(canvas.get(), &recorded));
+  CHECK(canvas->prepareRecordedOps(&recorded));
   bool const expectPreparedGeometry = preparedGeometryExpected(vk.physicalDevice());
   if (expectPreparedGeometry) {
     CHECK(recorded.preparedQuadBuffer != VK_NULL_HANDLE);
@@ -793,7 +793,7 @@ TEST_CASE("VulkanFrameRecorder replays captured image texture") {
     CHECK(recorded.preparedQuadBuffer == VK_NULL_HANDLE);
     CHECK(recorded.preparedQuadDescriptor == VK_NULL_HANDLE);
   }
-  REQUIRE(replayRecordedLocalOpsForCanvas(canvas.get(), recorded));
+  REQUIRE(canvas->replayRecordedLocalOps(recorded));
   canvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -905,14 +905,14 @@ TEST_CASE("VulkanFrameRecorder replays captured image after recording canvas is 
     sourceCanvas->resize(static_cast<int>(width), static_cast<int>(height));
     sourceCanvas->beginFrame();
     sourceCanvas->clear(Colors::black);
-    REQUIRE(beginRecordedOpsCaptureForCanvas(sourceCanvas.get(), &recorded));
+    REQUIRE(sourceCanvas->beginRecordedOpsCapture(&recorded));
     Size const imageSize = image->size();
     sourceCanvas->drawImage(*image,
                             lambdaui::Rect{0.f, 0.f, imageSize.width, imageSize.height},
                             lambdaui::Rect{8.f, 8.f, 24.f, 24.f},
                             CornerRadius{},
                             1.f);
-    endRecordedOpsCaptureForCanvas(sourceCanvas.get());
+    sourceCanvas->endRecordedOpsCapture();
     sourceCanvas->present();
   }
 
@@ -939,7 +939,7 @@ TEST_CASE("VulkanFrameRecorder replays captured image after recording canvas is 
   replayCanvas->resize(static_cast<int>(width), static_cast<int>(height));
   replayCanvas->beginFrame();
   replayCanvas->clear(Colors::black);
-  REQUIRE(replayRecordedLocalOpsForCanvas(replayCanvas.get(), recorded));
+  REQUIRE(replayCanvas->replayRecordedLocalOps(recorded));
   replayCanvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -1463,14 +1463,14 @@ TEST_CASE("Vulkan frame capture preserves transformed and rounded clip geometry"
                    FillStyle::linearGradient(Colors::green, Colors::blue, Point{0.f, 0.f}, Point{1.f, 0.f}),
                    StrokeStyle::none());
 
-  REQUIRE(requestNextFrameCaptureForCanvas(canvas.get()));
+  REQUIRE(canvas->requestNextFrameCapture());
   canvas->present();
   target.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
   std::vector<std::uint8_t> pixels;
   std::uint32_t width = 0;
   std::uint32_t height = 0;
-  REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+  REQUIRE(canvas->takeCapturedFrame(pixels, width, height));
   CHECK(width == target.pixelW);
   CHECK(height == target.pixelH);
   REQUIRE(pixels.size() == static_cast<std::size_t>(width) * height * 4u);
@@ -1521,14 +1521,14 @@ TEST_CASE("Vulkan external render-target frame capture waits for submitted compl
                    FillStyle::solid(Colors::red),
                    StrokeStyle::none());
 
-  REQUIRE(requestNextFrameCaptureForCanvas(canvas.get()));
+  REQUIRE(canvas->requestNextFrameCapture());
   canvas->present();
   target.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
   std::vector<std::uint8_t> pixels;
   std::uint32_t width = 0;
   std::uint32_t height = 0;
-  CHECK_FALSE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+  CHECK_FALSE(canvas->takeCapturedFrame(pixels, width, height));
 
   vkCheck(vkEndCommandBuffer(external.commandBuffer), "vkEndCommandBuffer external render target");
   auto submit = lambdaui::vkStructure<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
@@ -1540,7 +1540,7 @@ TEST_CASE("Vulkan external render-target frame capture waits for submitted compl
   vkCheck(vkWaitForFences(vk.device(), 1, &external.fence, VK_TRUE, UINT64_MAX),
           "vkWaitForFences external render target");
 
-  REQUIRE(takeCapturedFrameForCanvas(canvas.get(), pixels, width, height));
+  REQUIRE(canvas->takeCapturedFrame(pixels, width, height));
   CHECK(width == target.pixelW);
   CHECK(height == target.pixelH);
   REQUIRE(pixels.size() == static_cast<std::size_t>(width) * height * 4u);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Lambda/Graphics/Canvas.hpp>
+
 #include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
 
 #include <vulkan/vulkan.h>
@@ -42,7 +44,7 @@ void setVulkanFrameRecorderRetireHookForTesting(VulkanFrameRecorderRetireHook ho
 
 /// Per-frame CPU-side Vulkan display list, detachable from a canvas and replayable
 /// into later frames.
-struct VulkanFrameRecorder {
+struct VulkanFrameRecorder : RecordedOps {
   std::vector<DrawOp> ops;
   std::vector<QuadInstance> quads;
   std::vector<RectInstance> rects;
@@ -82,6 +84,7 @@ struct VulkanFrameRecorder {
   VulkanFrameRecorder &operator=(VulkanFrameRecorder &&other) noexcept;
 
   void clear();
+  Backend backend() const noexcept override { return Backend::Vulkan; }
 };
 
 } // namespace lambdaui

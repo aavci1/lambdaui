@@ -122,12 +122,12 @@ public:
     debug::perf::recordPresentedFrame();
   }
 
-  bool requestNextFrameCapture() {
+  bool requestNextFrameCapture() override {
     frameCaptureRequested_ = true;
     return true;
   }
 
-  bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width, std::uint32_t& height) {
+  bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width, std::uint32_t& height) override {
     pollFrameCapture(false);
     if (!capturedFrameAvailable_ || capturedFrameWidth_ == 0 || capturedFrameHeight_ == 0) {
       return false;
@@ -177,6 +177,11 @@ public:
 
   bool recordedOpsGlyphAtlasCurrent(VulkanFrameRecorder const& recorded) const {
     return recordedGlyphAtlasCurrent(recorded);
+  }
+
+  bool recordedOpsGlyphAtlasCurrent(RecordedOps const& recorded) const override {
+    VulkanFrameRecorder const* vulkanRecorded = asVulkanRecordedOps(recorded);
+    return vulkanRecorded && recordedGlyphAtlasCurrent(*vulkanRecorded);
   }
 
   ~VulkanCanvas() override {
@@ -297,9 +302,30 @@ public:
 
   float dpiScale() const noexcept override { return std::max(dpiScaleX_, dpiScaleY_); }
 
+  static VulkanFrameRecorder* asVulkanRecordedOps(RecordedOps* recorded) noexcept {
+    return recorded && recorded->backend() == Backend::Vulkan
+               ? static_cast<VulkanFrameRecorder*>(recorded)
+               : nullptr;
+  }
+
+  static VulkanFrameRecorder const* asVulkanRecordedOps(RecordedOps const& recorded) noexcept {
+    return recorded.backend() == Backend::Vulkan
+               ? static_cast<VulkanFrameRecorder const*>(&recorded)
+               : nullptr;
+  }
+
   void setResizeBoundsHint(int logicalWidth, int logicalHeight) {
     resizeBoundsHintWidth_ = std::max(0, logicalWidth);
     resizeBoundsHintHeight_ = std::max(0, logicalHeight);
+  }
+
+  bool beginRecordedOpsCapture(RecordedOps* target) override {
+    VulkanFrameRecorder* recorded = asVulkanRecordedOps(target);
+    if (!recorded) {
+      return false;
+    }
+    beginRecordedOpsCapture(recorded);
+    return true;
   }
 
   void beginRecordedOpsCapture(VulkanFrameRecorder *target) {
@@ -317,7 +343,7 @@ public:
     state_.clip = target->rootClip;
   }
 
-  void endRecordedOpsCapture() {
+  void endRecordedOpsCapture() override {
     captureTarget_ = nullptr;
     if (hasCaptureSavedState_) {
       state_ = captureSavedState_;
@@ -326,6 +352,15 @@ public:
       captureSavedStack_.clear();
       hasCaptureSavedState_ = false;
     }
+  }
+
+  bool replayRecordedOps(RecordedOps const& recorded,
+                         RecordedOpsReplaySlice const* slice = nullptr) override {
+    if (slice && slice->backend != Backend::Vulkan) {
+      return false;
+    }
+    VulkanFrameRecorder const* vulkanRecorded = asVulkanRecordedOps(recorded);
+    return vulkanRecorded && replayRecordedOps(*vulkanRecorded);
   }
 
   bool replayRecordedOps(VulkanFrameRecorder const &recorded) {
@@ -338,6 +373,15 @@ public:
     return appendRecordedOps(recorded, false);
   }
 
+  bool replayRecordedLocalOps(RecordedOps const& recorded,
+                              RecordedOpsReplaySlice const* slice = nullptr) override {
+    if (slice && slice->backend != Backend::Vulkan) {
+      return false;
+    }
+    VulkanFrameRecorder const* vulkanRecorded = asVulkanRecordedOps(recorded);
+    return vulkanRecorded && replayRecordedLocalOps(*vulkanRecorded);
+  }
+
   bool replayRecordedLocalOps(VulkanFrameRecorder const &recorded) {
     if (!recordedGlyphAtlasCurrent(recorded) || !state_.transform.isTranslationOnly()) {
       return false;
@@ -346,6 +390,10 @@ public:
       return false;
     }
     return appendRecordedOps(recorded, true);
+  }
+
+  bool prepareRecordedOps(RecordedOps* recorded) override {
+    return prepareRecordedOps(asVulkanRecordedOps(recorded));
   }
 
   bool prepareRecordedOps(VulkanFrameRecorder *recorded) {

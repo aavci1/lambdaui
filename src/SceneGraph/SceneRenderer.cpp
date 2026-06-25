@@ -94,7 +94,7 @@ enum class RenderTraversalMode : std::uint8_t {
     PreparedCacheBypass,
 };
 
-float rasterCacheDpiScaleForCanvas(Canvas* canvas) noexcept {
+float rasterCacheDpiScale(Canvas* canvas) noexcept {
     return canvas ? canvas->dpiScale() : 1.f;
 }
 
@@ -202,7 +202,12 @@ class MetalCanvasPreparedRenderOps final : public PreparedRenderOps {
     explicit MetalCanvasPreparedRenderOps(MetalFrameRecorder recorded) : recorded_(std::move(recorded)), slice_(fullRecordedSlice(recorded_)) {}
 
     bool replay(Renderer &renderer) const override {
-        return replayRecordedLocalOpsForCanvas(renderer.canvas(), recorded_, slice_);
+        Canvas* canvas = renderer.canvas();
+        if (!canvas) {
+            return false;
+        }
+        RecordedOpsReplaySlice const slice{Backend::Metal, &slice_};
+        return canvas->replayRecordedLocalOps(recorded_, &slice);
     }
 
   private:
@@ -217,13 +222,17 @@ class VulkanCanvasPreparedRenderOps final : public PreparedRenderOps {
     explicit VulkanCanvasPreparedRenderOps(VulkanFrameRecorder recorded) : recorded_(std::move(recorded)) {}
 
     bool replay(Renderer &renderer) const override {
+        Canvas* canvas = renderer.canvas();
+        if (!canvas) {
+            return false;
+        }
         atlasMismatchOnLastReplay_ = false;
         if (recorded_.glyphAtlasGeneration != 0 &&
-            !recordedOpsGlyphAtlasCurrentForCanvas(renderer.canvas(), recorded_)) {
+            !canvas->recordedOpsGlyphAtlasCurrent(recorded_)) {
             atlasMismatchOnLastReplay_ = true;
             return false;
         }
-        return replayRecordedLocalOpsForCanvas(renderer.canvas(), recorded_);
+        return canvas->replayRecordedLocalOps(recorded_);
     }
 
     bool reusableAfterReplayFailure() const override {
@@ -248,11 +257,11 @@ std::unique_ptr<PreparedRenderOps> captureCanvasPreparedOps(Canvas* canvas,
                                                             RenderBody&& renderBody,
                                                             Finish&& finish) {
     Recorder recorded;
-    if (!beginRecordedOpsCaptureForCanvas(canvas, &recorded)) {
+    if (!canvas || !canvas->beginRecordedOpsCapture(&recorded)) {
         return nullptr;
     }
     renderBody();
-    endRecordedOpsCaptureForCanvas(canvas);
+    canvas->endRecordedOpsCapture();
     return finish(recorded);
 }
 
@@ -277,7 +286,7 @@ std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node
             &canvas_,
             [&] { node.render(*this); },
             [this](VulkanFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
-                if (!prepareRecordedOpsForCanvas(&canvas_, &recorded)) {
+                if (!canvas_.prepareRecordedOps(&recorded)) {
                     return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
                 }
                 if (recordedOpsContainClipState(recorded)) {
@@ -343,7 +352,7 @@ struct SceneRenderer::Impl {
     }
 
     float preparedOpsDpiScale() const noexcept {
-        return rasterCacheDpiScaleForCanvas(renderer ? renderer->canvas() : nullptr);
+        return rasterCacheDpiScale(renderer ? renderer->canvas() : nullptr);
     }
 
     std::uint64_t preparedNodeKey(SceneNode const& node) const noexcept {
@@ -467,7 +476,7 @@ struct SceneRenderer::Impl {
         if (logicalSize.width <= 0.f || logicalSize.height <= 0.f) {
             return true;
         }
-        float const dpiScale = rasterCacheDpiScaleForCanvas(canvas);
+        float const dpiScale = rasterCacheDpiScale(canvas);
         std::shared_ptr<Image> cached =
             node.hasValidCache(logicalSize, dpiScale) ? node.cachedImage() : nullptr;
         if (!cached) {
@@ -534,7 +543,7 @@ struct SceneRenderer::Impl {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
             }
         }, [canvas](VulkanFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
-            if (!prepareRecordedOpsForCanvas(canvas, &recorded)) {
+            if (!canvas->prepareRecordedOps(&recorded)) {
                 return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
             }
             if (recordedOpsContainClipState(recorded)) {
