@@ -17,8 +17,8 @@ struct SceneNodeAccess {
     static bool ownPaintingDirty(SceneNode const &node) noexcept;
     static bool subtreeDirty(SceneNode const &node) noexcept;
     static void clearSubtreeDirty(SceneNode const &node) noexcept;
-    static bool preparedGroupCacheSuppressed(SceneNode const &node) noexcept;
-    static void suppressPreparedGroupCache(SceneNode const &node) noexcept;
+    static bool preparedGroupCacheOnCooldown(SceneNode const &node) noexcept;
+    static void startPreparedGroupCacheCooldown(SceneNode const &node) noexcept;
     static std::uint8_t preparedGroupCacheCooldown(SceneNode const &node) noexcept;
     static void decrementPreparedGroupCacheCooldown(SceneNode const &node) noexcept;
     static std::uint64_t preparedRenderOpsKey(SceneNode const &node) noexcept;

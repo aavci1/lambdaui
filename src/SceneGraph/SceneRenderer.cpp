@@ -402,7 +402,7 @@ struct SceneRenderer::Impl {
             if (node.kind() == SceneNodeKind::Group &&
                 detail::SceneNodeAccess::preparedGroupCacheCooldown(node) > 0) {
                 detail::SceneNodeAccess::decrementPreparedGroupCacheCooldown(node);
-                if (!detail::SceneNodeAccess::preparedGroupCacheSuppressed(node) &&
+                if (!detail::SceneNodeAccess::preparedGroupCacheOnCooldown(node) &&
                     !detail::SceneNodeAccess::preparedRenderOps(node) &&
                     canReplayPreparedGroup(node)) {
                     debug::perf::recordPreparedPrepareCall();
@@ -448,7 +448,7 @@ struct SceneRenderer::Impl {
                 // Drop the broad cache and let stable child groups continue replaying independently.
                 prepared.reset();
                 detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
-                detail::SceneNodeAccess::suppressPreparedGroupCache(node);
+                detail::SceneNodeAccess::startPreparedGroupCacheCooldown(node);
             }
             if (detail::SceneNodeAccess::ownPaintingDirty(node)) {
                 detail::SceneNodeAccess::clearDirty(node);
@@ -460,7 +460,7 @@ struct SceneRenderer::Impl {
         }
 
         if (node.kind() == SceneNodeKind::Group && !hadPreparedGroup &&
-            !detail::SceneNodeAccess::preparedGroupCacheSuppressed(node) &&
+            !detail::SceneNodeAccess::preparedGroupCacheOnCooldown(node) &&
             !detail::SceneNodeAccess::preparedRenderOps(node) &&
             canReplayPreparedGroup(node)) {
             debug::perf::recordPreparedPrepareCall();

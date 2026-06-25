@@ -384,11 +384,12 @@ void detail::SceneNodeAccess::clearSubtreeDirty(SceneNode const &node) noexcept 
     node.subtreeDirty_ = false;
 }
 
-bool detail::SceneNodeAccess::preparedGroupCacheSuppressed(SceneNode const &node) noexcept {
+bool detail::SceneNodeAccess::preparedGroupCacheOnCooldown(SceneNode const &node) noexcept {
     return node.preparedGroupCacheCooldown_ > 0;
 }
 
-void detail::SceneNodeAccess::suppressPreparedGroupCache(SceneNode const &node) noexcept {
+void detail::SceneNodeAccess::startPreparedGroupCacheCooldown(SceneNode const &node) noexcept {
+    // Suppression is the cooldown window before a dirty animated group may be recached.
     node.preparedGroupCacheCooldown_ = 2;
 }
 
