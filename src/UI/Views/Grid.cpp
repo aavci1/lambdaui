@@ -71,6 +71,12 @@ struct GridPlan {
   std::vector<Rect> slots;
 };
 
+struct MountedGridChild {
+  scenegraph::SceneNode* node = nullptr;
+  Point layoutOrigin{};
+  std::size_t childIndex = 0;
+};
+
 struct GridPlacement {
   std::size_t row = 0;
   std::size_t column = 0;
@@ -301,6 +307,60 @@ GridPlan planGrid(Grid const& grid, LayoutConstraints const& constraints,
   return plan;
 }
 
+void layoutMountedGrid(scenegraph::SceneNode& group,
+                       std::vector<MountedGridChild>& mountedChildren,
+                       std::vector<Size>& measuredSizes,
+                       Grid const& grid,
+                       LayoutConstraints const& constraints) {
+  std::size_t const columnsCount = clampedColumns(grid.columns);
+  float const availableWidth = std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f
+                                   ? constraints.maxWidth
+                                   : 0.f;
+  float const totalGap = static_cast<float>(columnsCount - 1) * grid.horizontalSpacing;
+  float const columnWidth = std::max(0.f, (availableWidth - totalGap) /
+                                             static_cast<float>(columnsCount));
+  std::vector<GridPlacement> const placements = placeGridItems(grid, grid.children.size());
+  std::vector<Size> measured = measuredSizes;
+  measured.resize(grid.children.size());
+  for (MountedGridChild const& child : mountedChildren) {
+    if (!child.node || child.childIndex >= placements.size()) {
+      continue;
+    }
+    float const width = slotWidth(placements[child.childIndex], columnWidth, grid.horizontalSpacing);
+    LayoutConstraints childConstraints{
+        .maxWidth = width,
+        .maxHeight = std::numeric_limits<float>::infinity(),
+        .minWidth = 0.f,
+        .minHeight = 0.f,
+    };
+    if (child.node && child.node->relayout(childConstraints)) {
+      measured[child.childIndex] = child.node->size();
+    } else {
+      measured[child.childIndex] = child.node ? child.node->size() : Size{};
+    }
+  }
+  measuredSizes = measured;
+  GridPlan const plan = planGrid(grid, constraints, measured);
+  for (MountedGridChild& child : mountedChildren) {
+    if (!child.node || child.childIndex >= plan.slots.size()) {
+      continue;
+    }
+    Rect const slot = plan.slots[child.childIndex];
+    child.node->relayout(fixedConstraints(Size{slot.width, slot.height}), false);
+    Rect const bounds = child.node->bounds();
+    Point const current = child.node->position();
+    Vec2 const localOffset{current.x - child.layoutOrigin.x,
+                           current.y - child.layoutOrigin.y};
+    Point const origin{
+        slot.x + alignedOffset(slot.width, bounds.width, grid.horizontalAlignment),
+        slot.y + alignedOffset(slot.height, bounds.height, grid.verticalAlignment),
+    };
+    child.node->setPosition(Point{origin.x + localOffset.x, origin.y + localOffset.y});
+    child.layoutOrigin = origin;
+  }
+  group.setSize(plan.size);
+}
+
 } // namespace
 
 Size Grid::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
@@ -353,11 +413,6 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
 
   GridPlan const plan = planGrid(*this, ctx.constraints(), measured);
   auto group = std::make_unique<scenegraph::SceneNode>(Rect{0.f, 0.f, plan.size.width, plan.size.height});
-  struct MountedGridChild {
-    scenegraph::SceneNode* node = nullptr;
-    Point layoutOrigin{};
-    std::size_t childIndex = 0;
-  };
   auto measuredSizes = std::make_shared<std::vector<Size>>(std::move(measured));
   auto mountedChildren = std::make_shared<std::vector<MountedGridChild>>();
   for (std::size_t i = 0; i < children.size(); ++i) {
@@ -380,53 +435,7 @@ std::unique_ptr<scenegraph::SceneNode> Grid::mount(MountContext& ctx) const {
   rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, mountedChildren, measuredSizes, grid = std::move(grid)](
                             LayoutConstraints const& constraints) mutable {
-    std::size_t const columnsCount = clampedColumns(grid.columns);
-    float const availableWidth = std::isfinite(constraints.maxWidth) && constraints.maxWidth > 0.f
-                                     ? constraints.maxWidth
-                                     : 0.f;
-    float const totalGap = static_cast<float>(columnsCount - 1) * grid.horizontalSpacing;
-    float const columnWidth = std::max(0.f, (availableWidth - totalGap) /
-                                               static_cast<float>(columnsCount));
-    std::vector<GridPlacement> const placements = placeGridItems(grid, grid.children.size());
-    std::vector<Size> measured = *measuredSizes;
-    measured.resize(grid.children.size());
-    for (MountedGridChild const& child : *mountedChildren) {
-      if (!child.node || child.childIndex >= placements.size()) {
-        continue;
-      }
-      float const width = slotWidth(placements[child.childIndex], columnWidth, grid.horizontalSpacing);
-      LayoutConstraints childConstraints{
-          .maxWidth = width,
-          .maxHeight = std::numeric_limits<float>::infinity(),
-          .minWidth = 0.f,
-          .minHeight = 0.f,
-      };
-      if (child.node && child.node->relayout(childConstraints)) {
-        measured[child.childIndex] = child.node->size();
-      } else {
-        measured[child.childIndex] = child.node ? child.node->size() : Size{};
-      }
-    }
-    *measuredSizes = measured;
-    GridPlan const plan = planGrid(grid, constraints, measured);
-    for (MountedGridChild& child : *mountedChildren) {
-      if (!child.node || child.childIndex >= plan.slots.size()) {
-        continue;
-      }
-      Rect const slot = plan.slots[child.childIndex];
-      child.node->relayout(fixedConstraints(Size{slot.width, slot.height}), false);
-      Rect const bounds = child.node->bounds();
-      Point const current = child.node->position();
-      Vec2 const localOffset{current.x - child.layoutOrigin.x,
-                             current.y - child.layoutOrigin.y};
-      Point const origin{
-          slot.x + alignedOffset(slot.width, bounds.width, grid.horizontalAlignment),
-          slot.y + alignedOffset(slot.height, bounds.height, grid.verticalAlignment),
-      };
-      child.node->setPosition(Point{origin.x + localOffset.x, origin.y + localOffset.y});
-      child.layoutOrigin = origin;
-    }
-    rawGroup->setSize(plan.size);
+    layoutMountedGrid(*rawGroup, *mountedChildren, *measuredSizes, grid, constraints);
   });
   return group;
 }

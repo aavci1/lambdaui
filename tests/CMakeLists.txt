@@ -22,6 +22,7 @@ set(_lambda_test_sources
   FileDialogTests.cpp
   ForTests.cpp
   LayoutAlgorithmTests.cpp
+  LayoutRelayoutParityTests.cpp
   main.cpp
   MountRootTests.cpp
   ParagraphCacheTests.cpp

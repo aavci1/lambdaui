@@ -197,6 +197,116 @@ ScrollViewPlan planScrollViewLayout(ScrollView const& scrollView, LayoutConstrai
   return plan;
 }
 
+void layoutMountedScrollContent(scenegraph::SceneNode& contentGroup,
+                                scenegraph::RectNode* verticalIndicator,
+                                scenegraph::RectNode* horizontalIndicator,
+                                Signal<Point> offsetState,
+                                Signal<Size> viewportState,
+                                Signal<Size> contentState,
+                                std::vector<Size>& childSizes,
+                                ScrollAxis scrollAxis,
+                                Reactive::SmallFn<void()> const& requestRedraw,
+                                LayoutConstraints const& constraints) {
+  auto mountedChildren = contentGroup.children();
+  childSizes.clear();
+  childSizes.reserve(mountedChildren.size());
+  for (std::unique_ptr<scenegraph::SceneNode>& child : mountedChildren) {
+    childSizes.push_back(relayoutChildAndStoreConstraints(child, constraints));
+  }
+  layout::ScrollContentLayout const contentLayout =
+      layout::layoutScrollContent(scrollAxis, viewportState.peek(), offsetState.peek(), childSizes);
+  layout::ScrollContentLayout const childLayout =
+      layout::layoutScrollContent(scrollAxis, viewportState.peek(), Point{}, childSizes);
+  for (std::size_t i = 0; i < mountedChildren.size() && i < childLayout.slots.size(); ++i) {
+    if (mountedChildren[i]) {
+      mountedChildren[i]->setPosition(childLayout.slots[i].origin);
+    }
+  }
+  contentGroup.setSize(contentLayout.contentSize);
+  contentGroup.setPosition(Point{-contentLayout.clampedOffset.x,
+                                 -contentLayout.clampedOffset.y});
+  contentState = contentLayout.contentSize;
+  offsetState = contentLayout.clampedOffset;
+  ScrollIndicatorPair const indicators =
+      makeIndicators(scrollAxis, contentLayout.clampedOffset, viewportState.peek(),
+                     contentLayout.contentSize);
+  if (verticalIndicator) {
+    setIndicatorBounds(*verticalIndicator, indicators.vertical);
+  }
+  if (horizontalIndicator) {
+    setIndicatorBounds(*horizontalIndicator, indicators.horizontal);
+  }
+  if (requestRedraw) {
+    requestRedraw();
+  }
+}
+
+void layoutMountedScrollViewport(scenegraph::SceneNode& viewportNode,
+                                 scenegraph::SceneNode& contentGroup,
+                                 scenegraph::RectNode* indicatorOverlay,
+                                 scenegraph::RectNode* verticalIndicator,
+                                 scenegraph::RectNode* horizontalIndicator,
+                                 ScrollView const& scrollView,
+                                 Signal<Point> offsetState,
+                                 Signal<Size> viewportState,
+                                 Signal<Size> contentState,
+                                 std::vector<Size>& childSizes,
+                                 LayoutConstraints const& constraints) {
+  auto mountedChildren = contentGroup.children();
+  ScrollViewPlan plan{};
+  plan.viewport =
+      scrollViewportHintForConstraints(scrollView.axis, constraints, viewportState.peek());
+  LayoutConstraints premeasureConstraints =
+      layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
+  childSizes.clear();
+  childSizes.reserve(mountedChildren.size());
+  for (std::unique_ptr<scenegraph::SceneNode>& child : mountedChildren) {
+    childSizes.push_back(relayoutChildAndStoreConstraints(child, premeasureConstraints));
+  }
+  if (plan.viewport.width <= 0.f || plan.viewport.height <= 0.f) {
+    plan.viewport = viewportFromConstraints(
+        scrollView.axis, layout::scrollContentSize(scrollView.axis, childSizes), constraints);
+  }
+  plan.childConstraints = layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
+  contentGroup.setLayoutConstraints(plan.childConstraints);
+  if (!sameLayoutConstraints(premeasureConstraints, plan.childConstraints)) {
+    for (std::size_t i = 0; i < mountedChildren.size(); ++i) {
+      if (mountedChildren[i]) {
+        childSizes[i] =
+            relayoutChildAndStoreConstraints(mountedChildren[i], plan.childConstraints);
+      }
+    }
+  }
+  plan.contentLayout =
+      layout::layoutScrollContent(scrollView.axis, plan.viewport, offsetState.peek(), childSizes);
+  layout::ScrollContentLayout const childLayout =
+      layout::layoutScrollContent(scrollView.axis, plan.viewport, Point{}, childSizes);
+  for (std::size_t i = 0; i < mountedChildren.size() && i < childLayout.slots.size(); ++i) {
+    if (mountedChildren[i]) {
+      mountedChildren[i]->setPosition(childLayout.slots[i].origin);
+    }
+  }
+  viewportNode.setSize(plan.viewport);
+  contentGroup.setSize(plan.contentLayout.contentSize);
+  contentGroup.setPosition(Point{-plan.contentLayout.clampedOffset.x,
+                                 -plan.contentLayout.clampedOffset.y});
+  if (indicatorOverlay) {
+    indicatorOverlay->setSize(plan.viewport);
+  }
+  ScrollIndicatorPair const indicators =
+      makeIndicators(scrollView.axis, plan.contentLayout.clampedOffset, plan.viewport,
+                     plan.contentLayout.contentSize);
+  if (verticalIndicator) {
+    setIndicatorBounds(*verticalIndicator, indicators.vertical);
+  }
+  if (horizontalIndicator) {
+    setIndicatorBounds(*horizontalIndicator, indicators.horizontal);
+  }
+  viewportState = plan.viewport;
+  contentState = plan.contentLayout.contentSize;
+  offsetState = plan.contentLayout.clampedOffset;
+}
+
 } // namespace
 
 Point clampScrollOffset(ScrollAxis axis, Point offset, Size const& viewport, Size const& content) {
@@ -452,97 +562,19 @@ std::unique_ptr<scenegraph::SceneNode> ScrollView::mount(MountContext& ctx) cons
                                 offsetState, viewportState, contentState, childSizes,
                                 scrollAxis, requestRedraw = ctx.redrawCallback()](
                                    LayoutConstraints const& constraints) mutable {
-    auto mountedChildren = rawContentGroup->children();
-    childSizes->clear();
-    childSizes->reserve(mountedChildren.size());
-    for (std::unique_ptr<scenegraph::SceneNode>& child : mountedChildren) {
-      childSizes->push_back(relayoutChildAndStoreConstraints(child, constraints));
-    }
-    layout::ScrollContentLayout const contentLayout =
-        layout::layoutScrollContent(scrollAxis, viewportState.peek(), offsetState.peek(), *childSizes);
-    layout::ScrollContentLayout const childLayout =
-        layout::layoutScrollContent(scrollAxis, viewportState.peek(), Point{}, *childSizes);
-    for (std::size_t i = 0; i < mountedChildren.size() && i < childLayout.slots.size(); ++i) {
-      if (mountedChildren[i]) {
-        mountedChildren[i]->setPosition(childLayout.slots[i].origin);
-      }
-    }
-    rawContentGroup->setSize(contentLayout.contentSize);
-    rawContentGroup->setPosition(Point{-contentLayout.clampedOffset.x,
-                                       -contentLayout.clampedOffset.y});
-    contentState = contentLayout.contentSize;
-    offsetState = contentLayout.clampedOffset;
-    ScrollIndicatorPair const indicators =
-        makeIndicators(scrollAxis, contentLayout.clampedOffset, viewportState.peek(),
-                       contentLayout.contentSize);
-    if (rawVerticalIndicator) {
-      setIndicatorBounds(*rawVerticalIndicator, indicators.vertical);
-    }
-    if (rawHorizontalIndicator) {
-      setIndicatorBounds(*rawHorizontalIndicator, indicators.horizontal);
-    }
-    if (requestRedraw) {
-      requestRedraw();
-    }
+    layoutMountedScrollContent(*rawContentGroup, rawVerticalIndicator, rawHorizontalIndicator,
+                               offsetState, viewportState, contentState, *childSizes,
+                               scrollAxis, requestRedraw, constraints);
   });
   rawViewportNode->setRelayout([rawViewportNode, rawContentGroup, rawIndicatorOverlay,
                                 rawVerticalIndicator, rawHorizontalIndicator,
                                 scrollView = std::move(scrollView), offsetState,
                                 viewportState, contentState, childSizes](
                                    LayoutConstraints const& constraints) mutable {
-    auto mountedChildren = rawContentGroup->children();
-    ScrollViewPlan plan{};
-    plan.viewport =
-        scrollViewportHintForConstraints(scrollView.axis, constraints, viewportState.peek());
-    LayoutConstraints premeasureConstraints =
-        layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
-    childSizes->clear();
-    childSizes->reserve(mountedChildren.size());
-    for (std::unique_ptr<scenegraph::SceneNode>& child : mountedChildren) {
-      childSizes->push_back(relayoutChildAndStoreConstraints(child, premeasureConstraints));
-    }
-    if (plan.viewport.width <= 0.f || plan.viewport.height <= 0.f) {
-      plan.viewport = viewportFromConstraints(
-          scrollView.axis, layout::scrollContentSize(scrollView.axis, *childSizes), constraints);
-    }
-    plan.childConstraints = layout::scrollChildConstraints(scrollView.axis, constraints, plan.viewport);
-    rawContentGroup->setLayoutConstraints(plan.childConstraints);
-    if (!sameLayoutConstraints(premeasureConstraints, plan.childConstraints)) {
-      for (std::size_t i = 0; i < mountedChildren.size(); ++i) {
-        if (mountedChildren[i]) {
-          (*childSizes)[i] =
-              relayoutChildAndStoreConstraints(mountedChildren[i], plan.childConstraints);
-        }
-      }
-    }
-    plan.contentLayout =
-        layout::layoutScrollContent(scrollView.axis, plan.viewport, offsetState.peek(), *childSizes);
-    layout::ScrollContentLayout const childLayout =
-        layout::layoutScrollContent(scrollView.axis, plan.viewport, Point{}, *childSizes);
-    for (std::size_t i = 0; i < mountedChildren.size() && i < childLayout.slots.size(); ++i) {
-      if (mountedChildren[i]) {
-        mountedChildren[i]->setPosition(childLayout.slots[i].origin);
-      }
-    }
-    rawViewportNode->setSize(plan.viewport);
-    rawContentGroup->setSize(plan.contentLayout.contentSize);
-    rawContentGroup->setPosition(Point{-plan.contentLayout.clampedOffset.x,
-                                       -plan.contentLayout.clampedOffset.y});
-    if (rawIndicatorOverlay) {
-      rawIndicatorOverlay->setSize(plan.viewport);
-    }
-    ScrollIndicatorPair const indicators =
-        makeIndicators(scrollView.axis, plan.contentLayout.clampedOffset, plan.viewport,
-                       plan.contentLayout.contentSize);
-    if (rawVerticalIndicator) {
-      setIndicatorBounds(*rawVerticalIndicator, indicators.vertical);
-    }
-    if (rawHorizontalIndicator) {
-      setIndicatorBounds(*rawHorizontalIndicator, indicators.horizontal);
-    }
-    viewportState = plan.viewport;
-    contentState = plan.contentLayout.contentSize;
-    offsetState = plan.contentLayout.clampedOffset;
+    layoutMountedScrollViewport(*rawViewportNode, *rawContentGroup, rawIndicatorOverlay,
+                                rawVerticalIndicator, rawHorizontalIndicator, scrollView,
+                                offsetState, viewportState, contentState, *childSizes,
+                                constraints);
   });
 
   return viewportNode;
