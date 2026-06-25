@@ -4,7 +4,6 @@
 #include <Lambda/Reactive/SmallFn.hpp>
 #include <Lambda/Reactive/Transition.hpp>
 
-#include <atomic>
 #include <algorithm>
 #include <cassert>
 #include <concepts>
@@ -15,6 +14,10 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+#if LAMBDAUI_PROFILE_REACTIVE
+#include <atomic>
+#endif
 
 namespace lambdaui::Reactive {
 
@@ -64,12 +67,16 @@ struct Link {
   Link* prevSubscriber = nullptr;
 };
 
+#if LAMBDAUI_PROFILE_REACTIVE
 inline std::atomic_size_t gLiveLinks = 0;
 inline std::atomic_size_t gTotalLinks = 0;
+#endif
 
 inline Link* allocateLink() {
+#if LAMBDAUI_PROFILE_REACTIVE
   gLiveLinks.fetch_add(1, std::memory_order_relaxed);
   gTotalLinks.fetch_add(1, std::memory_order_relaxed);
+#endif
   return new Link();
 }
 
@@ -77,20 +84,32 @@ inline void freeLink(Link* link) {
   if (!link) {
     return;
   }
+#if LAMBDAUI_PROFILE_REACTIVE
   gLiveLinks.fetch_sub(1, std::memory_order_relaxed);
+#endif
   delete link;
 }
 
 inline std::size_t debugLiveLinkCount() {
+#if LAMBDAUI_PROFILE_REACTIVE
   return gLiveLinks.load(std::memory_order_relaxed);
+#else
+  return 0;
+#endif
 }
 
 inline std::size_t debugTotalLinkAllocations() {
+#if LAMBDAUI_PROFILE_REACTIVE
   return gTotalLinks.load(std::memory_order_relaxed);
+#else
+  return 0;
+#endif
 }
 
 inline void debugResetLinkAllocationCount() {
+#if LAMBDAUI_PROFILE_REACTIVE
   gTotalLinks.store(0, std::memory_order_relaxed);
+#endif
 }
 
 struct ScopeState {
