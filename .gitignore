@@ -1,12 +1,35 @@
 # Local build output
 build/
+build-*/
 cmake-build-*/
+out/
 
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 compile_commands.json
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
 
-# macOS metadata
+# Native build products
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.app/
+*.dSYM/
+*.gcda
+*.gcno
+*.profraw
+
+# Editor and OS metadata
 .DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
