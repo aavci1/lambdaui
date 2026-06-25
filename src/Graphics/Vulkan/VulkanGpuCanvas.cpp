@@ -1344,7 +1344,7 @@ public:
       }
 
       auto image = std::make_shared<VulkanImage>(device_, allocator_, target.image, target.allocation,
-                                                 target.view, target.format, pixelW, pixelH);
+                                                 target.view, target.format, pixelW, pixelH, true);
       target.image = VK_NULL_HANDLE;
       target.allocation = VK_NULL_HANDLE;
       target.view = VK_NULL_HANDLE;
@@ -2146,7 +2146,7 @@ public:
     } catch (std::bad_weak_ptr const&) {
       op.sourceImageRef.reset();
     }
-    op.premultipliedAlpha = imagePremultipliedAlpha_;
+    op.premultipliedAlpha = imagePremultipliedAlpha_ || image.premultipliedAlpha();
     appendSignedDrawOp(target, op);
     debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
   }

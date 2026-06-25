@@ -485,6 +485,8 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   installBinding<float>(activeCtx, modifiers.opacity, [rawWrapper](float opacity) {
     rawWrapper->setOpacity(opacity);
   });
+  rawWrapper->setFlattenOpacity(
+      modifiers.flattenOpacity.value_or(scenegraph::kFlattenOpacityByDefault));
   rawWrapper->setClipsContents(modifiers.clip);
 
   scenegraph::RasterCacheNode* rawRasterNode = nullptr;

@@ -9,10 +9,12 @@ namespace lambdaui {
 /// Metal-backed `Image` (BGRA/RGBA texture from disk loader).
 class MetalImage final : public Image {
 public:
-  explicit MetalImage(id<MTLTexture> texture);
-  MetalImage(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height);
+  explicit MetalImage(id<MTLTexture> texture, bool premultipliedAlpha = false);
+  MetalImage(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height,
+             bool premultipliedAlpha = false);
 
   Size size() const override;
+  bool premultipliedAlpha() const noexcept override { return premultipliedAlpha_; }
   bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void* gpuDevice = nullptr) override;
   bool updatePixels(std::span<std::uint8_t const> pixels,
                     PixelFormat format,
@@ -32,6 +34,7 @@ private:
   id<MTLTexture> texture_{nil};
   std::uint32_t widthOverride_ = 0;
   std::uint32_t heightOverride_ = 0;
+  bool premultipliedAlpha_ = false;
 };
 
 /// Returns null if `image` is not a `MetalImage`.

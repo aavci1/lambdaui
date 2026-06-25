@@ -5,10 +5,15 @@
 
 namespace lambdaui {
 
-MetalImage::MetalImage(id<MTLTexture> texture) : texture_(texture) {}
+MetalImage::MetalImage(id<MTLTexture> texture, bool premultipliedAlpha)
+    : texture_(texture), premultipliedAlpha_(premultipliedAlpha) {}
 
-MetalImage::MetalImage(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height)
-    : texture_(texture), widthOverride_(width), heightOverride_(height) {}
+MetalImage::MetalImage(id<MTLTexture> texture, std::uint32_t width, std::uint32_t height,
+                       bool premultipliedAlpha)
+    : texture_(texture)
+    , widthOverride_(width)
+    , heightOverride_(height)
+    , premultipliedAlpha_(premultipliedAlpha) {}
 
 Size MetalImage::size() const {
   if (widthOverride_ > 0 && heightOverride_ > 0) {

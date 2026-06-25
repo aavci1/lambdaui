@@ -174,6 +174,7 @@ public:
   Element cornerRadius(Reactive::Bindable<CornerRadius> radius) &&;
   Element cornerRadius(Reactive::Bindable<float> radius) &&;
   Element opacity(Reactive::Bindable<float> opacity) &&;
+  Element opacity(Reactive::Bindable<float> opacity, bool flattenOpacity) &&;
   Element position(Reactive::Bindable<Vec2> p) &&;
   Element position(Reactive::Bindable<float> x, Reactive::Bindable<float> y) &&;
   Element translate(Reactive::Bindable<Vec2> delta) &&;

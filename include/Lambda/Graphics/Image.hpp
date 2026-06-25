@@ -34,6 +34,7 @@ public:
   Image& operator=(Image const&) = delete;
 
   virtual Size size() const = 0;
+  virtual bool premultipliedAlpha() const noexcept { return false; }
 
   /// Replace this image with same-size tightly packed 8-bit RGBA pixels.
   /// Returns false when the backend image is immutable or the size does not match.

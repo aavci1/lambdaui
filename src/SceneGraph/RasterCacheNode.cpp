@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
-#include <cmath>
 #include <memory>
 
 namespace lambdaui::scenegraph {
@@ -45,31 +44,24 @@ SceneNode const* RasterCacheNode::subtree() const noexcept {
 }
 
 void RasterCacheNode::invalidateCache() {
-  cachedImage_.reset();
-  cachedLogicalSize_ = {};
-  cachedDpiScale_ = 0.f;
+  cache_.invalidate();
   markDirty();
 }
 
 bool RasterCacheNode::hasValidCache(Size logicalSize, float dpiScale) const noexcept {
-  constexpr float eps = 1e-3f;
-  return static_cast<bool>(cachedImage_) &&
-         std::abs(cachedLogicalSize_.width - logicalSize.width) <= eps &&
-         std::abs(cachedLogicalSize_.height - logicalSize.height) <= eps &&
-         std::abs(cachedDpiScale_ - dpiScale) <= eps;
+  return cache_.hasValid(logicalSize, dpiScale);
 }
 
 std::shared_ptr<Image> RasterCacheNode::cachedImage() const noexcept {
-  return cachedImage_;
+  return cache_.image();
 }
 
 void RasterCacheNode::setCachedImage(std::shared_ptr<Image> image, Size logicalSize, float dpiScale) const {
-  cachedImage_ = std::move(image);
-  cachedLogicalSize_ = logicalSize;
-  cachedDpiScale_ = dpiScale;
+  cache_.setImage(std::move(image), logicalSize, dpiScale);
 }
 
 void RasterCacheNode::noteRasterized() const {
+  cache_.noteRasterized();
 #ifndef NDEBUG
   using Clock = std::chrono::steady_clock;
   double const now = std::chrono::duration<double>(Clock::now().time_since_epoch()).count();

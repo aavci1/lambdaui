@@ -234,6 +234,25 @@ struct SceneRenderer::Impl {
         return true;
     }
 
+    template<typename DrawBody>
+    std::shared_ptr<Image> rasterizeSceneLayer(Canvas& canvas,
+                                               Size logicalSize,
+                                               float dpiScale,
+                                               DrawBody&& drawBody) {
+        return rasterizeToImage(canvas, logicalSize, [this, draw = std::forward<DrawBody>(drawBody)](
+                                                         Canvas& targetCanvas, Rect layerBounds) mutable {
+            CanvasRenderer targetRenderer(targetCanvas);
+            struct RendererRestore {
+                Renderer*& renderer;
+                Renderer* saved;
+                ~RendererRestore() { renderer = saved; }
+            };
+            RendererRestore restore {renderer, renderer};
+            renderer = &targetRenderer;
+            draw(layerBounds);
+        }, dpiScale);
+    }
+
     void prepareNodeCache(SceneNode const &node) {
         if (!kEnablePreparedRenderCache) {
             return;
@@ -258,6 +277,9 @@ struct SceneRenderer::Impl {
             detail::SceneNodeAccess::setPreparedRenderOpsKey(node, 0);
             clearSubtreeDirtyRecursive(node);
             return;
+        }
+        if (node.kind() == SceneNodeKind::Rect) {
+            static_cast<RectNode const&>(node).invalidateOpacityLayerCache();
         }
         bool const hadPreparedGroup =
             node.kind() == SceneNodeKind::Group &&
@@ -325,19 +347,11 @@ struct SceneRenderer::Impl {
         std::shared_ptr<Image> cached =
             node.hasValidCache(logicalSize, dpiScale) ? node.cachedImage() : nullptr;
         if (!cached) {
-            cached = rasterizeToImage(*canvas, logicalSize, [this, &node](Canvas& targetCanvas, Rect) {
-                CanvasRenderer targetRenderer(targetCanvas);
-                struct RendererRestore {
-                    Renderer*& renderer;
-                    Renderer* saved;
-                    ~RendererRestore() { renderer = saved; }
-                };
-                RendererRestore restore {renderer, renderer};
-                renderer = &targetRenderer;
+            cached = rasterizeSceneLayer(*canvas, logicalSize, dpiScale, [this, &node](Rect) {
                 for (std::unique_ptr<SceneNode> const &child : node.children()) {
                     renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
                 }
-            }, dpiScale);
+            });
             if (!cached) {
                 return false;
             }
@@ -358,6 +372,65 @@ struct SceneRenderer::Impl {
         renderer->restore();
         detail::SceneNodeAccess::clearDirty(node);
         detail::SceneNodeAccess::clearSubtreeDirty(node);
+        return true;
+    }
+
+    bool renderFlattenedOpacityNode(RectNode const& node,
+                                    float nodeOpacity,
+                                    Point accumulatedTranslation) {
+        if (nodeOpacity <= 0.f) {
+            return true;
+        }
+        Canvas *canvas = renderer->canvas();
+        if (!canvas) {
+            return false;
+        }
+        Rect const visualBounds = detail::subtreeLocalVisualBounds(node);
+        if (visualBounds.width <= 0.f || visualBounds.height <= 0.f) {
+            return true;
+        }
+        Size const logicalSize{visualBounds.width, visualBounds.height};
+        float const dpiScale = rasterCacheDpiScale(canvas);
+        std::shared_ptr<Image> cached =
+            node.hasValidOpacityLayerCache(logicalSize, dpiScale) ? node.opacityLayerImage() : nullptr;
+        if (!cached) {
+            cached = rasterizeSceneLayer(*canvas, logicalSize, dpiScale, [this, &node, visualBounds](Rect) {
+                renderer->save();
+                renderer->translate(Point{-visualBounds.x, -visualBounds.y});
+                node.render(*renderer);
+                if (node.clipsContents()) {
+                    renderer->save();
+                    renderer->clipRect(Rect::sharp(0.f, 0.f, node.size().width, node.size().height),
+                                       node.cornerRadius());
+                }
+                for (std::unique_ptr<SceneNode> const& child : node.children()) {
+                    renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
+                }
+                if (node.clipsContents()) {
+                    renderer->restore();
+                }
+                renderer->restore();
+            });
+            if (!cached) {
+                return false;
+            }
+            node.setOpacityLayerImage(cached, logicalSize, dpiScale);
+            node.noteOpacityLayerRasterized();
+        }
+
+        renderer->save();
+        if (!isZeroOffset(accumulatedTranslation)) {
+            renderer->translate(accumulatedTranslation);
+        }
+        if (!isIdentityTransform(node.transform())) {
+            renderer->transform(node.transform());
+        }
+        renderer->setOpacity(nodeOpacity);
+        renderer->drawImage(*cached,
+                            Rect::sharp(visualBounds.x, visualBounds.y,
+                                        logicalSize.width, logicalSize.height),
+                            ImageFillMode::Stretch);
+        renderer->restore();
         return true;
     }
 
@@ -439,6 +512,14 @@ struct SceneRenderer::Impl {
             renderRasterCacheNode(static_cast<RasterCacheNode const&>(node), nodeOpacity,
                                   accumulatedTranslation)) {
             return;
+        }
+
+        if (node.kind() == SceneNodeKind::Rect) {
+            RectNode const& rectNode = static_cast<RectNode const&>(node);
+            if (rectNode.flattenOpacity() && rectNode.opacity() < 1.f &&
+                renderFlattenedOpacityNode(rectNode, nodeOpacity, accumulatedTranslation)) {
+                return;
+            }
         }
 
         if (node.kind() == SceneNodeKind::Group && usePreparedCache &&

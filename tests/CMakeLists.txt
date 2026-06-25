@@ -45,7 +45,9 @@ set(_lambda_test_sources
   ThemeReactivityTests.cpp)
 
 if(LAMBDAUI_PLATFORM_MACOS)
-  list(APPEND _lambda_test_sources MetalCanvasTests.mm)
+  list(APPEND _lambda_test_sources
+    MetalCanvasTests.mm
+    RenderOpacityTests.mm)
 endif()
 
 if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)

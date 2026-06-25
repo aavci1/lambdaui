@@ -1285,7 +1285,7 @@ public:
     float const v1 = (src.y + src.height) / ih;
 
     emitImage(mh->texture(), device, cr, simd_make_float4(u0, v0, u1, v1), simd_make_float2(0.f, 0.f), 0.f, op,
-              rotationRad, false);
+              rotationRad, false, image.premultipliedAlpha());
   }
 
   void drawImageTiled(Image const& image, Rect const& dst, CornerRadius const& corners, float opacity) override {
@@ -1341,7 +1341,8 @@ public:
 
     const float op = effectiveOpacity() * opacity;
     vector_float2 const texInv = simd_make_float2(1.f / sz.width, 1.f / sz.height);
-    emitImage(mh->texture(), device, cr, simd_make_float4(0.f, 0.f, 0.f, 0.f), texInv, 1.f, op, rotationRad, true);
+    emitImage(mh->texture(), device, cr, simd_make_float4(0.f, 0.f, 0.f, 0.f), texInv, 1.f, op, rotationRad, true,
+              image.premultipliedAlpha());
   }
 
   void drawBackdropBlur(Rect const& rect, float radius, Color tint, CornerRadius const& corners) override {
@@ -1826,7 +1827,8 @@ private:
   }
 
   void emitImage(id<MTLTexture> tex, Rect const& deviceRect, CornerRadius const& corners, vector_float4 const& uvBounds,
-                 vector_float2 const& texSizeInv, float imageMode, float opacity, float rotationRad, bool repeat) {
+                 vector_float2 const& texSizeInv, float imageMode, float opacity, float rotationRad, bool repeat,
+                 bool premultipliedAlpha) {
     MetalImageOp op{};
     op.inst.sdf.rect = simd_make_float4(deviceRect.x, deviceRect.y, deviceRect.width, deviceRect.height);
     op.inst.sdf.corners = cornersToSimd(corners);
@@ -1839,7 +1841,7 @@ private:
     op.inst.sdf.shadowGeom = simd_make_float4(0.f, 0.f, 0.f, 0.f);
     op.inst.uvBounds = uvBounds;
     op.inst.texSizeInv = texSizeInv;
-    op.inst.imageModePad = simd_make_float2(imageMode, 0.f);
+    op.inst.imageModePad = simd_make_float2(imageMode, premultipliedAlpha ? 1.f : 0.f);
     op.blendMode = currentState().blendMode;
     op.texture = (__bridge_retained void*)tex;
     op.repeatSampler = repeat;
@@ -2502,7 +2504,7 @@ public:
     draw(*targetCanvas, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
     targetCanvas->present();
     return std::make_shared<MetalImage>(texture, static_cast<std::uint32_t>(pixelW),
-                                        static_cast<std::uint32_t>(pixelH));
+                                        static_cast<std::uint32_t>(pixelH), true);
   }
 
   void* preparedRectInstanceBuffer(MetalFrameRecorder const& recorded) {

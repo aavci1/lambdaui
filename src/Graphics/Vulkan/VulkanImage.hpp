@@ -42,6 +42,7 @@ struct VulkanImage final : Image {
   bool ownsGpuResource = false;
   bool ownsImportedMemory = false;
   bool ownsCoreReference = false;
+  bool premultipliedAlpha_ = false;
   VkDevice owningDevice = VK_NULL_HANDLE;
   VmaAllocator owningAllocator = VK_NULL_HANDLE;
   std::uint64_t contentGeneration = 1;
@@ -59,7 +60,8 @@ struct VulkanImage final : Image {
               VkImageView ownedView,
               VkFormat imageFormat,
               int w,
-              int h);
+              int h,
+              bool imagePremultipliedAlpha = false);
   VulkanImage(VkDevice device,
               VkImage importedImage,
               VkDeviceMemory importedImageMemory,
@@ -70,6 +72,7 @@ struct VulkanImage final : Image {
   ~VulkanImage() override;
 
   Size size() const override;
+  bool premultipliedAlpha() const noexcept override { return premultipliedAlpha_; }
   void markContentChanged();
   bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void* gpuDevice) override;
   bool updatePixels(std::span<std::uint8_t const> newPixels,

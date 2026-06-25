@@ -21,22 +21,6 @@ Rect expandForShadow(Rect rect, ShadowStyle const &shadow) noexcept {
     return rect;
 }
 
-Rect insetRect(Rect rect, float inset) noexcept {
-    rect.x += inset;
-    rect.y += inset;
-    rect.width = std::max(0.f, rect.width - 2.f * inset);
-    rect.height = std::max(0.f, rect.height - 2.f * inset);
-    return rect;
-}
-
-CornerRadius insetCornerRadius(CornerRadius radius, float inset) noexcept {
-    radius.topLeft = std::max(0.f, radius.topLeft - inset);
-    radius.topRight = std::max(0.f, radius.topRight - inset);
-    radius.bottomRight = std::max(0.f, radius.bottomRight - inset);
-    radius.bottomLeft = std::max(0.f, radius.bottomLeft - inset);
-    return radius;
-}
-
 } // namespace
 
 RectNode::RectNode(Rect bounds, FillStyle fill, StrokeStyle stroke, CornerRadius cornerRadius,
@@ -73,11 +57,16 @@ float RectNode::opacity() const noexcept {
     return opacity_;
 }
 
+bool RectNode::flattenOpacity() const noexcept {
+    return flattenOpacity_;
+}
+
 void RectNode::setFill(FillStyle fill) {
     if (fill_ == fill) {
         return;
     }
     fill_ = std::move(fill);
+    invalidateOpacityLayerCache();
     markDirty();
 }
 
@@ -86,6 +75,7 @@ void RectNode::setStroke(StrokeStyle stroke) {
         return;
     }
     stroke_ = std::move(stroke);
+    invalidateOpacityLayerCache();
     markDirty();
 }
 
@@ -94,6 +84,7 @@ void RectNode::setCornerRadius(CornerRadius cornerRadius) {
         return;
     }
     cornerRadius_ = cornerRadius;
+    invalidateOpacityLayerCache();
     markDirty();
 }
 
@@ -102,6 +93,7 @@ void RectNode::setShadow(ShadowStyle shadow) {
         return;
     }
     shadow_ = shadow;
+    invalidateOpacityLayerCache();
     markDirty();
 }
 
@@ -110,6 +102,7 @@ void RectNode::setClipsContents(bool clipsContents) noexcept {
         return;
     }
     clipsContents_ = clipsContents;
+    invalidateOpacityLayerCache();
     markSubtreeDirty();
 }
 
@@ -122,22 +115,46 @@ void RectNode::setOpacity(float opacity) noexcept {
     markSubtreeDirty();
 }
 
+void RectNode::setFlattenOpacity(bool flatten) noexcept {
+    if (flattenOpacity_ == flatten) {
+        return;
+    }
+    flattenOpacity_ = flatten;
+    invalidateOpacityLayerCache();
+    markSubtreeDirty();
+}
+
+void RectNode::invalidateOpacityLayerCache() const {
+    opacityLayerCache_.invalidate();
+}
+
+bool RectNode::hasValidOpacityLayerCache(Size logicalSize, float dpiScale) const noexcept {
+    return opacityLayerCache_.hasValid(logicalSize, dpiScale);
+}
+
+std::shared_ptr<Image> RectNode::opacityLayerImage() const noexcept {
+    return opacityLayerCache_.image();
+}
+
+void RectNode::setOpacityLayerImage(std::shared_ptr<Image> image, Size logicalSize, float dpiScale) const {
+    opacityLayerCache_.setImage(std::move(image), logicalSize, dpiScale);
+}
+
+void RectNode::noteOpacityLayerRasterized() const {
+    opacityLayerCache_.noteRasterized();
+}
+
+std::uint64_t RectNode::opacityLayerRasterizeCount() const noexcept {
+    return opacityLayerCache_.rasterizeCount();
+}
+
 Rect RectNode::localBounds() const noexcept {
     return expandForShadow(Rect::sharp(0.f, 0.f, size().width, size().height), shadow_);
 }
 
 void RectNode::render(Renderer &renderer) const {
     Rect const bounds = Rect::sharp(0.f, 0.f, size().width, size().height);
-    renderer.drawRect(bounds, cornerRadius_, fill_, StrokeStyle::none(), shadow_);
-    if (stroke_.isNone() || stroke_.width <= 0.f) {
-        return;
-    }
-    float const strokeInset = stroke_.width * 0.5f;
-    renderer.drawRect(insetRect(bounds, strokeInset),
-                      insetCornerRadius(cornerRadius_, strokeInset),
-                      FillStyle::none(),
-                      stroke_,
-                      ShadowStyle::none());
+    renderer.drawRect(bounds, cornerRadius_, fill_, stroke_, shadow_);
 }
 
 } // namespace lambdaui::scenegraph

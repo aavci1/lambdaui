@@ -69,6 +69,7 @@ detail::ElementModifiers::ElementModifiers(detail::ElementModifiers const& o)
     , shadow(o.shadow)
     , cornerRadius(o.cornerRadius)
     , opacity(o.opacity)
+    , flattenOpacity(o.flattenOpacity)
     , transform(o.transform)
     , clip(o.clip)
     , positionX(o.positionX)
@@ -106,6 +107,7 @@ detail::ElementModifiers& detail::ElementModifiers::operator=(detail::ElementMod
     shadow = o.shadow;
     cornerRadius = o.cornerRadius;
     opacity = o.opacity;
+    flattenOpacity = o.flattenOpacity;
     transform = o.transform;
     clip = o.clip;
     positionX = o.positionX;
@@ -233,7 +235,16 @@ Element Element::cornerRadius(Reactive::Bindable<float> radius) && {
 }
 
 Element Element::opacity(Reactive::Bindable<float> opacity) && {
-  writableModifiers().opacity = std::move(opacity);
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.opacity = std::move(opacity);
+  modifiers.flattenOpacity.reset();
+  return std::move(*this);
+}
+
+Element Element::opacity(Reactive::Bindable<float> opacity, bool flattenOpacity) && {
+  detail::ElementModifiers& modifiers = writableModifiers();
+  modifiers.opacity = std::move(opacity);
+  modifiers.flattenOpacity = flattenOpacity;
   return std::move(*this);
 }
 

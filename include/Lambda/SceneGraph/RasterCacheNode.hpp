@@ -4,7 +4,7 @@
 ///
 /// Scene-graph boundary for subtrees opted into texture rasterization.
 
-#include <Lambda/Graphics/Image.hpp>
+#include <Lambda/SceneGraph/RasterizedLayerCache.hpp>
 #include <Lambda/SceneGraph/SceneNode.hpp>
 
 #include <cstdint>
@@ -31,9 +31,7 @@ public:
   bool canPrepareRenderOps() const noexcept override;
 
 private:
-  mutable std::shared_ptr<Image> cachedImage_{};
-  mutable Size cachedLogicalSize_{};
-  mutable float cachedDpiScale_ = 0.f;
+  mutable RasterizedLayerCache cache_{};
 #ifndef NDEBUG
   mutable std::uint32_t rasterizeBurstCount_ = 0;
   mutable bool rasterizeWarningLogged_ = false;

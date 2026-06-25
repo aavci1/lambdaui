@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace lambdaui {
@@ -51,6 +52,7 @@ struct ElementModifiers {
   Reactive::Bindable<ShadowStyle> shadow{ShadowStyle::none()};
   Reactive::Bindable<CornerRadius> cornerRadius{CornerRadius{}};
   Reactive::Bindable<float> opacity{1.f};
+  std::optional<bool> flattenOpacity;
   Reactive::Bindable<Mat3> transform{Mat3::identity()};
   bool clip = false;
   Reactive::Bindable<float> positionX{0.f};

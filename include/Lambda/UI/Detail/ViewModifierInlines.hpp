@@ -84,6 +84,11 @@ Element ViewModifiers<Derived>::opacity(Reactive::Bindable<float> o) && {
 }
 
 template<typename Derived>
+Element ViewModifiers<Derived>::opacity(Reactive::Bindable<float> o, bool flattenOpacity) && {
+  return Element{std::move(static_cast<Derived&>(*this))}.opacity(std::move(o), flattenOpacity);
+}
+
+template<typename Derived>
 Element ViewModifiers<Derived>::position(Reactive::Bindable<Vec2> p) && {
   return Element{std::move(static_cast<Derived&>(*this))}.position(std::move(p));
 }

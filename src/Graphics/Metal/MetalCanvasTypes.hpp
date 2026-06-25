@@ -59,7 +59,7 @@ struct MetalImageInstance {
   MetalRectInstance sdf;
   vector_float4 uvBounds; // u0, v0, u1, v1 in normalized texture coordinates
   vector_float2 texSizeInv;
-  vector_float2 imageModePad; // x: 0 = clamp UV bounds, 1 = tile (repeat sampler)
+  vector_float2 imageModePad; // x: 0 = clamp UV bounds, 1 = tile; y: sampled texture is premultiplied
 };
 
 static_assert(std::is_trivially_copyable_v<MetalImageInstance>);

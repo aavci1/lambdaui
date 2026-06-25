@@ -29,7 +29,7 @@ require_dir "$LAMBDA_TESTS_DIR"
 
 is_allowed_header_only_class() {
   case "$1" in
-    Animation|AnimationBase|AnimationClipState|Bindable|Clipboard|Computed|Effect|EnvironmentBinding|EnvironmentEntry|EnvironmentSlot|ForView|HookInteractionSignalScope|HookLayoutScope|Interaction|PreparedRenderOps|Renderer|Scope|ScopedInteractionScopeKey|ScopedTimer|ScopedWindowCreationModalParent|ShowView|Signal|SmallFn|SmallVector|SwitchView)
+    Animation|AnimationBase|AnimationClipState|Bindable|Clipboard|Computed|Effect|EnvironmentBinding|EnvironmentEntry|EnvironmentSlot|ForView|HookInteractionSignalScope|HookLayoutScope|Interaction|PreparedRenderOps|RasterizedLayerCache|Renderer|Scope|ScopedInteractionScopeKey|ScopedTimer|ScopedWindowCreationModalParent|ShowView|Signal|SmallFn|SmallVector|SwitchView)
       return 0
       ;;
   esac

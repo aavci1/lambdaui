@@ -283,6 +283,7 @@ struct ImageVertexOut {
   float4 fragUvBounds;
   float2 fragTexSizeInv;
   float fragImageMode [[flat]];
+  float fragImagePremultipliedAlpha [[flat]];
 };
 
 struct ImageFragmentIn {
@@ -300,6 +301,7 @@ struct ImageFragmentIn {
   float4 fragUvBounds;
   float2 fragTexSizeInv;
   float fragImageMode;
+  float fragImagePremultipliedAlpha;
 };
 
 vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance_id]], constant float2* quad [[buffer(0)]],
@@ -338,6 +340,7 @@ vertex ImageVertexOut image_sdf_vert(uint vid [[vertex_id]], uint iid [[instance
   out.fragUvBounds = inst.uvBounds;
   out.fragTexSizeInv = inst.texSizeInv;
   out.fragImageMode = inst.imageModePad.x;
+  out.fragImagePremultipliedAlpha = inst.imageModePad.y;
   return out;
 }
 
@@ -364,7 +367,7 @@ fragment float4 image_sdf_frag(ImageFragmentIn in [[stage_in]], float4 fragCoord
     uv = float2(local.x * in.fragTexSizeInv.x, local.y * in.fragTexSizeInv.y);
   }
   float4 c = tex.sample(smpl, uv);
-  float4 premul = float4(c.rgb * c.a, c.a);
+  float4 premul = in.fragImagePremultipliedAlpha > 0.5f ? c : float4(c.rgb * c.a, c.a);
   premul *= coverage * in.fragOpacity * clipCoverage;
   if (premul.a < 0.001f)
     discard_fragment();

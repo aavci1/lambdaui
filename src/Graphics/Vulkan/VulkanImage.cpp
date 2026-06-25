@@ -82,7 +82,8 @@ VulkanImage::VulkanImage(VkDevice device,
                          VkImageView ownedView,
                          VkFormat imageFormat,
                          int w,
-                         int h)
+                         int h,
+                         bool imagePremultipliedAlpha)
     : width(w),
       height(h),
       format(imageFormat == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : imageFormat),
@@ -91,6 +92,7 @@ VulkanImage::VulkanImage(VkDevice device,
       view(ownedView),
       uploaded(true),
       ownsGpuResource(true),
+      premultipliedAlpha_(imagePremultipliedAlpha),
       owningDevice(device),
       owningAllocator(allocator) {
   retainSharedVulkanCoreForVulkanImage();
