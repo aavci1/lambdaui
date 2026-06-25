@@ -134,7 +134,7 @@ class SceneNode {
     SceneNode* parent_ = nullptr;
     std::vector<std::unique_ptr<SceneNode>> children_{};
     std::unique_ptr<Interaction> interaction_{};
-    RelayoutFn relayout_{};
+    std::unique_ptr<RelayoutFn> relayout_{};
     mutable bool ownPaintingDirty_ = true;
     mutable bool subtreeDirty_ = true;
     mutable std::optional<Rect> cachedSubtreeVisualBounds_{};

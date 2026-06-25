@@ -21,14 +21,172 @@
 #include "SceneGraph/SceneNodeInternal.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include <memory>
+#include <new>
 #include <vector>
+
+namespace {
+
+thread_local bool gTrackAllocations = false;
+thread_local std::size_t gTrackedAllocationCount = 0;
+
+void noteAllocation() noexcept {
+    if (gTrackAllocations) {
+        ++gTrackedAllocationCount;
+    }
+}
+
+void* allocateOrThrow(std::size_t size) {
+    if (void* ptr = std::malloc(size == 0 ? 1 : size)) {
+        return ptr;
+    }
+    throw std::bad_alloc {};
+}
+
+void* allocateAlignedOrThrow(std::size_t size, std::align_val_t alignment) {
+    void* ptr = nullptr;
+    std::size_t const requestedAlignment = static_cast<std::size_t>(alignment);
+    std::size_t const effectiveAlignment = std::max(requestedAlignment, sizeof(void*));
+    if (posix_memalign(&ptr, effectiveAlignment, size == 0 ? 1 : size) == 0) {
+        return ptr;
+    }
+    throw std::bad_alloc {};
+}
+
+} // namespace
+
+void* operator new(std::size_t size) {
+    noteAllocation();
+    return allocateOrThrow(size);
+}
+
+void* operator new[](std::size_t size) {
+    noteAllocation();
+    return allocateOrThrow(size);
+}
+
+void* operator new(std::size_t size, std::align_val_t alignment) {
+    noteAllocation();
+    return allocateAlignedOrThrow(size, alignment);
+}
+
+void* operator new[](std::size_t size, std::align_val_t alignment) {
+    noteAllocation();
+    return allocateAlignedOrThrow(size, alignment);
+}
+
+void* operator new(std::size_t size, std::nothrow_t const&) noexcept {
+    try {
+        return operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* operator new[](std::size_t size, std::nothrow_t const&) noexcept {
+    try {
+        return operator new[](size);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* operator new(std::size_t size, std::align_val_t alignment, std::nothrow_t const&) noexcept {
+    try {
+        return operator new(size, alignment);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* operator new[](std::size_t size, std::align_val_t alignment, std::nothrow_t const&) noexcept {
+    try {
+        return operator new[](size, alignment);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void operator delete(void* ptr) noexcept {
+    std::free(ptr);
+}
+
+void operator delete[](void* ptr) noexcept {
+    std::free(ptr);
+}
+
+void operator delete(void* ptr, std::size_t) noexcept {
+    std::free(ptr);
+}
+
+void operator delete[](void* ptr, std::size_t) noexcept {
+    std::free(ptr);
+}
+
+void operator delete(void* ptr, std::align_val_t) noexcept {
+    std::free(ptr);
+}
+
+void operator delete[](void* ptr, std::align_val_t) noexcept {
+    std::free(ptr);
+}
+
+void operator delete(void* ptr, std::size_t, std::align_val_t) noexcept {
+    std::free(ptr);
+}
+
+void operator delete[](void* ptr, std::size_t, std::align_val_t) noexcept {
+    std::free(ptr);
+}
+
+void operator delete(void* ptr, std::nothrow_t const&) noexcept {
+    std::free(ptr);
+}
+
+void operator delete[](void* ptr, std::nothrow_t const&) noexcept {
+    std::free(ptr);
+}
+
+void operator delete(void* ptr, std::align_val_t, std::nothrow_t const&) noexcept {
+    std::free(ptr);
+}
+
+void operator delete[](void* ptr, std::align_val_t, std::nothrow_t const&) noexcept {
+    std::free(ptr);
+}
 
 namespace {
 
 using namespace lambdaui;
 using namespace lambdaui::scenegraph;
+
+static_assert(sizeof(SceneNode) <= 208,
+              "SceneNode should keep relayout callback storage off the hot traversal object");
+
+class ScopedAllocationCounter {
+  public:
+    ScopedAllocationCounter()
+        : previousTrack_(gTrackAllocations)
+        , previousCount_(gTrackedAllocationCount) {
+        gTrackedAllocationCount = 0;
+        gTrackAllocations = true;
+    }
+
+    ~ScopedAllocationCounter() {
+        gTrackAllocations = previousTrack_;
+        gTrackedAllocationCount = previousCount_;
+    }
+
+    std::size_t count() const noexcept {
+        return gTrackedAllocationCount;
+    }
+
+  private:
+    bool previousTrack_ = false;
+    std::size_t previousCount_ = 0;
+};
 
 class DummyImage final : public Image {
   public:
@@ -277,6 +435,35 @@ TEST_CASE("RectNode local bounds keep strokes inside and expand for shadows") {
                       CornerRadius {},
                       ShadowStyle {.radius = 3.f, .offset = {1.f, 2.f}, .color = Colors::black});
     CHECK(shadowed.localBounds() == Rect::sharp(-2.f, -1.f, 26.f, 16.f));
+}
+
+TEST_CASE("SceneNode relayout storage stays off leaf nodes") {
+    SceneNode leaf;
+    bool leafRelayoutResult = true;
+    std::size_t leafRelayoutAllocations = 0;
+    {
+        ScopedAllocationCounter allocations;
+        leafRelayoutResult = leaf.relayout(LayoutConstraints {});
+        leafRelayoutAllocations = allocations.count();
+    }
+
+    CHECK_FALSE(leafRelayoutResult);
+    CHECK(leafRelayoutAllocations == 0);
+
+    SceneNode group;
+    bool relayoutCalled = false;
+    std::size_t setRelayoutAllocations = 0;
+    {
+        ScopedAllocationCounter allocations;
+        group.setRelayout([&relayoutCalled](LayoutConstraints const&) {
+            relayoutCalled = true;
+        });
+        setRelayoutAllocations = allocations.count();
+    }
+
+    CHECK(setRelayoutAllocations == 1);
+    CHECK(group.relayout(LayoutConstraints {}));
+    CHECK(relayoutCalled);
 }
 
 TEST_CASE("SceneRenderer accumulates parent-space bounds as local translations") {

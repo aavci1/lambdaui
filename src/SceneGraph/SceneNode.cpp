@@ -189,7 +189,11 @@ LayoutConstraints SceneNode::layoutConstraints() const noexcept {
 }
 
 void SceneNode::setRelayout(RelayoutFn relayout) {
-    relayout_ = std::move(relayout);
+    if (!relayout) {
+        relayout_.reset();
+        return;
+    }
+    relayout_ = std::make_unique<RelayoutFn>(std::move(relayout));
 }
 
 bool SceneNode::relayoutStoredConstraints() {
@@ -218,7 +222,7 @@ bool SceneNode::relayout(LayoutConstraints const& constraints, bool storeConstra
     bool const shouldDump = ::lambdaui::layoutDebugEnabled() && gRelayoutDepth == 0;
     ++gRelayoutDepth;
     TransientRelayoutScope const transientScope{!storeConstraints};
-    relayout_(constraints);
+    (*relayout_)(constraints);
     --gRelayoutDepth;
     if (shouldDump && gRelayoutDepth == 0) {
         layoutDebugDumpAttached(storeConstraints ? "scene-node-relayout"
