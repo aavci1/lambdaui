@@ -5,7 +5,6 @@
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanSwapchain.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCanvasResources.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCommandRecording.inc"
-#include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanGlyphAtlas.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanImages.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCanvasMembers.inc"
 #include "Graphics/Vulkan/VulkanGpuCanvasParts/VulkanCanvasApi.inc"

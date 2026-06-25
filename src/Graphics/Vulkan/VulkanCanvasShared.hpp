@@ -1,0 +1,109 @@
+#pragma once
+
+#include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
+
+#include <Lambda/Core/Geometry.hpp>
+
+#include <vulkan/vulkan.h>
+
+#include <cstdint>
+#include <filesystem>
+#include <functional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+struct VmaAllocator_T;
+using VmaAllocator = VmaAllocator_T*;
+
+namespace lambdaui {
+
+struct Rgba {
+  std::uint8_t r = 0;
+  std::uint8_t g = 0;
+  std::uint8_t b = 0;
+  std::uint8_t a = 255;
+};
+
+struct VulkanGlyphKey {
+  std::uint32_t fontId = 0;
+  std::uint32_t glyphId = 0;
+  std::uint16_t size = 0;
+  bool operator==(VulkanGlyphKey const&) const = default;
+};
+
+struct VulkanGlyphKeyHash {
+  std::size_t operator()(VulkanGlyphKey const& key) const noexcept {
+    std::size_t h = std::hash<std::uint32_t>{}(key.fontId);
+    h ^= std::hash<std::uint32_t>{}(key.glyphId) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
+    h ^= std::hash<std::uint16_t>{}(key.size) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
+    return h;
+  }
+};
+
+struct VulkanGlyphSlot {
+  float u0 = 0;
+  float v0 = 0;
+  float u1 = 0;
+  float v1 = 0;
+  std::uint32_t w = 0;
+  std::uint32_t h = 0;
+  int x = 0;
+  int y = 0;
+  Point bearing{};
+  std::uint64_t lastUsed = 0;
+  std::vector<std::uint8_t> alpha;
+};
+
+struct SharedVulkanCore {
+  VkInstance instance = VK_NULL_HANDLE;
+  VkPhysicalDevice physical = VK_NULL_HANDLE;
+  VkDevice device = VK_NULL_HANDLE;
+  VmaAllocator allocator = VK_NULL_HANDLE;
+  VkQueue queue = VK_NULL_HANDLE;
+  std::uint32_t queueFamily = 0;
+
+  struct Resources {
+    bool initialized = false;
+    VkFormat renderFormat = VK_FORMAT_UNDEFINED;
+    VkFormat backdropRenderFormat = VK_FORMAT_UNDEFINED;
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout rectDescriptorLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout quadDescriptorLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout textureDescriptorLayout = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkPipelineLayout rectPipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout calloutPipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout imagePipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout backdropPipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline rectPipeline = VK_NULL_HANDLE;
+    VkPipeline calloutPipeline = VK_NULL_HANDLE;
+    VkPipeline imagePipeline = VK_NULL_HANDLE;
+    VkPipeline imageUnpremultiplyPipeline = VK_NULL_HANDLE;
+    VkPipeline backdropPipeline = VK_NULL_HANDLE;
+    VkPipeline backdropBlurPipeline = VK_NULL_HANDLE;
+    VkPipeline pathPipeline = VK_NULL_HANDLE;
+    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+    std::filesystem::path pipelineCacheFile;
+    Texture atlas;
+    std::vector<Rgba> atlasPixels;
+    int atlasX = 1;
+    int atlasY = 1;
+    int atlasRowH = 0;
+    bool atlasDirty = false;
+    std::uint64_t atlasGeneration = 1;
+    std::uint64_t atlasUseCounter = 0;
+    std::unordered_map<VulkanGlyphKey, VulkanGlyphSlot, VulkanGlyphKeyHash> glyphs;
+  } resources;
+
+  std::uint32_t refs = 0;
+  bool googleDisplayTiming = false;
+  bool swapchainMaintenance1 = false;
+  std::string swapchainMaintenance1Extension;
+  VkDriverId driverId = VK_DRIVER_ID_MAX_ENUM;
+  std::string driverName;
+  std::string driverInfo;
+};
+
+} // namespace lambdaui

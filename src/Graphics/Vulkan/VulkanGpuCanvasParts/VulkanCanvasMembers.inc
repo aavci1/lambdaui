@@ -1,5 +1,6 @@
   unsigned int handle_ = 0;
   TextSystem &textSystem_;
+  VulkanGlyphAtlas glyphAtlas_;
   VulkanRenderTargetSpec targetSpec_{};
   int width_ = 1;
   int height_ = 1;

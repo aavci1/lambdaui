@@ -179,7 +179,7 @@
     for (TextLayout::PlacedRun const &placed : layout.runs) {
       std::size_t const glyphCount = std::min(placed.run.glyphIds.size(), placed.run.positions.size());
       for (std::size_t i = 0; i < glyphCount; ++i) {
-        GlyphSlot const *slot = nullptr;
+        VulkanGlyphSlot const *slot = nullptr;
         try {
           slot = glyphSlot(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize);
         } catch (std::exception const &e) {

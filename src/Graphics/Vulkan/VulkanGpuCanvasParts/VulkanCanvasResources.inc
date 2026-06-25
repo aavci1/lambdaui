@@ -1,3 +1,20 @@
+  VulkanGlyphSlot const* glyphSlot(std::uint32_t fontId, std::uint32_t glyphId, float fontSize) {
+    return glyphAtlas_.glyphSlot(resources(), dpiScaleY_, fontId, glyphId, fontSize);
+  }
+
+  void ensureAtlasDescriptor() {
+    ensureTextureDescriptor(resources().atlas);
+  }
+
+  void queueAtlasUploadIfNeeded() {
+    auto &res = resources();
+    if (!glyphAtlas_.atlasUploadNeeded(res)) {
+      return;
+    }
+    queueTextureUpload(res.atlas, res.atlasPixels.data());
+    res.atlasDirty = false;
+  }
+
   void createAtlas() {
     auto &res = resources();
     res.atlas.width = 2048;

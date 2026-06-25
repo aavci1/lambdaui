@@ -8,8 +8,8 @@ public:
   VulkanCanvas(VkSurfaceKHR surface,
                unsigned int handle,
                TextSystem &textSystem,
-               VulkanCanvasOptions options)
-      : handle_(handle), textSystem_(textSystem), surface_(surface),
+      VulkanCanvasOptions options)
+      : handle_(handle), textSystem_(textSystem), glyphAtlas_(textSystem), surface_(surface),
         transparentSurface_(options.transparentSurface) {
     instance_ = ensureSharedVulkanInstanceImpl();
     if (!surface_) {
@@ -34,7 +34,7 @@ public:
   }
 
   VulkanCanvas(VulkanRenderTargetSpec const &spec, TextSystem &textSystem)
-      : textSystem_(textSystem), targetSpec_(spec), targetMode_(true) {
+      : textSystem_(textSystem), glyphAtlas_(textSystem), targetSpec_(spec), targetMode_(true) {
     instance_ = ensureSharedVulkanInstanceImpl();
     if (!targetSpec_.image || !targetSpec_.view || targetSpec_.width == 0 || targetSpec_.height == 0) {
       throw std::runtime_error("Vulkan RenderTarget requires image, view, width, and height");

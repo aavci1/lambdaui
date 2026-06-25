@@ -11,6 +11,7 @@
 #include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
+#include "Graphics/Vulkan/VulkanGlyphAtlas.hpp"
 #include "Detail/ResizeTrace.hpp"
 #include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
@@ -132,7 +133,6 @@ void updateImageTextureRegionFor(VulkanImage const* image,
                                  void const* pixels,
                                  std::uint32_t sourceBytesPerRow = 0);
 void markImageTextureContentsChangedFor(VulkanImage const* image);
-struct SharedVulkanCore;
 SharedVulkanCore *acquireSharedVulkanCore(VkSurfaceKHR surface);
 void releaseSharedVulkanCore();
 
@@ -164,10 +164,6 @@ void destroyOwnedVulkanImage(PendingOwnedVulkanImageDestroy& destroy) {
   }
   destroy = {};
 }
-
-struct Rgba {
-  std::uint8_t r = 0, g = 0, b = 0, a = 255;
-};
 
 VkFormat vkFormatForImagePixelFormat(Image::PixelFormat format) {
   switch (format) {
@@ -367,31 +363,6 @@ struct CachedPath {
   std::list<PathCacheKey>::iterator lruIt;
 };
 
-struct GlyphKey {
-  std::uint32_t fontId = 0;
-  std::uint32_t glyphId = 0;
-  std::uint16_t size = 0;
-  bool operator==(GlyphKey const &) const = default;
-};
-
-struct GlyphKeyHash {
-  std::size_t operator()(GlyphKey const &k) const noexcept {
-    std::size_t h = std::hash<std::uint32_t>{}(k.fontId);
-    h ^= std::hash<std::uint32_t>{}(k.glyphId) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
-    h ^= std::hash<std::uint16_t>{}(k.size) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
-    return h;
-  }
-};
-
-struct GlyphSlot {
-  float u0 = 0, v0 = 0, u1 = 0, v1 = 0;
-  std::uint32_t w = 0, h = 0;
-  int x = 0, y = 0;
-  Point bearing{};
-  std::uint64_t lastUsed = 0;
-  std::vector<std::uint8_t> alpha;
-};
-
 void putColor(float out[4], Color c, float opacity = 1.f) {
   out[0] = c.r;
   out[1] = c.g;
@@ -531,55 +502,6 @@ VkFormat vkFormatForDrmFormat(std::uint32_t drmFormat) {
       return VK_FORMAT_UNDEFINED;
   }
 }
-
-struct SharedVulkanCore {
-  VkInstance instance = VK_NULL_HANDLE;
-  VkPhysicalDevice physical = VK_NULL_HANDLE;
-  VkDevice device = VK_NULL_HANDLE;
-  VmaAllocator allocator = VK_NULL_HANDLE;
-  VkQueue queue = VK_NULL_HANDLE;
-  std::uint32_t queueFamily = 0;
-    struct Resources {
-    bool initialized = false;
-    VkFormat renderFormat = VK_FORMAT_UNDEFINED;
-    VkFormat backdropRenderFormat = VK_FORMAT_UNDEFINED;
-    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-    VkDescriptorSetLayout rectDescriptorLayout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout quadDescriptorLayout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout textureDescriptorLayout = VK_NULL_HANDLE;
-    VkSampler sampler = VK_NULL_HANDLE;
-    VkPipelineLayout rectPipelineLayout = VK_NULL_HANDLE;
-    VkPipelineLayout calloutPipelineLayout = VK_NULL_HANDLE;
-    VkPipelineLayout imagePipelineLayout = VK_NULL_HANDLE;
-    VkPipelineLayout backdropPipelineLayout = VK_NULL_HANDLE;
-    VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
-    VkPipeline rectPipeline = VK_NULL_HANDLE;
-    VkPipeline calloutPipeline = VK_NULL_HANDLE;
-    VkPipeline imagePipeline = VK_NULL_HANDLE;
-    VkPipeline imageUnpremultiplyPipeline = VK_NULL_HANDLE;
-    VkPipeline backdropPipeline = VK_NULL_HANDLE;
-    VkPipeline backdropBlurPipeline = VK_NULL_HANDLE;
-    VkPipeline pathPipeline = VK_NULL_HANDLE;
-    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
-    std::filesystem::path pipelineCacheFile;
-    Texture atlas;
-    std::vector<Rgba> atlasPixels;
-    int atlasX = 1;
-    int atlasY = 1;
-    int atlasRowH = 0;
-    bool atlasDirty = false;
-    std::uint64_t atlasGeneration = 1;
-    std::uint64_t atlasUseCounter = 0;
-    std::unordered_map<GlyphKey, GlyphSlot, GlyphKeyHash> glyphs;
-  } resources;
-  std::uint32_t refs = 0;
-  bool googleDisplayTiming = false;
-  bool swapchainMaintenance1 = false;
-  std::string swapchainMaintenance1Extension;
-  VkDriverId driverId = VK_DRIVER_ID_MAX_ENUM;
-  std::string driverName;
-  std::string driverInfo;
-};
 
 std::mutex gVulkanCoreMutex;
 SharedVulkanCore gVulkanCore;
