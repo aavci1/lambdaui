@@ -2381,6 +2381,45 @@ private:
     };
   }
 
+  static bool roundedClipHasEntries(MetalRoundedClipStack const& clip) noexcept {
+    return clip.header.x > 0.f;
+  }
+
+  template <typename Op>
+  static bool opHasRecordedClip(Op const& op) noexcept {
+    return op.scissorValid || roundedClipHasEntries(op.roundedClip);
+  }
+
+  static bool recordedOpsContainClipState(MetalFrameRecorder const& recorded) noexcept {
+    return std::any_of(recorded.rectOps.begin(), recorded.rectOps.end(), opHasRecordedClip<MetalRectOp>) ||
+           std::any_of(recorded.imageOps.begin(), recorded.imageOps.end(), opHasRecordedClip<MetalImageOp>) ||
+           std::any_of(recorded.pathOps.begin(), recorded.pathOps.end(), opHasRecordedClip<MetalPathOp>) ||
+           std::any_of(recorded.glyphOps.begin(), recorded.glyphOps.end(), opHasRecordedClip<MetalGlyphOp>);
+  }
+
+  class MetalCanvasPreparedRenderOps final : public scenegraph::PreparedRenderOps {
+  public:
+    explicit MetalCanvasPreparedRenderOps(MetalFrameRecorder recorded)
+        : recorded_(std::move(recorded))
+        , slice_(fullRecordedSlice(recorded_)) {}
+
+    bool replay(Canvas& canvas) const override {
+      RecordedOpsReplaySlice const slice{Backend::Metal, &slice_};
+      return canvas.replayRecordedLocalOps(recorded_, &slice);
+    }
+
+  private:
+    MetalFrameRecorder recorded_;
+    MetalRecorderSlice slice_{};
+  };
+
+  class CanvasUnreplayablePreparedRenderOps final : public scenegraph::PreparedRenderOps {
+  public:
+    bool replay(Canvas&) const override {
+      return false;
+    }
+  };
+
   static MetalRecorderSlice const* asMetalReplaySlice(RecordedOpsReplaySlice const* slice) noexcept {
     if (!slice || slice->backend != Backend::Metal || !slice->native) {
       return nullptr;
@@ -2391,13 +2430,10 @@ private:
 public:
   float dpiScale() const noexcept override { return dpiScale_; }
 
-  bool beginRecordedOpsCapture(RecordedOps* target) override {
-    MetalFrameRecorder* recorded = asMetalRecordedOps(target);
-    if (!recorded) {
-      return false;
-    }
-    beginRecordedOpsCapture(recorded);
-    return true;
+  std::unique_ptr<RecordedOps> beginRecordedOpsCapture() override {
+    auto recorded = std::make_unique<MetalFrameRecorder>();
+    beginRecordedOpsCapture(recorded.get());
+    return recorded;
   }
 
   void beginRecordedOpsCapture(MetalFrameRecorder* target) {
@@ -2418,17 +2454,16 @@ public:
     updateClipScissor();
   }
 
-  bool prepareRecordedOps(RecordedOps* recorded) override {
-    return asMetalRecordedOps(recorded) != nullptr;
-  }
-
-  bool recordedOpsGlyphAtlasCurrent(RecordedOps const& recorded) const override {
-    MetalFrameRecorder const* metalRecorded = asMetalRecordedOps(recorded);
+  std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(
+      std::unique_ptr<RecordedOps> recorded) override {
+    MetalFrameRecorder* metalRecorded = asMetalRecordedOps(recorded.get());
     if (!metalRecorded) {
-      return false;
+      return nullptr;
     }
-    MetalRecorderSlice const slice = fullRecordedSlice(*metalRecorded);
-    return recordedGlyphAtlasCurrent(*metalRecorded, slice);
+    if (recordedOpsContainClipState(*metalRecorded)) {
+      return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+    }
+    return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(*metalRecorded));
   }
 
   std::shared_ptr<Image> rasterizeWithRenderTarget(Size logicalSize, RasterizeDrawCallback const& draw,

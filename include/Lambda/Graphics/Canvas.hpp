@@ -23,6 +23,28 @@ namespace lambdaui {
 
 class Image;
 class Window;
+class Canvas;
+
+namespace scenegraph {
+class Renderer;
+
+class PreparedRenderOps;
+}
+
+namespace scenegraph {
+
+class PreparedRenderOps {
+public:
+  virtual ~PreparedRenderOps() = default;
+  virtual bool replay(Renderer& renderer) const;
+  virtual bool replay(Canvas& canvas) const {
+    (void)canvas;
+    return false;
+  }
+  virtual bool reusableAfterReplayFailure() const { return true; }
+};
+
+}
 
 enum class Backend : std::uint8_t { Metal, Vulkan };
 
@@ -142,10 +164,10 @@ public:
   virtual bool requestNextFrameCapture() = 0;
   virtual bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width,
                                  std::uint32_t& height) = 0;
-  virtual bool beginRecordedOpsCapture(RecordedOps* target) = 0;
+  virtual std::unique_ptr<RecordedOps> beginRecordedOpsCapture() = 0;
   virtual void endRecordedOpsCapture() = 0;
-  virtual bool prepareRecordedOps(RecordedOps* recorded) = 0;
-  virtual bool recordedOpsGlyphAtlasCurrent(RecordedOps const& recorded) const = 0;
+  virtual std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(
+      std::unique_ptr<RecordedOps> recorded) = 0;
   virtual bool replayRecordedOps(RecordedOps const& recorded,
                                  RecordedOpsReplaySlice const* slice = nullptr) = 0;
   virtual bool replayRecordedLocalOps(RecordedOps const& recorded,

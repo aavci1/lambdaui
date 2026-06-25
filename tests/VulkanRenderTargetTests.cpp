@@ -108,6 +108,14 @@ void checkPreparedRectState(VulkanFrameRecorder const& recorded, bool expected) 
   }
 }
 
+VulkanFrameRecorder* beginVulkanRecordedOpsCapture(Canvas& canvas,
+                                                   std::unique_ptr<RecordedOps>& recordedOps) {
+  recordedOps = canvas.beginRecordedOpsCapture();
+  return recordedOps && recordedOps->backend() == Backend::Vulkan
+             ? static_cast<VulkanFrameRecorder*>(recordedOps.get())
+             : nullptr;
+}
+
 std::uint32_t findMemoryType(VkPhysicalDevice physical, std::uint32_t typeBits,
                              VkMemoryPropertyFlags properties) {
   VkPhysicalDeviceMemoryProperties memoryProperties{};
@@ -574,16 +582,17 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   canvas->beginFrame();
   canvas->clear(Colors::black);
 
-  VulkanFrameRecorder recorded;
-  REQUIRE(canvas->beginRecordedOpsCapture(&recorded));
+  std::unique_ptr<RecordedOps> recordedOps;
+  VulkanFrameRecorder* recorded = beginVulkanRecordedOpsCapture(*canvas, recordedOps);
+  REQUIRE(recorded);
   canvas->drawRect(lambdaui::Rect{16.f, 16.f, 32.f, 32.f}, CornerRadius{},
                    FillStyle::solid(Color{1.f, 0.f, 0.f, 1.f}), StrokeStyle::none(), ShadowStyle::none());
   canvas->endRecordedOpsCapture();
-  CHECK(recorded.ops.size() == 1);
-  CHECK(recorded.rects.size() == 1);
+  CHECK(recorded->ops.size() == 1);
+  CHECK(recorded->rects.size() == 1);
 
-  REQUIRE(canvas->replayRecordedLocalOps(recorded));
-  checkPreparedRectState(recorded, expectPreparedGeometry);
+  REQUIRE(canvas->replayRecordedLocalOps(*recorded));
+  checkPreparedRectState(*recorded, expectPreparedGeometry);
   canvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -617,9 +626,9 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   secondCanvas->clear(Colors::black);
   secondCanvas->save();
   secondCanvas->translate(lambdaui::Point{16.f, 0.f});
-  REQUIRE(secondCanvas->replayRecordedLocalOps(recorded));
+  REQUIRE(secondCanvas->replayRecordedLocalOps(*recorded));
   secondCanvas->restore();
-  checkPreparedRectState(recorded, expectPreparedGeometry);
+  checkPreparedRectState(*recorded, expectPreparedGeometry);
   secondCanvas->present();
 
   VulkanReadbackBuffer secondReadback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -642,10 +651,10 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   CHECK(translatedPixels[oldLeftEdge + 0] < 32);
 
   for (int i = 0; i < 4; ++i) {
-    recorded.rects[0].fill0[i] = i == 1 || i == 3 ? 1.f : 0.f;
-    recorded.rects[0].fill1[i] = recorded.rects[0].fill0[i];
-    recorded.rects[0].fill2[i] = recorded.rects[0].fill0[i];
-    recorded.rects[0].fill3[i] = recorded.rects[0].fill0[i];
+    recorded->rects[0].fill0[i] = i == 1 || i == 3 ? 1.f : 0.f;
+    recorded->rects[0].fill1[i] = recorded->rects[0].fill0[i];
+    recorded->rects[0].fill2[i] = recorded->rects[0].fill0[i];
+    recorded->rects[0].fill3[i] = recorded->rects[0].fill0[i];
   }
 
   VulkanImageTarget mutatedTargetImage{vk.physicalDevice(), vk.device(), width, height};
@@ -663,8 +672,8 @@ TEST_CASE("VulkanFrameRecorder captures and replays canvas ops into a RenderTarg
   mutatedCanvas->resize(static_cast<int>(width), static_cast<int>(height));
   mutatedCanvas->beginFrame();
   mutatedCanvas->clear(Colors::black);
-  REQUIRE(mutatedCanvas->replayRecordedLocalOps(recorded));
-  checkPreparedRectState(recorded, expectPreparedGeometry);
+  REQUIRE(mutatedCanvas->replayRecordedLocalOps(*recorded));
+  checkPreparedRectState(*recorded, expectPreparedGeometry);
   mutatedCanvas->present();
 
   VulkanReadbackBuffer mutatedReadback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -704,8 +713,9 @@ TEST_CASE("VulkanFrameRecorder local replay preserves translated non-root clip")
   canvas->beginFrame();
   canvas->clear(Colors::black);
 
-  VulkanFrameRecorder recorded;
-  REQUIRE(canvas->beginRecordedOpsCapture(&recorded));
+  std::unique_ptr<RecordedOps> recordedOps;
+  VulkanFrameRecorder* recorded = beginVulkanRecordedOpsCapture(*canvas, recordedOps);
+  REQUIRE(recorded);
   canvas->save();
   canvas->clipRect(Rect::sharp(0.f, 0.f, 24.f, 64.f));
   canvas->drawRect(Rect::sharp(16.f, 16.f, 32.f, 32.f),
@@ -715,14 +725,13 @@ TEST_CASE("VulkanFrameRecorder local replay preserves translated non-root clip")
                    ShadowStyle::none());
   canvas->restore();
   canvas->endRecordedOpsCapture();
-  REQUIRE(recorded.ops.size() == 1);
-  CHECK(recorded.ops[0].clip.width == doctest::Approx(24.f));
-  CHECK(recorded.rootClip.width == doctest::Approx(64.f));
-  REQUIRE(canvas->prepareRecordedOps(&recorded));
+  REQUIRE(recorded->ops.size() == 1);
+  CHECK(recorded->ops[0].clip.width == doctest::Approx(24.f));
+  CHECK(recorded->rootClip.width == doctest::Approx(64.f));
 
   canvas->save();
   canvas->translate(Point{16.f, 0.f});
-  REQUIRE(canvas->replayRecordedLocalOps(recorded));
+  REQUIRE(canvas->replayRecordedLocalOps(*recorded));
   canvas->restore();
   canvas->present();
 
@@ -772,8 +781,9 @@ TEST_CASE("VulkanFrameRecorder replays captured image texture") {
   canvas->beginFrame();
   canvas->clear(Colors::black);
 
-  VulkanFrameRecorder recorded;
-  REQUIRE(canvas->beginRecordedOpsCapture(&recorded));
+  std::unique_ptr<RecordedOps> recordedOps;
+  VulkanFrameRecorder* recorded = beginVulkanRecordedOpsCapture(*canvas, recordedOps);
+  REQUIRE(recorded);
   Size const imageSize = image->size();
   canvas->drawImage(*image,
                     lambdaui::Rect{0.f, 0.f, imageSize.width, imageSize.height},
@@ -782,18 +792,17 @@ TEST_CASE("VulkanFrameRecorder replays captured image texture") {
                     1.f);
   canvas->endRecordedOpsCapture();
 
-  CHECK(recorded.replayable);
-  CHECK(recorded.ops.size() == 1);
-  CHECK(canvas->prepareRecordedOps(&recorded));
+  CHECK(recorded->replayable);
+  CHECK(recorded->ops.size() == 1);
+  REQUIRE(canvas->replayRecordedLocalOps(*recorded));
   bool const expectPreparedGeometry = preparedGeometryExpected(vk.physicalDevice());
   if (expectPreparedGeometry) {
-    CHECK(recorded.preparedQuadBuffer != VK_NULL_HANDLE);
-    CHECK(recorded.preparedQuadDescriptor != VK_NULL_HANDLE);
+    CHECK(recorded->preparedQuadBuffer != VK_NULL_HANDLE);
+    CHECK(recorded->preparedQuadDescriptor != VK_NULL_HANDLE);
   } else {
-    CHECK(recorded.preparedQuadBuffer == VK_NULL_HANDLE);
-    CHECK(recorded.preparedQuadDescriptor == VK_NULL_HANDLE);
+    CHECK(recorded->preparedQuadBuffer == VK_NULL_HANDLE);
+    CHECK(recorded->preparedQuadDescriptor == VK_NULL_HANDLE);
   }
-  REQUIRE(canvas->replayRecordedLocalOps(recorded));
   canvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
@@ -875,7 +884,8 @@ TEST_CASE("VulkanFrameRecorder replays captured image after recording canvas is 
   constexpr std::uint32_t width = 64;
   constexpr std::uint32_t height = 64;
   FreeTypeTextSystem textSystem;
-  VulkanFrameRecorder recorded;
+  std::unique_ptr<RecordedOps> recordedOps;
+  VulkanFrameRecorder* recorded = nullptr;
   std::shared_ptr<Image> image;
 
   {
@@ -905,7 +915,8 @@ TEST_CASE("VulkanFrameRecorder replays captured image after recording canvas is 
     sourceCanvas->resize(static_cast<int>(width), static_cast<int>(height));
     sourceCanvas->beginFrame();
     sourceCanvas->clear(Colors::black);
-    REQUIRE(sourceCanvas->beginRecordedOpsCapture(&recorded));
+    recorded = beginVulkanRecordedOpsCapture(*sourceCanvas, recordedOps);
+    REQUIRE(recorded);
     Size const imageSize = image->size();
     sourceCanvas->drawImage(*image,
                             lambdaui::Rect{0.f, 0.f, imageSize.width, imageSize.height},
@@ -917,10 +928,11 @@ TEST_CASE("VulkanFrameRecorder replays captured image after recording canvas is 
   }
 
   REQUIRE(image);
-  CHECK(recorded.replayable);
-  REQUIRE(recorded.ops.size() == 1);
-  CHECK(recorded.ops[0].sourceImage != nullptr);
-  CHECK(recorded.ops[0].sourceImageRef != nullptr);
+  REQUIRE(recorded);
+  CHECK(recorded->replayable);
+  REQUIRE(recorded->ops.size() == 1);
+  CHECK(recorded->ops[0].sourceImage != nullptr);
+  CHECK(recorded->ops[0].sourceImageRef != nullptr);
   image.reset();
   CHECK(!image);
 
@@ -939,7 +951,7 @@ TEST_CASE("VulkanFrameRecorder replays captured image after recording canvas is 
   replayCanvas->resize(static_cast<int>(width), static_cast<int>(height));
   replayCanvas->beginFrame();
   replayCanvas->clear(Colors::black);
-  REQUIRE(replayCanvas->replayRecordedLocalOps(recorded));
+  REQUIRE(replayCanvas->replayRecordedLocalOps(*recorded));
   replayCanvas->present();
 
   VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};

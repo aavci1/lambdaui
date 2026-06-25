@@ -274,10 +274,10 @@ class DpiOnlyCanvas final : public Canvas {
     void* gpuDevice() const override { return nullptr; }
     bool requestNextFrameCapture() override { return false; }
     bool takeCapturedFrame(std::vector<std::uint8_t>&, std::uint32_t&, std::uint32_t&) override { return false; }
-    bool beginRecordedOpsCapture(RecordedOps*) override { return false; }
+    std::unique_ptr<RecordedOps> beginRecordedOpsCapture() override { return nullptr; }
     void endRecordedOpsCapture() override {}
-    bool prepareRecordedOps(RecordedOps*) override { return false; }
-    bool recordedOpsGlyphAtlasCurrent(RecordedOps const&) const override { return false; }
+    std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(
+        std::unique_ptr<RecordedOps>) override { return nullptr; }
     bool replayRecordedOps(RecordedOps const&, RecordedOpsReplaySlice const* = nullptr) override { return false; }
     bool replayRecordedLocalOps(RecordedOps const&, RecordedOpsReplaySlice const* = nullptr) override { return false; }
     void clear(Color) override {}

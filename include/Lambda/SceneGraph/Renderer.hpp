@@ -4,6 +4,7 @@
 ///
 /// Pure scene-graph rendering interface used by `SceneNode` and `SceneRenderer`.
 
+#include <Lambda/Graphics/Canvas.hpp>
 #include <Lambda/Core/Geometry.hpp>
 #include <Lambda/Graphics/ImageFillMode.hpp>
 #include <Lambda/Graphics/Path.hpp>
@@ -21,13 +22,6 @@ namespace scenegraph {
 
 class SceneNode;
 class Renderer;
-
-class PreparedRenderOps {
-  public:
-    virtual ~PreparedRenderOps() = default;
-    virtual bool replay(Renderer &renderer) const = 0;
-    virtual bool reusableAfterReplayFailure() const { return true; }
-};
 
 class Renderer {
   public:

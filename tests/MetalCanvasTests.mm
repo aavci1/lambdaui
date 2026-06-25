@@ -70,6 +70,14 @@ static bool replayLocal(Canvas& canvas, MetalFrameRecorder const& recorded, Meta
   return canvas.replayRecordedLocalOps(recorded, &replaySlice);
 }
 
+static MetalFrameRecorder* beginMetalRecordedOpsCapture(Canvas& canvas,
+                                                        std::unique_ptr<RecordedOps>& recordedOps) {
+  recordedOps = canvas.beginRecordedOpsCapture();
+  return recordedOps && recordedOps->backend() == Backend::Metal
+             ? static_cast<MetalFrameRecorder*>(recordedOps.get())
+             : nullptr;
+}
+
 struct StressScene {
   std::unique_ptr<SceneGraph> graph;
   SceneNode* animatedGroup = nullptr;
@@ -475,15 +483,17 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
     cachedFont.weight = 500.f;
     auto cachedLayout = textSystem.layout("Cached", cachedFont, Colors::white, 160.f, {});
 
-    MetalFrameRecorder recorded;
+    std::unique_ptr<RecordedOps> recordedOps;
+    MetalFrameRecorder* recorded = nullptr;
     target.begin(Colors::black);
-    REQUIRE(canvas.beginRecordedOpsCapture(&recorded));
+    recorded = beginMetalRecordedOpsCapture(canvas, recordedOps);
+    REQUIRE(recorded);
     canvas.drawTextLayout(*cachedLayout, lambdaui::Point{12.f, 12.f});
     canvas.endRecordedOpsCapture();
     target.end();
 
-    REQUIRE(recorded.glyphVertexCount > 0);
-    REQUIRE(recorded.glyphAtlasGeneration > 0);
+    REQUIRE(recorded->glyphVertexCount > 0);
+    REQUIRE(recorded->glyphAtlasGeneration > 0);
 
     Font largeFont = cachedFont;
     largeFont.size = 240.f;
@@ -495,7 +505,7 @@ TEST_CASE("MetalCanvas rejects prepared glyph replay after atlas growth") {
     target.end();
 
     target.begin(Colors::black);
-    CHECK_FALSE(replayLocal(canvas, recorded, fullSlice(recorded)));
+    CHECK_FALSE(replayLocal(canvas, *recorded, fullSlice(*recorded)));
     target.end();
   }
 #endif
@@ -527,14 +537,16 @@ TEST_CASE("MetalCanvas retries glyphs after deferred atlas growth") {
     canvas.drawTextLayout(*pressureLayout, lambdaui::Point{0.f, 300.f});
     target.end();
 
-    MetalFrameRecorder recorded;
+    std::unique_ptr<RecordedOps> recordedOps;
+    MetalFrameRecorder* recorded = nullptr;
     target.begin(Colors::black);
-    REQUIRE(canvas.beginRecordedOpsCapture(&recorded));
+    recorded = beginMetalRecordedOpsCapture(canvas, recordedOps);
+    REQUIRE(recorded);
     canvas.drawTextLayout(*pressureLayout, lambdaui::Point{0.f, 300.f});
     canvas.endRecordedOpsCapture();
     target.end();
 
-    CHECK(recorded.glyphVertexCount >= 180u);
+    CHECK(recorded->glyphVertexCount >= 180u);
   }
 #endif
 }
@@ -577,24 +589,26 @@ TEST_CASE("MetalCanvas replays image and path prepared buffers with shader trans
     path.lineTo({4.f, 20.f});
     path.close();
 
-    MetalFrameRecorder recorded;
+    std::unique_ptr<RecordedOps> recordedOps;
+    MetalFrameRecorder* recorded = nullptr;
     target.begin(Colors::black);
-    REQUIRE(canvas.beginRecordedOpsCapture(&recorded));
+    recorded = beginMetalRecordedOpsCapture(canvas, recordedOps);
+    REQUIRE(recorded);
     canvas.drawPath(path, FillStyle::solid(Colors::red), StrokeStyle::none(), ShadowStyle::none());
     canvas.drawImage(*image, lambdaui::Rect{0.f, 0.f, 8.f, 8.f}, lambdaui::Rect{28.f, 4.f, 8.f, 8.f});
     canvas.endRecordedOpsCapture();
     target.end();
 
-    CHECK(!recorded.pathVerts.empty());
-    CHECK(recorded.imageOps.size() == 1);
+    CHECK(!recorded->pathVerts.empty());
+    CHECK(recorded->imageOps.size() == 1);
 
     target.begin(Colors::black);
     canvas.save();
     canvas.translate(lambdaui::Point{16.f, 8.f});
-    REQUIRE(replayLocal(canvas, recorded, fullSlice(recorded)));
+    REQUIRE(replayLocal(canvas, *recorded, fullSlice(*recorded)));
     canvas.restore();
-    CHECK(recorded.preparedPathVertexBuffer != nullptr);
-    CHECK(recorded.preparedImageInstanceBuffer != nullptr);
+    CHECK(recorded->preparedPathVertexBuffer != nullptr);
+    CHECK(recorded->preparedImageInstanceBuffer != nullptr);
     target.end();
 
     std::vector<std::uint8_t> pixels = target.readPixels();

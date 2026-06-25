@@ -1013,11 +1013,6 @@ public:
     return recordedGlyphAtlasCurrent(recorded);
   }
 
-  bool recordedOpsGlyphAtlasCurrent(RecordedOps const& recorded) const override {
-    VulkanFrameRecorder const* vulkanRecorded = asVulkanRecordedOps(recorded);
-    return vulkanRecorded && recordedGlyphAtlasCurrent(*vulkanRecorded);
-  }
-
   ~VulkanCanvas() override {
     if (device_) {
       if (deviceWaitIdleOnDestruct_) {
@@ -1148,18 +1143,64 @@ public:
                : nullptr;
   }
 
+  static bool sameClipRect(Rect a, Rect b) noexcept {
+    constexpr float eps = 1e-4f;
+    return std::abs(a.x - b.x) <= eps &&
+           std::abs(a.y - b.y) <= eps &&
+           std::abs(a.width - b.width) <= eps &&
+           std::abs(a.height - b.height) <= eps;
+  }
+
+  static bool recordedOpsContainClipState(VulkanFrameRecorder const& recorded) noexcept {
+    return std::any_of(recorded.ops.begin(), recorded.ops.end(), [&recorded](DrawOp const& op) {
+      return !sameClipRect(op.clip, recorded.rootClip);
+    });
+  }
+
+  class VulkanCanvasPreparedRenderOps final : public scenegraph::PreparedRenderOps {
+  public:
+    explicit VulkanCanvasPreparedRenderOps(VulkanFrameRecorder recorded)
+        : recorded_(std::move(recorded)) {}
+
+    bool replay(Canvas& canvas) const override {
+      atlasMismatchOnLastReplay_ = false;
+      VulkanCanvas* vulkanCanvas = dynamic_cast<VulkanCanvas*>(&canvas);
+      if (recorded_.glyphAtlasGeneration != 0 &&
+          (!vulkanCanvas || !vulkanCanvas->recordedOpsGlyphAtlasCurrent(recorded_))) {
+        atlasMismatchOnLastReplay_ = true;
+        return false;
+      }
+      return canvas.replayRecordedLocalOps(recorded_);
+    }
+
+    bool reusableAfterReplayFailure() const override {
+      return !atlasMismatchOnLastReplay_;
+    }
+
+  private:
+    VulkanFrameRecorder recorded_;
+    mutable bool atlasMismatchOnLastReplay_ = false;
+  };
+
+  class CanvasUnreplayablePreparedRenderOps final : public scenegraph::PreparedRenderOps {
+  public:
+    bool replay(Canvas&) const override {
+      return false;
+    }
+  };
+
   void setResizeBoundsHint(int logicalWidth, int logicalHeight) {
     resizeBoundsHintWidth_ = std::max(0, logicalWidth);
     resizeBoundsHintHeight_ = std::max(0, logicalHeight);
   }
 
-  bool beginRecordedOpsCapture(RecordedOps* target) override {
-    VulkanFrameRecorder* recorded = asVulkanRecordedOps(target);
-    if (!recorded) {
-      return false;
+  std::unique_ptr<RecordedOps> beginRecordedOpsCapture() override {
+    if (captureTarget_) {
+      return nullptr;
     }
-    beginRecordedOpsCapture(recorded);
-    return true;
+    auto recorded = std::make_unique<VulkanFrameRecorder>();
+    beginRecordedOpsCapture(recorded.get());
+    return recorded;
   }
 
   void beginRecordedOpsCapture(VulkanFrameRecorder *target) {
@@ -1186,6 +1227,21 @@ public:
       captureSavedStack_.clear();
       hasCaptureSavedState_ = false;
     }
+  }
+
+  std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(
+      std::unique_ptr<RecordedOps> recorded) override {
+    VulkanFrameRecorder* vulkanRecorded = asVulkanRecordedOps(recorded.get());
+    if (!vulkanRecorded) {
+      return nullptr;
+    }
+    if (!prepareRecorderForReplay(vulkanRecorded)) {
+      return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+    }
+    if (recordedOpsContainClipState(*vulkanRecorded)) {
+      return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
+    }
+    return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(*vulkanRecorded));
   }
 
   bool replayRecordedOps(RecordedOps const& recorded,
@@ -1226,11 +1282,7 @@ public:
     return appendRecordedOps(recorded, true);
   }
 
-  bool prepareRecordedOps(RecordedOps* recorded) override {
-    return prepareRecordedOps(asVulkanRecordedOps(recorded));
-  }
-
-  bool prepareRecordedOps(VulkanFrameRecorder *recorded) {
+  bool prepareRecorderForReplay(VulkanFrameRecorder *recorded) {
     if (!recorded) {
       return false;
     }

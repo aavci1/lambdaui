@@ -9,23 +9,12 @@
 #include <Lambda/SceneGraph/SceneGraph.hpp>
 #include <Lambda/SceneGraph/SceneNode.hpp>
 
-#if LAMBDAUI_METAL
-#include "Graphics/Metal/MetalCanvas.hpp"
-#include "Graphics/Metal/MetalCanvasTypes.hpp"
-#include "Graphics/Metal/MetalFrameRecorder.hpp"
-#endif
-#if LAMBDAUI_VULKAN
-#include "Graphics/Vulkan/VulkanCanvas.hpp"
-#include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
-#endif
 #include "SceneGraph/SceneBounds.hpp"
 #include "SceneGraph/SceneNodeInternal.hpp"
 #include "Detail/ResizeTrace.hpp"
 
-#include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -34,6 +23,11 @@
 #include "Debug/PerfCounters.hpp"
 
 namespace lambdaui::scenegraph {
+
+bool PreparedRenderOps::replay(Renderer& renderer) const {
+    Canvas* canvas = renderer.canvas();
+    return canvas && replay(*canvas);
+}
 
 namespace {
 
@@ -107,63 +101,6 @@ std::uint64_t preparedGroupRenderOpsKey(float dpiScale) noexcept {
     return hash == 0 ? 1 : hash;
 }
 
-#if LAMBDAUI_METAL
-MetalRecorderSlice fullRecordedSlice(MetalFrameRecorder const &recorded) {
-    return MetalRecorderSlice {
-        .orderStart = 0,
-        .orderCount = static_cast<std::uint32_t>(recorded.opOrder.size()),
-        .rectStart = 0,
-        .rectCount = static_cast<std::uint32_t>(recorded.rectOps.size()),
-        .imageStart = 0,
-        .imageCount = static_cast<std::uint32_t>(recorded.imageOps.size()),
-        .pathOpStart = 0,
-        .pathOpCount = static_cast<std::uint32_t>(recorded.pathOps.size()),
-        .glyphOpStart = 0,
-        .glyphOpCount = static_cast<std::uint32_t>(recorded.glyphOps.size()),
-        .backdropBlurOpStart = 0,
-        .backdropBlurOpCount = static_cast<std::uint32_t>(recorded.backdropBlurOps.size()),
-        .pathVertexStart = 0,
-        .pathVertexCount = static_cast<std::uint32_t>(recorded.pathVerts.size()),
-        .glyphVertexStart = 0,
-        .glyphVertexCount = recorded.glyphVertexCount,
-    };
-}
-#endif
-
-#if LAMBDAUI_METAL
-bool roundedClipHasEntries(MetalRoundedClipStack const &clip) noexcept {
-    return clip.header.x > 0.f;
-}
-
-template <typename Op>
-bool opHasRecordedClip(Op const &op) noexcept {
-    return op.scissorValid || roundedClipHasEntries(op.roundedClip);
-}
-
-bool recordedOpsContainClipState(MetalFrameRecorder const &recorded) noexcept {
-    return std::any_of(recorded.rectOps.begin(), recorded.rectOps.end(), opHasRecordedClip<MetalRectOp>) ||
-           std::any_of(recorded.imageOps.begin(), recorded.imageOps.end(), opHasRecordedClip<MetalImageOp>) ||
-           std::any_of(recorded.pathOps.begin(), recorded.pathOps.end(), opHasRecordedClip<MetalPathOp>) ||
-           std::any_of(recorded.glyphOps.begin(), recorded.glyphOps.end(), opHasRecordedClip<MetalGlyphOp>);
-}
-#endif
-
-#if LAMBDAUI_VULKAN
-bool sameClipRect(Rect a, Rect b) noexcept {
-    constexpr float eps = 1e-4f;
-    return std::abs(a.x - b.x) <= eps &&
-           std::abs(a.y - b.y) <= eps &&
-           std::abs(a.width - b.width) <= eps &&
-           std::abs(a.height - b.height) <= eps;
-}
-
-bool recordedOpsContainClipState(VulkanFrameRecorder const &recorded) noexcept {
-    return std::any_of(recorded.ops.begin(), recorded.ops.end(), [&recorded](DrawOp const &op) {
-        return !sameClipRect(op.clip, recorded.rootClip);
-    });
-}
-#endif
-
 class CanvasRenderer final : public Renderer {
   public:
     explicit CanvasRenderer(Canvas &canvas) : canvas_(canvas) {}
@@ -195,111 +132,23 @@ class CanvasRenderer final : public Renderer {
     Canvas &canvas_;
 };
 
-#if LAMBDAUI_METAL
-class MetalCanvasPreparedRenderOps final : public PreparedRenderOps {
-  public:
-    explicit MetalCanvasPreparedRenderOps(MetalFrameRecorder recorded) : recorded_(std::move(recorded)), slice_(fullRecordedSlice(recorded_)) {}
-
-    bool replay(Renderer &renderer) const override {
-        Canvas* canvas = renderer.canvas();
-        if (!canvas) {
-            return false;
-        }
-        RecordedOpsReplaySlice const slice{Backend::Metal, &slice_};
-        return canvas->replayRecordedLocalOps(recorded_, &slice);
-    }
-
-  private:
-    MetalFrameRecorder recorded_;
-    MetalRecorderSlice slice_ {};
-};
-#endif
-
-#if LAMBDAUI_VULKAN
-class VulkanCanvasPreparedRenderOps final : public PreparedRenderOps {
-  public:
-    explicit VulkanCanvasPreparedRenderOps(VulkanFrameRecorder recorded) : recorded_(std::move(recorded)) {}
-
-    bool replay(Renderer &renderer) const override {
-        Canvas* canvas = renderer.canvas();
-        if (!canvas) {
-            return false;
-        }
-        atlasMismatchOnLastReplay_ = false;
-        if (recorded_.glyphAtlasGeneration != 0 &&
-            !canvas->recordedOpsGlyphAtlasCurrent(recorded_)) {
-            atlasMismatchOnLastReplay_ = true;
-            return false;
-        }
-        return canvas->replayRecordedLocalOps(recorded_);
-    }
-
-    bool reusableAfterReplayFailure() const override {
-        return !atlasMismatchOnLastReplay_;
-    }
-
-  private:
-    VulkanFrameRecorder recorded_;
-    mutable bool atlasMismatchOnLastReplay_ = false;
-};
-#endif
-
-class CanvasUnreplayablePreparedRenderOps final : public PreparedRenderOps {
-  public:
-    bool replay(Renderer &) const override {
-      return false;
-    }
-};
-
-template<typename Recorder, typename RenderBody, typename Finish>
+template<typename RenderBody>
 std::unique_ptr<PreparedRenderOps> captureCanvasPreparedOps(Canvas* canvas,
-                                                            RenderBody&& renderBody,
-                                                            Finish&& finish) {
-    Recorder recorded;
-    if (!canvas || !canvas->beginRecordedOpsCapture(&recorded)) {
+                                                            RenderBody&& renderBody) {
+    if (!canvas) {
+        return nullptr;
+    }
+    std::unique_ptr<RecordedOps> recorded = canvas->beginRecordedOpsCapture();
+    if (!recorded) {
         return nullptr;
     }
     renderBody();
     canvas->endRecordedOpsCapture();
-    return finish(recorded);
+    return canvas->finalizeRecordedOps(std::move(recorded));
 }
 
 std::unique_ptr<PreparedRenderOps> CanvasRenderer::prepare(SceneNode const &node) {
-#if LAMBDAUI_METAL
-    if (auto prepared = captureCanvasPreparedOps<MetalFrameRecorder>(
-            &canvas_,
-            [&] { node.render(*this); },
-            [](MetalFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
-                if (recordedOpsContainClipState(recorded)) {
-                    // Local replay retags cached ops with the caller's current clip. Until it can merge
-                    // recorded and caller clips, keep internally clipped leaves on the live render path.
-                    return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-                }
-                return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
-            })) {
-        return prepared;
-    }
-#endif
-#if LAMBDAUI_VULKAN
-    if (auto prepared = captureCanvasPreparedOps<VulkanFrameRecorder>(
-            &canvas_,
-            [&] { node.render(*this); },
-            [this](VulkanFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
-                if (!canvas_.prepareRecordedOps(&recorded)) {
-                    return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-                }
-                if (recordedOpsContainClipState(recorded)) {
-                    // Local replay retags cached ops with the caller's current clip. Until it can merge
-                    // recorded and caller clips, keep internally clipped leaves on the live render path.
-                    return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-                }
-                return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
-            })) {
-        return prepared;
-    }
-#endif
-    (void)node;
-    return nullptr;
+    return captureCanvasPreparedOps(&canvas_, [&] { node.render(*this); });
 }
 
 } // namespace
@@ -558,43 +407,11 @@ struct SceneRenderer::Impl {
         if (!canvas) {
             return nullptr;
         }
-#if LAMBDAUI_METAL
-        if (auto prepared = captureCanvasPreparedOps<MetalFrameRecorder>(canvas, [&] {
+        return captureCanvasPreparedOps(canvas, [&] {
             for (std::unique_ptr<SceneNode> const &child : node.children()) {
                 renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
             }
-        }, [](MetalFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
-            if (recordedOpsContainClipState(recorded)) {
-                // Group captures include clips from descendants. Replaying them as one local
-                // display list would drop those nested clips, so let the normal traversal render it.
-                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-            }
-            return std::make_unique<MetalCanvasPreparedRenderOps>(std::move(recorded));
-        })) {
-            return prepared;
-        }
-#endif
-#if LAMBDAUI_VULKAN
-        if (auto prepared = captureCanvasPreparedOps<VulkanFrameRecorder>(canvas, [&] {
-            for (std::unique_ptr<SceneNode> const &child : node.children()) {
-                renderNode(*child, 1.f, Point {}, false, RenderTraversalMode::PreparedCacheBypass);
-            }
-        }, [canvas](VulkanFrameRecorder& recorded) -> std::unique_ptr<PreparedRenderOps> {
-            if (!canvas->prepareRecordedOps(&recorded)) {
-                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-            }
-            if (recordedOpsContainClipState(recorded)) {
-                // Group captures include clips from descendants. Replaying them as one local
-                // display list would drop those nested clips, so let the normal traversal render it.
-                return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
-            }
-            return std::make_unique<VulkanCanvasPreparedRenderOps>(std::move(recorded));
-        })) {
-            return prepared;
-        }
-#endif
-        (void)node;
-        return nullptr;
+        });
     }
 
     void renderNode(SceneNode const &node, float inheritedOpacity, Point inheritedTranslation,
