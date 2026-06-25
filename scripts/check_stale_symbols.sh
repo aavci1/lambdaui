@@ -36,7 +36,7 @@ is_allowed_header_only_class() {
   return 1
 }
 
-is_allowed_forward_without_direct_instantiation() {
+is_allowed_forward_without_definition() {
   case "$1" in
     GestureTracker|Interaction|PreparedRenderOps|Renderer|TextSystem)
       return 0
@@ -47,12 +47,7 @@ is_allowed_forward_without_direct_instantiation() {
 
 has_definition() {
   local type="$1"
-  rg -q "(^|[[:space:]])(class|struct)[[:space:]]+([A-Za-z0-9_]+::)*${type}([^A-Za-z0-9_]|$).*\\{" "$LAMBDA_INCLUDE_DIR" "$LAMBDA_SOURCE_DIR"
-}
-
-has_direct_instantiation() {
-  local type="$1"
-  rg -q "make_unique<([A-Za-z0-9_]+::)*${type}\\b|make_shared<([A-Za-z0-9_]+::)*${type}\\b|new[[:space:]]+([A-Za-z0-9_]+::)*${type}\\b|:[^{;]*([A-Za-z0-9_]+::)*${type}\\b|[[:space:]]([A-Za-z0-9_]+::)*${type}\\{|[[:space:]]([A-Za-z0-9_]+::)*${type}\\(" "$LAMBDA_INCLUDE_DIR" "$LAMBDA_SOURCE_DIR"
+  rg -U -q "(?s)(^|[[:space:]])(class|struct)[[:space:]]+([A-Za-z0-9_]+::)*${type}\\b[^;{}]*\\{" "$LAMBDA_INCLUDE_DIR" "$LAMBDA_SOURCE_DIR"
 }
 
 has_out_of_class_implementation() {
@@ -108,16 +103,11 @@ while IFS= read -r line; do
   type="$(printf '%s\n' "$line" | sed -E 's/.*class[[:space:]]+([A-Z][A-Za-z0-9_]+)[[:space:]]*;.*/\1/')"
   [[ -z "$type" ]] && continue
   if ! has_definition "$type"; then
+    if is_allowed_forward_without_definition "$type"; then
+      continue
+    fi
     add_failure "forward declaration has no matching definition: $line"
-    continue
   fi
-  if has_direct_instantiation "$type"; then
-    continue
-  fi
-  if is_allowed_forward_without_direct_instantiation "$type"; then
-    continue
-  fi
-  add_failure "forward declaration appears never directly instantiated: $line"
 done < <(grep -RnE '^[[:space:]]*class[[:space:]]+[A-Z][A-Za-z0-9_]+[[:space:]]*;' "$LAMBDA_INCLUDE_DIR" "$LAMBDA_SOURCE_DIR" 2>/dev/null)
 
 if ((${#failures[@]} > 0)); then

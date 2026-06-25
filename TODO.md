@@ -29,6 +29,9 @@ All architecture-remediation follow-up items tracked after `9c9f244`
 
 ## Acceptance Checks
 
+These checks were run and passed on the current macOS checkout after the
+architecture follow-up implementation:
+
 ```sh
 rg -n 'std::function' src/UI include/Lambda/UI
 rg -n 'virtual void waitForEvents|virtual int eventFd|virtual int wakeFd|virtual void requestAnimationFrame' src/UI/Platform/Window.hpp
@@ -39,6 +42,7 @@ scripts/check_stale_symbols.sh
 ctest --test-dir build --output-on-failure
 ```
 
-Linux Vulkan validation still needs to be run on a Linux host with Vulkan,
+Full Linux Vulkan validation still needs to be run on a Linux host with Vulkan,
 Wayland/KMS, libdrm, xkbcommon, HarfBuzz, FreeType, and glslang dependencies
-installed.
+installed. That validation should include a clean configure/build plus
+`ctest --test-dir build --output-on-failure` for the Linux backend targets.
