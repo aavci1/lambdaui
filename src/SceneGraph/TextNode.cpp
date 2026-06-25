@@ -56,8 +56,7 @@ std::uint64_t TextNode::preparedRenderOpsKey(float dpiScale) const noexcept {
         return 0;
     }
     std::uint64_t hash = 14695981039346656037ull;
-    std::uintptr_t const layoutAddress = reinterpret_cast<std::uintptr_t>(layout_.get());
-    hashValue(hash, layoutAddress);
+    hashValue(hash, layout_->identity);
     hashValue(hash, dpiScale);
     return hash == 0 ? 1 : hash;
 }

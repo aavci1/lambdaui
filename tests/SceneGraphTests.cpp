@@ -21,6 +21,7 @@
 #include "SceneGraph/SceneNodeInternal.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -31,6 +32,51 @@ namespace {
 
 thread_local bool gTrackAllocations = false;
 thread_local std::size_t gTrackedAllocationCount = 0;
+
+template<typename T>
+struct ReusingAllocator {
+    using value_type = T;
+
+    ReusingAllocator() noexcept = default;
+
+    template<typename U>
+    ReusingAllocator(ReusingAllocator<U> const&) noexcept {}
+
+    T* allocate(std::size_t count) {
+        if (count != 1 || storage().inUse) {
+            throw std::bad_alloc {};
+        }
+        storage().inUse = true;
+        return reinterpret_cast<T*>(storage().bytes);
+    }
+
+    void deallocate(T* ptr, std::size_t) noexcept {
+        if (ptr == reinterpret_cast<T*>(storage().bytes)) {
+            storage().inUse = false;
+        }
+    }
+
+    template<typename U>
+    bool operator==(ReusingAllocator<U> const&) const noexcept {
+        return true;
+    }
+
+    template<typename U>
+    bool operator!=(ReusingAllocator<U> const&) const noexcept {
+        return false;
+    }
+
+  private:
+    struct Storage {
+        alignas(T) unsigned char bytes[sizeof(T)];
+        bool inUse = false;
+    };
+
+    static Storage& storage() {
+        static Storage storageInstance;
+        return storageInstance;
+    }
+};
 
 void noteAllocation() noexcept {
     if (gTrackAllocations) {
@@ -549,6 +595,29 @@ TEST_CASE("TextNode prepared render ops are keyed by layout and dpi scale") {
     textNode->setLayout(nextLayout);
     sceneRenderer.render(graph);
     CHECK(renderer.prepareCalls > dpiPrepareCount);
+}
+
+TEST_CASE("TextNode prepared render ops key survives TextLayout address reuse") {
+    using LayoutAllocator = ReusingAllocator<TextLayout>;
+
+    std::uintptr_t firstAddress = 0;
+    std::uint64_t firstIdentity = 0;
+    std::uint64_t firstKey = 0;
+    {
+        auto layout = std::allocate_shared<TextLayout>(LayoutAllocator {});
+        layout->measuredSize = Size {80.f, 20.f};
+        firstAddress = reinterpret_cast<std::uintptr_t>(layout.get());
+        firstIdentity = layout->identity;
+        TextNode node {Rect {0.f, 0.f, 80.f, 20.f}, layout};
+        firstKey = node.preparedRenderOpsKey(1.f);
+    }
+
+    auto nextLayout = std::allocate_shared<TextLayout>(LayoutAllocator {});
+    nextLayout->measuredSize = Size {72.f, 20.f};
+    REQUIRE(reinterpret_cast<std::uintptr_t>(nextLayout.get()) == firstAddress);
+    CHECK(nextLayout->identity != firstIdentity);
+    TextNode nextNode {Rect {0.f, 0.f, 72.f, 20.f}, nextLayout};
+    CHECK(nextNode.preparedRenderOpsKey(1.f) != firstKey);
 }
 
 TEST_CASE("RectNode clipping scopes child traversal to the node bounds") {

@@ -3,6 +3,7 @@
 #include "Graphics/TextSystemPrivate.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <limits>
@@ -13,6 +14,16 @@
 #include <vector>
 
 namespace lambdaui {
+
+namespace detail {
+
+std::uint64_t nextTextLayoutIdentity() noexcept {
+    static std::atomic<std::uint64_t> next {1};
+    std::uint64_t const id = next.fetch_add(1, std::memory_order_relaxed);
+    return id == 0 ? next.fetch_add(1, std::memory_order_relaxed) : id;
+}
+
+} // namespace detail
 
 void recomputeTextLayoutMetrics(TextLayout &L) {
     if (L.runs.empty()) {

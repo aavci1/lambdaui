@@ -15,6 +15,10 @@
 
 namespace lambdaui {
 
+namespace detail {
+std::uint64_t nextTextLayoutIdentity() noexcept;
+}
+
 /// Owning glyph arenas for layouts produced on the slow path or by `cloneTextLayout`. Spans in `runs`
 /// point into these vectors.
 struct TextLayoutStorage {
@@ -49,6 +53,8 @@ struct TextLayout {
     /// Index of the `CTLine` this run came from (stable grouping for hit-testing vs. baseline epsilon).
     std::uint32_t ctLineIndex = 0;
   };
+
+  std::uint64_t const identity = detail::nextTextLayoutIdentity();
 
   std::vector<PlacedRun> runs;
   /// Empty for legacy layouts; when non-empty, byte ranges match `CTLineGetStringRange` (UTF-8 mapped).
