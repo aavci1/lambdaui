@@ -361,6 +361,26 @@ struct DragMoveProbeRoot {
   }
 };
 
+struct KeyboardSpatialProbeRoot {
+  int* keyDownCount = nullptr;
+  int* textInputCount = nullptr;
+
+  lambdaui::Element body() const {
+    return lambdaui::Element{lambdaui::Rectangle{}}
+        .size(40.f, 40.f)
+        .onKeyDown([keyDownCount = keyDownCount](lambdaui::KeyCode, lambdaui::Modifiers) {
+          if (keyDownCount) {
+            ++*keyDownCount;
+          }
+        })
+        .onTextInput([textInputCount = textInputCount](std::string const&) {
+          if (textInputCount) {
+            ++*textInputCount;
+          }
+        });
+  }
+};
+
 struct TextInputFocusRoot {
   lambdaui::Reactive::Signal<std::string>* first = nullptr;
   lambdaui::Reactive::Signal<std::string>* second = nullptr;
@@ -1014,6 +1034,24 @@ TEST_CASE("keyboard focus collection performs one scene interaction traversal") 
   CHECK(lambdaui::scenegraph::detail::interactionTraversalCountForTesting() == 1);
   CHECK(firstFocus.get());
   CHECK_FALSE(secondFocus.get());
+}
+
+TEST_CASE("keyboard input without focus does not route through pointer hit") {
+  RuntimeHarness harness;
+  int keyDownCount = 0;
+  int textInputCount = 0;
+  harness.setRoot(KeyboardSpatialProbeRoot{
+      .keyDownCount = &keyDownCount,
+      .textInputCount = &textInputCount,
+  });
+
+  REQUIRE_FALSE(harness.runtime.focusTargetKey().has_value());
+
+  harness.keyDown(lambdaui::keys::A);
+  harness.textInput("x");
+
+  CHECK(keyDownCount == 0);
+  CHECK(textInputCount == 0);
 }
 
 TEST_CASE("keyboard focus signal differs from pointer focus") {

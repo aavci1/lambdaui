@@ -995,34 +995,6 @@ void Runtime::handleInput(InputEvent const& event) {
         break;
       }
     }
-
-    std::optional<HitTarget> hit = hitWindow(d->window, point);
-    if (!hit || !hit->interaction) {
-      return;
-    }
-    InteractionData const& interaction = *hit->interaction;
-    switch (event.kind) {
-    case InputEvent::Kind::KeyDown:
-      if (interaction.onKeyDown) {
-        auto onKeyDown = interaction.onKeyDown;
-        onKeyDown(event.key, event.modifiers);
-      }
-      break;
-    case InputEvent::Kind::KeyUp:
-      if (interaction.onKeyUp) {
-        auto onKeyUp = interaction.onKeyUp;
-        onKeyUp(event.key, event.modifiers);
-      }
-      break;
-    case InputEvent::Kind::TextInput:
-      if (interaction.onTextInput) {
-        auto onTextInput = interaction.onTextInput;
-        onTextInput(event.text);
-      }
-      break;
-    default:
-      break;
-    }
     return;
   }
 
