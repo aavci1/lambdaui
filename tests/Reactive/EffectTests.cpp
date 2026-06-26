@@ -1,6 +1,7 @@
 #include <Lambda/Reactive/Animation.hpp>
 #include <Lambda/Reactive/Computed.hpp>
 #include <Lambda/Reactive/Effect.hpp>
+#include <Lambda/Reactive/Scope.hpp>
 #include <Lambda/Reactive/Signal.hpp>
 
 #include <doctest/doctest.h>
@@ -186,6 +187,64 @@ TEST_CASE("Reactive Effect flush survives signal writes from a running effect") 
   for (int runs : watcherRuns) {
     CHECK(runs == 3);
   }
+}
+
+TEST_CASE("Reactive Effect flush skips queued effect freed by another effect") {
+  Signal<int> source(0);
+  Computed<int> derived([&] {
+    return source.get() * 10;
+  });
+
+  Scope childScope;
+  int childRuns = 0;
+  withOwner(childScope, [&] {
+    Effect([&] {
+      (void)derived.get();
+      ++childRuns;
+    });
+  });
+
+  int parentRuns = 0;
+  Effect parent([&] {
+    int const value = source.get();
+    ++parentRuns;
+    if (value > 0) {
+      childScope.dispose();
+    }
+  });
+
+  CHECK(parentRuns == 1);
+  CHECK(childRuns == 1);
+
+  source.set(1);
+
+  CHECK(parentRuns == 2);
+  CHECK(childRuns == 1);
+  CHECK(childScope.disposed());
+}
+
+TEST_CASE("Reactive Effect flush skips effect disposed after scheduling") {
+  Signal<int> source(0);
+  Scope scope;
+  int runs = 0;
+  withOwner(scope, [&] {
+    Effect([&] {
+      (void)source.get();
+      ++runs;
+    });
+  });
+
+  CHECK(runs == 1);
+
+  {
+    detail::BatchGuard batch;
+    source.set(1);
+    scope.dispose();
+    CHECK(runs == 1);
+  }
+
+  CHECK(runs == 1);
+  CHECK(scope.disposed());
 }
 
 TEST_CASE("Reactive Effect flush caps runaway self scheduling in test builds") {

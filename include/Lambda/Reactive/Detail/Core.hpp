@@ -56,6 +56,11 @@ struct Disposable {
 struct Observable;
 struct Computation;
 
+struct EffectQueueEntry {
+  std::weak_ptr<EffectState> effect;
+  std::uint16_t depth = 0;
+};
+
 struct Link {
   Observable* source = nullptr;
   Computation* observer = nullptr;
@@ -155,8 +160,8 @@ inline thread_local Computation* sCurrentObserver = nullptr;
 inline thread_local ScopeState* sCurrentOwner = nullptr;
 inline thread_local int sBatchDepth = 0;
 inline thread_local bool sFlushingEffects = false;
-inline thread_local std::vector<EffectState*> sEffectQueue;
-inline thread_local std::vector<EffectState*> sEffectFlushQueue;
+inline thread_local std::vector<EffectQueueEntry> sEffectQueue;
+inline thread_local std::vector<EffectQueueEntry> sEffectFlushQueue;
 
 inline void ownNode(std::shared_ptr<Disposable> disposable) {
   if (sCurrentOwner) {
@@ -795,7 +800,7 @@ private:
 template <typename Fn>
 Computed(Fn) -> Computed<std::invoke_result_t<Fn&>>;
 
-struct EffectState final : detail::Computation {
+struct EffectState final : detail::Computation, std::enable_shared_from_this<EffectState> {
   template <typename Fn>
   explicit EffectState(Fn&& body)
       : fn(std::forward<Fn>(body)) {}
@@ -852,12 +857,16 @@ inline void scheduleEffect(EffectState* effect) {
     return;
   }
   effect->scheduled = true;
+  EffectQueueEntry entry{
+      .effect = effect->weak_from_this(),
+      .depth = effect->depth,
+  };
   auto const it = std::upper_bound(
-      sEffectQueue.begin(), sEffectQueue.end(), effect,
-      [](EffectState const* lhs, EffectState const* rhs) {
-        return lhs->depth < rhs->depth;
+      sEffectQueue.begin(), sEffectQueue.end(), entry,
+      [](EffectQueueEntry const& lhs, EffectQueueEntry const& rhs) {
+        return lhs.depth < rhs.depth;
       });
-  sEffectQueue.insert(it, effect);
+  sEffectQueue.insert(it, std::move(entry));
 }
 
 inline void flushEffects() {
@@ -878,8 +887,10 @@ inline void flushEffects() {
                    "Lambda Reactive: effect flush exceeded %zu iterations; "
                    "dropping the remaining scheduled effects.\n",
                    kMaxEffectFlushIterations);
-      for (auto* effect : sEffectQueue) {
-        effect->scheduled = false;
+      for (EffectQueueEntry const& entry : sEffectQueue) {
+        if (std::shared_ptr<EffectState> effect = entry.effect.lock()) {
+          effect->scheduled = false;
+        }
       }
       sEffectQueue.clear();
       break;
@@ -888,7 +899,11 @@ inline void flushEffects() {
     sEffectFlushQueue.clear();
     sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
     sEffectQueue.clear();
-    for (auto* effect : sEffectFlushQueue) {
+    for (EffectQueueEntry const& entry : sEffectFlushQueue) {
+      std::shared_ptr<EffectState> effect = entry.effect.lock();
+      if (!effect) {
+        continue;
+      }
       effect->scheduled = false;
       if (!effect->disposed() &&
           (hasFlag(effect->flags, Dirty) ||
