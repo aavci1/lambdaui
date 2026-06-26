@@ -347,6 +347,20 @@ struct CapturedMoveUnmountRoot {
   }
 };
 
+struct DragMoveProbeRoot {
+  int* moveCount = nullptr;
+
+  lambdaui::Element body() const {
+    return lambdaui::Element{lambdaui::Rectangle{}}
+        .size(40.f, 40.f)
+        .onPointerMove([moveCount = moveCount](lambdaui::Point) {
+          if (moveCount) {
+            ++*moveCount;
+          }
+        });
+  }
+};
+
 struct TextInputFocusRoot {
   lambdaui::Reactive::Signal<std::string>* first = nullptr;
   lambdaui::Reactive::Signal<std::string>* second = nullptr;
@@ -958,6 +972,19 @@ TEST_CASE("captured pointer move survives handler unmounting its target") {
 
   CHECK(moveCount == 1);
   CHECK_FALSE(visible.get());
+}
+
+TEST_CASE("captured drag pointer move performs one scene hit traversal") {
+  RuntimeHarness harness;
+  int moveCount = 0;
+  harness.setRoot(DragMoveProbeRoot{.moveCount = &moveCount});
+
+  harness.pointerDown({5.f, 5.f});
+  lambdaui::scenegraph::detail::resetHitTestTraversalCountForTesting();
+  harness.pointerMove({16.f, 5.f});
+
+  CHECK(moveCount == 1);
+  CHECK(lambdaui::scenegraph::detail::hitTestTraversalCountForTesting() == 1);
 }
 
 TEST_CASE("focus moves between elements") {

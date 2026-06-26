@@ -1094,7 +1094,13 @@ void Runtime::handleInput(InputEvent const& event) {
     updateCursorForPoint(d->input, d->window, point);
     break;
   case InputEvent::Kind::PointerMove: {
-    PointerHitSnapshot const hit = pointerHitSnapshot(d->window, point, d->input.hoverScratch);
+    std::optional<PointerHitSnapshot> hit;
+    auto currentHit = [&]() -> PointerHitSnapshot const& {
+      if (!hit) {
+        hit = pointerHitSnapshot(d->window, point, d->input.hoverScratch);
+      }
+      return *hit;
+    };
     bool hitMayBeStale = false;
     if (d->input.pressTarget) {
       float const dx = point.x - d->input.pressPoint.x;
@@ -1115,20 +1121,23 @@ void Runtime::handleInput(InputEvent const& event) {
           d->input.pressCancelled = false;
         }
       }
-    } else if (hit.hit) {
-      if (hit.hit->interaction && hit.hit->interaction->onPointerMove) {
-        auto onPointerMove = hit.hit->interaction->onPointerMove;
-        Point const localPoint = hit.hit->localPoint;
+    } else {
+      PointerHitSnapshot const& current = currentHit();
+      if (current.hit && current.hit->interaction && current.hit->interaction->onPointerMove) {
+        auto onPointerMove = current.hit->interaction->onPointerMove;
+        Point const localPoint = current.hit->localPoint;
         onPointerMove(localPoint);
         hitMayBeStale = true;
       }
     }
     if (hitMayBeStale) {
-      updateHoverForPoint(d->input, d->window, point);
-      updateCursorForPoint(d->input, d->window, point);
+      PointerHitSnapshot const refreshed = pointerHitSnapshot(d->window, point, d->input.hoverScratch);
+      updateHoverForHit(d->input, point, refreshed, d->input.hoverScratch);
+      updateCursorForHit(d->input, d->window, refreshed);
     } else {
-      updateHoverForHit(d->input, point, hit, d->input.hoverScratch);
-      updateCursorForHit(d->input, d->window, hit);
+      PointerHitSnapshot const& current = currentHit();
+      updateHoverForHit(d->input, point, current, d->input.hoverScratch);
+      updateCursorForHit(d->input, d->window, current);
     }
     break;
   }
