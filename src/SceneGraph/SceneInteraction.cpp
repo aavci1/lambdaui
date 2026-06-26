@@ -14,6 +14,7 @@ namespace lambdaui::scenegraph {
 namespace {
 
 std::uint64_t gHitTestTraversalCountForTesting = 0;
+std::uint64_t gInteractionTraversalCountForTesting = 0;
 
 SceneNode const* findInteractionNodeByKey(SceneNode const& node, ComponentKey const& key) {
     for (auto it = node.children().rbegin(); it != node.children().rend(); ++it) {
@@ -36,6 +37,7 @@ std::pair<SceneNode const*, Interaction const*> findInteractionByKey(SceneGraph 
         return {nullptr, nullptr};
     }
 
+    ++gInteractionTraversalCountForTesting;
     SceneNode const* match = findInteractionNodeByKey(graph.root(), key);
     return match ? std::pair<SceneNode const*, Interaction const*>{match, match->interaction()}
                  : std::pair<SceneNode const*, Interaction const*>{nullptr, nullptr};
@@ -65,11 +67,27 @@ std::optional<InteractionHitResult> hitTestInteraction(
 }
 
 std::vector<ComponentKey> collectFocusableKeys(SceneGraph const& graph) {
+    ++gInteractionTraversalCountForTesting;
     std::vector<ComponentKey> out{};
     walkSceneGraph(graph.root(), [&](SceneNode const& node) {
         if (Interaction const* interaction = node.interaction();
             interaction && interaction->focusable() && !interaction->stableTargetKey().empty()) {
             out.push_back(interaction->stableTargetKey());
+        }
+    });
+    return out;
+}
+
+std::vector<FocusableInteractionTarget> collectFocusableTargets(SceneGraph const& graph) {
+    ++gInteractionTraversalCountForTesting;
+    std::vector<FocusableInteractionTarget> out{};
+    walkSceneGraph(graph.root(), [&](SceneNode const& node) {
+        if (Interaction const* interaction = node.interaction();
+            interaction && interaction->focusable() && !interaction->stableTargetKey().empty()) {
+            out.push_back(FocusableInteractionTarget{
+                .node = &node,
+                .interaction = interaction,
+            });
         }
     });
     return out;
@@ -83,6 +101,14 @@ void resetHitTestTraversalCountForTesting() noexcept {
 
 std::uint64_t hitTestTraversalCountForTesting() noexcept {
     return gHitTestTraversalCountForTesting;
+}
+
+void resetInteractionTraversalCountForTesting() noexcept {
+    gInteractionTraversalCountForTesting = 0;
+}
+
+std::uint64_t interactionTraversalCountForTesting() noexcept {
+    return gInteractionTraversalCountForTesting;
 }
 
 } // namespace detail

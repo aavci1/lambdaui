@@ -975,6 +975,20 @@ TEST_CASE("focus moves between elements") {
   CHECK(secondFocus.get());
 }
 
+TEST_CASE("keyboard focus collection performs one scene interaction traversal") {
+  RuntimeHarness harness;
+  lambdaui::Reactive::Signal<bool> firstFocus;
+  lambdaui::Reactive::Signal<bool> secondFocus;
+  harness.setRoot(TwoProbeRoot{.firstFocus = &firstFocus, .secondFocus = &secondFocus});
+
+  lambdaui::scenegraph::detail::resetInteractionTraversalCountForTesting();
+  harness.keyDown(lambdaui::keys::Tab);
+
+  CHECK(lambdaui::scenegraph::detail::interactionTraversalCountForTesting() == 1);
+  CHECK(firstFocus.get());
+  CHECK_FALSE(secondFocus.get());
+}
+
 TEST_CASE("keyboard focus signal differs from pointer focus") {
   RuntimeHarness harness;
   lambdaui::Reactive::Signal<bool> focus;

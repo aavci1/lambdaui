@@ -364,17 +364,14 @@ Rect windowRectForNode(scenegraph::SceneNode const& node, Point rootOrigin = {})
 
 void appendFocusableTargets(scenegraph::SceneGraph const& graph, OverlayId overlay,
                             std::vector<HitTarget>& out) {
-  for (ComponentKey const& key : scenegraph::collectFocusableKeys(graph)) {
-    auto const [node, interaction] = scenegraph::findInteractionByKey(graph, key);
-    InteractionData const* data = interaction ? &interactionData(*interaction) : nullptr;
-    if (node && data && interaction->focusable()) {
-      out.push_back(HitTarget{
-          .node = node,
-          .interaction = data,
-          .localPoint = {},
-          .overlay = overlay,
-      });
-    }
+  for (scenegraph::FocusableInteractionTarget const& target :
+       scenegraph::collectFocusableTargets(graph)) {
+    out.push_back(HitTarget{
+        .node = target.node,
+        .interaction = target.interaction ? &interactionData(*target.interaction) : nullptr,
+        .localPoint = {},
+        .overlay = overlay,
+    });
   }
 }
 
