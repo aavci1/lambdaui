@@ -203,6 +203,24 @@ void operator delete[](void* ptr, std::align_val_t, std::nothrow_t const&) noexc
     std::free(ptr);
 }
 
+namespace lambdaui::tests {
+
+void beginAllocationTrackingForTesting() noexcept {
+    gTrackedAllocationCount = 0;
+    gTrackAllocations = true;
+}
+
+std::size_t allocationCountForTesting() noexcept {
+    return gTrackedAllocationCount;
+}
+
+void endAllocationTrackingForTesting() noexcept {
+    gTrackAllocations = false;
+    gTrackedAllocationCount = 0;
+}
+
+} // namespace lambdaui::tests
+
 namespace {
 
 using namespace lambdaui;

@@ -5,6 +5,7 @@
 #include <Lambda/Core/Geometry.hpp>
 #include <Lambda/UI/CommandRegistry.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -15,6 +16,11 @@ struct RootHolder;
 class Window;
 namespace scenegraph {
 class SceneGraph;
+}
+
+namespace detail {
+void resetInteractionPayloadMaterializationCountForTesting() noexcept;
+std::uint64_t interactionPayloadMaterializationCountForTesting() noexcept;
 }
 
 class Runtime {

@@ -35,6 +35,12 @@
 #include <utility>
 #include <vector>
 
+namespace lambdaui::tests {
+void beginAllocationTrackingForTesting() noexcept;
+std::size_t allocationCountForTesting() noexcept;
+void endAllocationTrackingForTesting() noexcept;
+} // namespace lambdaui::tests
+
 namespace {
 
 struct ScopedEnvOverride {
@@ -205,6 +211,107 @@ struct ProbeView {
       element = std::move(element).cursor(cursor);
     }
     return element;
+  }
+};
+
+struct DeepHoverLeaf {
+  lambdaui::Reactive::Signal<bool>* hover = nullptr;
+  std::vector<std::string>* events = nullptr;
+
+  lambdaui::Element body() const {
+    if (hover) {
+      *hover = lambdaui::useHover();
+    }
+    return lambdaui::Element{lambdaui::Rectangle{}}
+        .size(20.f, 20.f)
+        .onPointerEnter([events = events] {
+          if (events) {
+            events->push_back("leaf-enter");
+          }
+        })
+        .onPointerExit([events = events] {
+          if (events) {
+            events->push_back("leaf-exit");
+          }
+        });
+  }
+};
+
+struct DeepHoverInner {
+  lambdaui::Reactive::Signal<bool>* hover = nullptr;
+  std::vector<std::string>* events = nullptr;
+
+  lambdaui::Element body() const {
+    if (hover) {
+      *hover = lambdaui::useHover();
+    }
+    return lambdaui::Element{lambdaui::VStack{
+               .spacing = 0.f,
+               .children = lambdaui::children(DeepHoverLeaf{hover, events}),
+           }}
+        .size(20.f, 20.f)
+        .onPointerEnter([events = events] {
+          if (events) {
+            events->push_back("inner-enter");
+          }
+        })
+        .onPointerExit([events = events] {
+          if (events) {
+            events->push_back("inner-exit");
+          }
+        });
+  }
+};
+
+struct DeepHoverMiddle {
+  lambdaui::Reactive::Signal<bool>* hover = nullptr;
+  std::vector<std::string>* events = nullptr;
+
+  lambdaui::Element body() const {
+    if (hover) {
+      *hover = lambdaui::useHover();
+    }
+    return lambdaui::Element{lambdaui::VStack{
+               .spacing = 0.f,
+               .children = lambdaui::children(DeepHoverInner{hover, events}),
+           }}
+        .size(20.f, 20.f)
+        .onPointerEnter([events = events] {
+          if (events) {
+            events->push_back("middle-enter");
+          }
+        })
+        .onPointerExit([events = events] {
+          if (events) {
+            events->push_back("middle-exit");
+          }
+        });
+  }
+};
+
+struct DeepHoverRoot {
+  lambdaui::Reactive::Signal<bool>* hover = nullptr;
+  std::vector<std::string>* events = nullptr;
+
+  lambdaui::Element body() const {
+    if (hover) {
+      *hover = lambdaui::useHover();
+    }
+    return lambdaui::Element{lambdaui::VStack{
+               .spacing = 0.f,
+               .children = lambdaui::children(DeepHoverMiddle{hover, events}),
+           }}
+        .size(20.f, 20.f)
+        .onPointerEnter([events = events] {
+          if (events) {
+            events->push_back("root-enter");
+          }
+        })
+        .onPointerExit([events = events] {
+          if (events) {
+            events->push_back("root-exit");
+          }
+        });
   }
 };
 
@@ -393,6 +500,29 @@ struct ConditionalActionRoot {
   }
 };
 
+struct ConditionalFocusProbeRoot {
+  lambdaui::Reactive::Signal<bool> visible;
+  lambdaui::Reactive::Signal<bool>* focus = nullptr;
+  int* blurCount = nullptr;
+
+  lambdaui::Element body() const {
+    return lambdaui::Show(visible, [focus = focus, blurCount = blurCount] {
+      if (focus) {
+        *focus = lambdaui::useFocus();
+      }
+      return lambdaui::Element{lambdaui::Rectangle{}}
+          .size(20.f, 20.f)
+          .focusable(true)
+          .onTap([] {})
+          .onBlur([blurCount = blurCount] {
+            if (blurCount) {
+              ++*blurCount;
+            }
+          });
+    });
+  }
+};
+
 struct AncestorActionShowRoot {
   lambdaui::Reactive::Signal<bool> visible;
   int* fired = nullptr;
@@ -429,10 +559,12 @@ struct AncestorActionForRoot {
 struct ConditionalHoverRoot {
   lambdaui::Reactive::Signal<bool> visible;
   lambdaui::Reactive::Signal<bool>* hover = nullptr;
+  int* pointerExitCount = nullptr;
 
   lambdaui::Element body() const {
-    return lambdaui::Show(visible, [hover = hover] {
-      return lambdaui::Element{ProbeView{hover, nullptr, nullptr, nullptr}};
+    return lambdaui::Show(visible, [hover = hover, pointerExitCount = pointerExitCount] {
+      return lambdaui::Element{
+          ProbeView{hover, nullptr, nullptr, nullptr, nullptr, pointerExitCount}};
     });
   }
 };
@@ -698,6 +830,66 @@ TEST_CASE("pointer move performs one scene hit traversal") {
 
   CHECK(lambdaui::scenegraph::detail::hitTestTraversalCountForTesting() == 1);
   CHECK(hover.get());
+}
+
+TEST_CASE("unchanged hover target does not materialize interaction payloads") {
+  RuntimeHarness harness;
+  lambdaui::Reactive::Signal<bool> hover;
+  std::vector<std::string> events;
+  events.reserve(8);
+  harness.setRoot(DeepHoverRoot{.hover = &hover, .events = &events});
+
+  harness.pointerMove({10.f, 10.f});
+  REQUIRE(hover.get());
+
+  lambdaui::detail::resetInteractionPayloadMaterializationCountForTesting();
+  harness.pointerMove({11.f, 10.f});
+  harness.pointerMove({12.f, 10.f});
+
+  CHECK(lambdaui::detail::interactionPayloadMaterializationCountForTesting() == 0);
+}
+
+TEST_CASE("unchanged hover target pointer move performs no heap allocations") {
+  RuntimeHarness harness;
+  lambdaui::Reactive::Signal<bool> hover;
+  std::vector<std::string> events;
+  events.reserve(8);
+  harness.setRoot(DeepHoverRoot{.hover = &hover, .events = &events});
+
+  harness.pointerMove({10.f, 10.f});
+  REQUIRE(hover.get());
+  harness.pointerMove({11.f, 10.f});
+
+  lambdaui::detail::resetInteractionPayloadMaterializationCountForTesting();
+  lambdaui::tests::beginAllocationTrackingForTesting();
+  harness.pointerMove({12.f, 10.f});
+  std::size_t const allocations = lambdaui::tests::allocationCountForTesting();
+  lambdaui::tests::endAllocationTrackingForTesting();
+
+  CHECK(lambdaui::detail::interactionPayloadMaterializationCountForTesting() == 0);
+  CHECK(allocations == 0);
+}
+
+TEST_CASE("hover enter and exit ordering follows ancestor chain") {
+  RuntimeHarness harness;
+  std::vector<std::string> events;
+  events.reserve(8);
+  harness.setRoot(DeepHoverRoot{.events = &events});
+
+  harness.pointerMove({10.f, 10.f});
+  harness.pointerMove({100.f, 100.f});
+
+  std::vector<std::string> const expected{
+      "root-enter",
+      "middle-enter",
+      "inner-enter",
+      "leaf-enter",
+      "leaf-exit",
+      "inner-exit",
+      "middle-exit",
+      "root-exit",
+  };
+  CHECK(events == expected);
 }
 
 TEST_CASE("pointer leave clears hover without blurring keyboard focus") {
@@ -1104,6 +1296,34 @@ TEST_CASE("view action deregisters on view unmount") {
   CHECK(fired == 1);
 }
 
+TEST_CASE("focused target unmount leaves no stale public focus target") {
+  RuntimeHarness harness;
+  lambdaui::Reactive::Signal<bool> visible{true};
+  lambdaui::Reactive::Signal<bool> focus;
+  int blurCount = 0;
+  harness.setRoot(ConditionalFocusProbeRoot{
+      .visible = visible,
+      .focus = &focus,
+      .blurCount = &blurCount,
+  });
+
+  REQUIRE(focus.get());
+  REQUIRE(harness.runtime.focusAnchor().has_value());
+  REQUIRE(harness.runtime.focusTargetKey().has_value());
+
+  visible.set(false);
+  CHECK(focus.disposed());
+  CHECK_FALSE(harness.runtime.focusAnchor().has_value());
+  CHECK_FALSE(harness.runtime.focusTargetKey().has_value());
+
+  harness.keyDown(lambdaui::keys::A);
+  CHECK(blurCount == 1);
+  CHECK_FALSE(harness.runtime.focusTargetKey().has_value());
+
+  harness.pointerMove({100.f, 100.f});
+  CHECK_FALSE(harness.runtime.focusAnchor().has_value());
+}
+
 TEST_CASE("view action on ancestor resolves through Show branch remount") {
   RuntimeHarness harness;
   registerSaveAction(harness.window);
@@ -1148,16 +1368,25 @@ TEST_CASE("hover chain disposes signals on subtree unmount") {
   RuntimeHarness harness;
   lambdaui::Reactive::Signal<bool> visible{true};
   lambdaui::Reactive::Signal<bool> hover;
-  harness.setRoot(ConditionalHoverRoot{.visible = visible, .hover = &hover});
+  int pointerExitCount = 0;
+  harness.setRoot(ConditionalHoverRoot{
+      .visible = visible,
+      .hover = &hover,
+      .pointerExitCount = &pointerExitCount,
+  });
 
   harness.pointerMove({10.f, 10.f});
   REQUIRE(hover.get());
 
   visible.set(false);
   CHECK(hover.disposed());
+  CHECK(pointerExitCount == 0);
 
   harness.pointerMove({100.f, 100.f});
+  CHECK(pointerExitCount == 1);
   CHECK(hover.disposed());
+  CHECK_FALSE(harness.runtime.hoverAnchor().has_value());
+  CHECK_FALSE(harness.runtime.hoverTargetKey().has_value());
 }
 
 TEST_CASE("runtime scroll dispatch reaches scroll view") {
