@@ -575,7 +575,6 @@ inline Link* Computation::acquireLink() {
   }
   auto* link = spareLinks;
   spareLinks = spareLinks->nextSource;
-  *link = Link{};
   return link;
 }
 
@@ -759,6 +758,7 @@ struct ComputedState final : detail::Computation {
   template <typename Fn>
   explicit ComputedState(Fn&& compute)
       : fn(std::forward<Fn>(compute)) {
+    // Establish dependencies immediately; later reads remain lazy through updateIfNeeded().
     recompute();
   }
 
@@ -792,6 +792,13 @@ struct ComputedState final : detail::Computation {
 
   void onPending() override {
     propagatePending();
+  }
+
+  void refreshIfStale() {
+    if (detail::hasFlag(flags, detail::Dirty) ||
+        detail::hasFlag(flags, detail::Pending) || !value) {
+      (void)updateIfNeeded();
+    }
   }
 
   bool recompute() {
@@ -840,10 +847,7 @@ public:
   T const& get() const {
     assert(state_ && "reading an empty Computed handle");
     assert(!state_->disposed() && "reading a disposed Computed");
-    if (detail::hasFlag(state_->flags, detail::Dirty) ||
-        detail::hasFlag(state_->flags, detail::Pending) || !state_->value) {
-      (void)state_->updateIfNeeded();
-    }
+    state_->refreshIfStale();
     state_->reportRead();
     return *state_->value;
   }
@@ -859,10 +863,7 @@ public:
   T const& peek() const {
     assert(state_ && "peeking an empty Computed handle");
     assert(!state_->disposed() && "peeking a disposed Computed");
-    if (detail::hasFlag(state_->flags, detail::Dirty) ||
-        detail::hasFlag(state_->flags, detail::Pending) || !state_->value) {
-      (void)state_->updateIfNeeded();
-    }
+    state_->refreshIfStale();
     return *state_->value;
   }
 
