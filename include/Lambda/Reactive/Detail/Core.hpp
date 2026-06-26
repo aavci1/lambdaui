@@ -76,6 +76,7 @@ struct Link {
 inline std::atomic_size_t gLiveLinks = 0;
 inline std::atomic_size_t gTotalLinks = 0;
 inline std::atomic_size_t gSourceScanSteps = 0;
+inline std::atomic_size_t gEffectQueueSortComparisons = 0;
 #endif
 
 inline Link* allocateLink() {
@@ -129,6 +130,20 @@ inline std::size_t debugSourceScanStepCount() {
 inline void debugResetSourceScanStepCount() {
 #if LAMBDAUI_PROFILE_REACTIVE
   gSourceScanSteps.store(0, std::memory_order_relaxed);
+#endif
+}
+
+inline std::size_t debugEffectQueueSortComparisonCount() {
+#if LAMBDAUI_PROFILE_REACTIVE
+  return gEffectQueueSortComparisons.load(std::memory_order_relaxed);
+#else
+  return 0;
+#endif
+}
+
+inline void debugResetEffectQueueSortComparisonCount() {
+#if LAMBDAUI_PROFILE_REACTIVE
+  gEffectQueueSortComparisons.store(0, std::memory_order_relaxed);
 #endif
 }
 
@@ -901,12 +916,7 @@ inline void scheduleEffect(EffectState* effect) {
       .effect = effect->weak_from_this(),
       .depth = effect->depth,
   };
-  auto const it = std::upper_bound(
-      sEffectQueue.begin(), sEffectQueue.end(), entry,
-      [](EffectQueueEntry const& lhs, EffectQueueEntry const& rhs) {
-        return lhs.depth < rhs.depth;
-      });
-  sEffectQueue.insert(it, std::move(entry));
+  sEffectQueue.push_back(std::move(entry));
 }
 
 inline void flushEffects() {
@@ -939,6 +949,14 @@ inline void flushEffects() {
     sEffectFlushQueue.clear();
     sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
     sEffectQueue.clear();
+    std::stable_sort(
+        sEffectFlushQueue.begin(), sEffectFlushQueue.end(),
+        [](EffectQueueEntry const& lhs, EffectQueueEntry const& rhs) {
+#if LAMBDAUI_PROFILE_REACTIVE
+          gEffectQueueSortComparisons.fetch_add(1, std::memory_order_relaxed);
+#endif
+          return lhs.depth < rhs.depth;
+        });
     for (EffectQueueEntry const& entry : sEffectFlushQueue) {
       std::shared_ptr<EffectState> effect = entry.effect.lock();
       if (!effect) {

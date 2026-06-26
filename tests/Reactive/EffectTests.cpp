@@ -155,6 +155,42 @@ TEST_CASE("Reactive Effect flushes shallower graph dependencies first") {
   CHECK(order == std::vector<int>{1, 2});
 }
 
+#if LAMBDAUI_PROFILE_REACTIVE
+TEST_CASE("Reactive Effect batch scheduling sorts one flush wave") {
+  constexpr std::size_t kEffectCount = 256;
+  std::vector<Signal<int>> sources;
+  sources.reserve(kEffectCount);
+  for (std::size_t i = 0; i < kEffectCount; ++i) {
+    sources.emplace_back(0);
+  }
+
+  std::vector<int> runs(kEffectCount, 0);
+  std::vector<Effect> effects;
+  effects.reserve(kEffectCount);
+  for (std::size_t i = 0; i < kEffectCount; ++i) {
+    effects.emplace_back([&sources, &runs, i] {
+      (void)sources[i].get();
+      ++runs[i];
+    });
+  }
+
+  detail::debugResetEffectQueueSortComparisonCount();
+  {
+    detail::BatchGuard batch;
+    for (Signal<int> const& source : sources) {
+      source.set(1);
+    }
+  }
+
+  for (int runCount : runs) {
+    CHECK(runCount == 2);
+  }
+  std::size_t const comparisons = detail::debugEffectQueueSortComparisonCount();
+  CHECK(comparisons > 0);
+  CHECK(comparisons <= kEffectCount * 32u);
+}
+#endif
+
 TEST_CASE("Reactive Effect flush survives signal writes from a running effect") {
   // Regression: an effect writing a signal mid-flush re-entered flushEffects
   // through the nested BatchGuard and invalidated the flush queue iteration.
