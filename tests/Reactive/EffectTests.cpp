@@ -283,7 +283,8 @@ TEST_CASE("Reactive Effect flush skips effect disposed after scheduling") {
   CHECK(scope.disposed());
 }
 
-TEST_CASE("Reactive Effect flush caps runaway self scheduling in test builds") {
+TEST_CASE("Reactive Effect flush caps runaway self scheduling") {
+  detail::debugSetEffectFlushIterationLimitForTesting(8);
   Signal<int> source(0);
   int runs = 0;
 
@@ -297,8 +298,9 @@ TEST_CASE("Reactive Effect flush caps runaway self scheduling in test builds") {
 
   source.set(1);
 
-  CHECK(runs <= 10002);
-  CHECK(source.peek() <= 10001);
+  CHECK(runs <= 9);
+  CHECK(source.peek() <= 9);
+  detail::debugResetEffectFlushIterationLimitForTesting();
 }
 
 TEST_CASE("Reactive Effect reruns do not inherit ambient WithTransition") {

@@ -192,6 +192,29 @@ inline thread_local int sBatchDepth = 0;
 inline thread_local bool sFlushingEffects = false;
 inline thread_local std::vector<EffectQueueEntry> sEffectQueue;
 inline thread_local std::vector<EffectQueueEntry> sEffectFlushQueue;
+inline constexpr std::size_t kDefaultMaxEffectFlushIterations = 10000;
+#if defined(LAMBDAUI_TESTING)
+inline thread_local std::size_t sEffectFlushIterationLimitForTesting = 0;
+#endif
+
+inline std::size_t effectFlushIterationLimit() noexcept {
+#if defined(LAMBDAUI_TESTING)
+  if (sEffectFlushIterationLimitForTesting > 0) {
+    return sEffectFlushIterationLimitForTesting;
+  }
+#endif
+  return kDefaultMaxEffectFlushIterations;
+}
+
+#if defined(LAMBDAUI_TESTING)
+inline void debugSetEffectFlushIterationLimitForTesting(std::size_t limit) noexcept {
+  sEffectFlushIterationLimitForTesting = limit;
+}
+
+inline void debugResetEffectFlushIterationLimitForTesting() noexcept {
+  sEffectFlushIterationLimitForTesting = 0;
+}
+#endif
 
 inline void ownNode(std::shared_ptr<Disposable> disposable) {
   if (sCurrentOwner) {
@@ -928,15 +951,14 @@ inline void flushEffects() {
   }
   sFlushingEffects = true;
   [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::FlushEffects};
-  [[maybe_unused]] std::size_t flushIterations = 0;
+  std::size_t flushIterations = 0;
   while (!sEffectQueue.empty()) {
-#if !defined(NDEBUG) || defined(LAMBDAUI_TESTING)
-    constexpr std::size_t kMaxEffectFlushIterations = 10000;
-    if (++flushIterations > kMaxEffectFlushIterations) {
+    std::size_t const maxEffectFlushIterations = effectFlushIterationLimit();
+    if (++flushIterations > maxEffectFlushIterations) {
       std::fprintf(stderr,
                    "Lambda Reactive: effect flush exceeded %zu iterations; "
                    "dropping the remaining scheduled effects.\n",
-                   kMaxEffectFlushIterations);
+                   maxEffectFlushIterations);
       for (EffectQueueEntry const& entry : sEffectQueue) {
         if (std::shared_ptr<EffectState> effect = entry.effect.lock()) {
           effect->scheduled = false;
@@ -945,7 +967,6 @@ inline void flushEffects() {
       sEffectQueue.clear();
       break;
     }
-#endif
     sEffectFlushQueue.clear();
     sEffectFlushQueue.insert(sEffectFlushQueue.end(), sEffectQueue.begin(), sEffectQueue.end());
     sEffectQueue.clear();
