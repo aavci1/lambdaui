@@ -266,6 +266,8 @@ struct Observable : Disposable {
   virtual std::uint16_t observerDepthContribution() const;
   void reportRead();
   void subscribe(Computation& observer);
+  template <typename MarkFn>
+  void propagateSubscribers(MarkFn&& mark);
   void propagatePending();
   void propagateDirty();
   void detachSubscribers();
@@ -394,8 +396,8 @@ inline void Observable::subscribe(Computation& observer) {
   observer.sources = link;
 }
 
-inline void Observable::propagatePending() {
-  [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::PropagatePending};
+template <typename MarkFn>
+inline void Observable::propagateSubscribers(MarkFn&& mark) {
   auto* link = subscribers;
   while (link) {
     auto* next = link->nextSubscriber;
@@ -404,27 +406,24 @@ inline void Observable::propagatePending() {
           hasFlag(link->observer->flags, Running) &&
           link->runVersion != link->observer->runVersion;
       if (!staleDuringRun) {
-        link->observer->markPending();
+        std::forward<MarkFn>(mark)(*link->observer);
       }
     }
     link = next;
   }
 }
 
+inline void Observable::propagatePending() {
+  [[maybe_unused]] profile::ScopedTimer timer{profile::Bucket::PropagatePending};
+  propagateSubscribers([](Computation& observer) {
+    observer.markPending();
+  });
+}
+
 inline void Observable::propagateDirty() {
-  auto* link = subscribers;
-  while (link) {
-    auto* next = link->nextSubscriber;
-    if (link->observer) {
-      bool const staleDuringRun =
-          hasFlag(link->observer->flags, Running) &&
-          link->runVersion != link->observer->runVersion;
-      if (!staleDuringRun) {
-        link->observer->markDirty();
-      }
-    }
-    link = next;
-  }
+  propagateSubscribers([](Computation& observer) {
+    observer.markDirty();
+  });
 }
 
 inline void Observable::detachSubscribers() {
