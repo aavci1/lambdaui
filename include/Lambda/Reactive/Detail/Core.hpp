@@ -75,6 +75,7 @@ struct Link {
 #if LAMBDAUI_PROFILE_REACTIVE
 inline std::atomic_size_t gLiveLinks = 0;
 inline std::atomic_size_t gTotalLinks = 0;
+inline std::atomic_size_t gSourceScanSteps = 0;
 #endif
 
 inline Link* allocateLink() {
@@ -114,6 +115,20 @@ inline std::size_t debugTotalLinkAllocations() {
 inline void debugResetLinkAllocationCount() {
 #if LAMBDAUI_PROFILE_REACTIVE
   gTotalLinks.store(0, std::memory_order_relaxed);
+#endif
+}
+
+inline std::size_t debugSourceScanStepCount() {
+#if LAMBDAUI_PROFILE_REACTIVE
+  return gSourceScanSteps.load(std::memory_order_relaxed);
+#else
+  return 0;
+#endif
+}
+
+inline void debugResetSourceScanStepCount() {
+#if LAMBDAUI_PROFILE_REACTIVE
+  gSourceScanSteps.store(0, std::memory_order_relaxed);
 #endif
 }
 
@@ -220,6 +235,7 @@ struct Observable : Disposable {
 
 struct Computation : Observable {
   Link* sources = nullptr;
+  Link* sourceReuseCursor = nullptr;
   Link* spareLinks = nullptr;
   bool scheduled = false;
   std::uint32_t runVersion = 0;
@@ -240,6 +256,7 @@ struct Computation : Observable {
   void beginTrackingRun();
   void sweepStaleSources();
   void deleteSpareLinks();
+  Link* reuseNextSource(Observable const* source);
   Link* findSource(Observable const* source) const;
   Link* acquireLink();
   void retireLink(Link* link);
@@ -308,6 +325,11 @@ inline void Observable::reportRead() {
 inline void Observable::subscribe(Computation& observer) {
   if (std::uint16_t const sourceDepth = observerDepthContribution()) {
     observer.depth = std::max(observer.depth, sourceDepth);
+  }
+  if (auto* reused = observer.reuseNextSource(this)) {
+    reused->sourceVersion = version;
+    reused->runVersion = observer.runVersion;
+    return;
   }
   if (auto* existing = observer.findSource(this)) {
     existing->sourceVersion = version;
@@ -438,6 +460,7 @@ inline void Computation::markPending() {
 }
 
 inline void Computation::clearSourcesForReuse() {
+  sourceReuseCursor = nullptr;
   while (sources) {
     auto* link = sources;
     unlinkFromSubscriberList(link);
@@ -452,6 +475,10 @@ inline void Computation::beginTrackingRun() {
   ++runVersion;
   if (runVersion == 0) {
     ++runVersion;
+  }
+  sourceReuseCursor = sources;
+  while (sourceReuseCursor && sourceReuseCursor->nextSource) {
+    sourceReuseCursor = sourceReuseCursor->nextSource;
   }
   setFlag(flags, Running);
 }
@@ -469,6 +496,7 @@ inline void Computation::sweepStaleSources() {
     }
     link = next;
   }
+  sourceReuseCursor = nullptr;
   clearFlag(flags, Running);
 }
 
@@ -481,9 +509,21 @@ inline void Computation::deleteSpareLinks() {
   }
 }
 
+inline Link* Computation::reuseNextSource(Observable const* source) {
+  Link* link = sourceReuseCursor;
+  if (!link || link->source != source) {
+    return nullptr;
+  }
+  sourceReuseCursor = link->prevSource;
+  return link;
+}
+
 inline Link* Computation::findSource(Observable const* source) const {
   auto* link = sources;
   while (link) {
+#if LAMBDAUI_PROFILE_REACTIVE
+    gSourceScanSteps.fetch_add(1, std::memory_order_relaxed);
+#endif
     if (link->source == source) {
       return link;
     }
