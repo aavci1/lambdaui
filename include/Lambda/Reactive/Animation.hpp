@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <concepts>
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -60,6 +61,15 @@ inline void validateTimelineTiming(double duration, double delay, char const* ap
   }
   if (delay < 0.0) {
     throw std::invalid_argument(std::string{apiName} + ": delay must be non-negative");
+  }
+}
+
+template<typename T>
+bool animationValuesEqual(T const& lhs, T const& rhs) {
+  if constexpr (std::equality_comparable<T>) {
+    return lhs == rhs;
+  } else {
+    return false;
   }
 }
 
@@ -334,7 +344,7 @@ public:
     self.target = std::move(value);
     float const duration = transition.duration;
     self.options = AnimationOptions{.transition = std::move(transition)};
-    if (duration <= 0.f) {
+    if (duration <= 0.f || detail::animationValuesEqual(self.start, self.target)) {
       self.running = false;
       self.value.set(self.target);
       return;
@@ -360,7 +370,8 @@ public:
     self.target = std::move(target);
     self.options = std::move(options);
     self.paused = false;
-    if (self.options.transition.duration <= 0.f) {
+    if (self.options.transition.duration <= 0.f ||
+        detail::animationValuesEqual(self.start, self.target)) {
       self.running = false;
       self.value.set(self.target);
       return;

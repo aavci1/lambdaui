@@ -365,6 +365,53 @@ TEST_CASE("AnimationClock delegates frame pump and redraw to installed driver") 
   clock.shutdown();
 }
 
+TEST_CASE("Animated no-op set and play do not start the frame pump") {
+  AnimationClock& clock = AnimationClock::instance();
+  clock.shutdown();
+
+  int frameRequests = 0;
+  clock.setFrameDriver([&] {
+    ++frameRequests;
+  }, [] {});
+
+  Animated<float> value{5.f};
+  value.set(5.f, Transition::linear(1.f));
+
+  CHECK(value.get() == doctest::Approx(5.f));
+  CHECK_FALSE(value.isRunning());
+  CHECK_FALSE(clock.needsFramePump());
+  CHECK(frameRequests == 0);
+
+  value.play(5.f, Transition::linear(1.f));
+
+  CHECK(value.get() == doctest::Approx(5.f));
+  CHECK_FALSE(value.isRunning());
+  CHECK_FALSE(clock.needsFramePump());
+  CHECK(frameRequests == 0);
+
+  clock.shutdown();
+}
+
+TEST_CASE("Animated real animation still starts the frame pump") {
+  AnimationClock& clock = AnimationClock::instance();
+  clock.shutdown();
+
+  int frameRequests = 0;
+  clock.setFrameDriver([&] {
+    ++frameRequests;
+  }, [] {});
+
+  Animated<float> value{5.f};
+  value.set(6.f, Transition::linear(1.f));
+
+  CHECK(value.isRunning());
+  CHECK(clock.needsFramePump());
+  CHECK(frameRequests == 1);
+
+  value.stop();
+  clock.shutdown();
+}
+
 TEST_CASE("Animation clip cancel freezes the sampled value without completion") {
   int completionCount = 0;
   double const now = AnimationClock::nowSeconds();
