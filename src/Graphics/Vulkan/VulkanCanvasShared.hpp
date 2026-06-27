@@ -114,6 +114,8 @@ struct SharedVulkanCore {
     std::filesystem::path pipelineCacheFile;
     Texture atlas;
     std::vector<Rgba> atlasPixels;
+    int atlasTextureWidth = 0;
+    int atlasTextureHeight = 0;
     int atlasX = 1;
     int atlasY = 1;
     int atlasRowH = 0;

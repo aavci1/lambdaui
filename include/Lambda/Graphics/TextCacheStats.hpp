@@ -27,8 +27,6 @@ struct TextCacheStats {
   LayerStats l2_5_paragraph{};
   LayerStats l2_5_variant{};
   LayerStats l2_5_memo{};
-
-  std::uint64_t contentHashCollisions = 0;
 };
 
 } // namespace lambdaui

@@ -3309,6 +3309,20 @@ private:
     if (!glyphAtlas_.atlasUploadNeeded(res)) {
       return;
     }
+    if (!res.atlas.image ||
+        res.atlasTextureWidth != res.atlas.width ||
+        res.atlasTextureHeight != res.atlas.height) {
+      int const width = res.atlas.width;
+      int const height = res.atlas.height;
+      VkFormat const format = res.atlas.format == VK_FORMAT_UNDEFINED
+                                  ? VK_FORMAT_R8G8B8A8_UNORM
+                                  : res.atlas.format;
+      destroyTexture(res.atlas);
+      createTexture(res.atlas, width, height, format);
+      res.atlasTextureWidth = width;
+      res.atlasTextureHeight = height;
+      ensureTextureDescriptor(res.atlas);
+    }
     queueTextureUpload(res.atlas, res.atlasPixels.data());
     res.atlasDirty = false;
   }
@@ -3322,6 +3336,8 @@ private:
                   res.atlas.width,
                   res.atlas.height,
                   VK_FORMAT_R8G8B8A8_UNORM);
+    res.atlasTextureWidth = res.atlas.width;
+    res.atlasTextureHeight = res.atlas.height;
     ensureTextureDescriptor(res.atlas);
   }
 

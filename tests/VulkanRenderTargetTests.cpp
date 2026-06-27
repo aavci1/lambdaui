@@ -18,6 +18,7 @@
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
 #include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "Graphics/Vulkan/VulkanFrameRecorder.hpp"
+#include "Graphics/Vulkan/VulkanGlyphAtlas.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -31,6 +32,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -59,6 +61,50 @@ struct ScopedEnvOverride {
       unsetenv(name);
     }
   }
+};
+
+class FixedGlyphTextSystem final : public TextSystem {
+public:
+  FixedGlyphTextSystem(std::uint32_t glyphWidth, std::uint32_t glyphHeight)
+      : glyphWidth_(glyphWidth), glyphHeight_(glyphHeight) {}
+
+  std::shared_ptr<TextLayout const> layout(AttributedString const&, float,
+                                           TextLayoutOptions const&) override {
+    return std::make_shared<TextLayout>();
+  }
+
+  std::shared_ptr<TextLayout const> layout(std::string_view, Font const&, Color const&, float,
+                                           TextLayoutOptions const&) override {
+    return std::make_shared<TextLayout>();
+  }
+
+  Size measure(AttributedString const&, float, TextLayoutOptions const&) override {
+    return {};
+  }
+
+  Size measure(std::string_view, Font const&, Color const&, float, TextLayoutOptions const&) override {
+    return {};
+  }
+
+  std::uint32_t resolveFontId(std::string_view, float, bool) override {
+    return 0;
+  }
+
+  std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t, std::uint32_t glyphId, float,
+                                           std::uint32_t& outWidth, std::uint32_t& outHeight,
+                                           Point& outBearing) override {
+    ++rasterizeCounts[glyphId];
+    outWidth = glyphWidth_;
+    outHeight = glyphHeight_;
+    outBearing = {};
+    return std::vector<std::uint8_t>(static_cast<std::size_t>(glyphWidth_) * glyphHeight_, 255);
+  }
+
+  std::unordered_map<std::uint32_t, int> rasterizeCounts;
+
+private:
+  std::uint32_t glyphWidth_ = 0;
+  std::uint32_t glyphHeight_ = 0;
 };
 
 static std::filesystem::path imageFixturePath() {
@@ -501,6 +547,47 @@ TEST_CASE("VulkanFrameRecorder supports empty lifecycle and move semantics") {
   CHECK(assigned.rects.size() == 1);
   CHECK(moved.ops.empty());
   CHECK(moved.rects.empty());
+}
+
+TEST_CASE("VulkanGlyphAtlas grows CPU atlas instead of rebuilding under capacity pressure") {
+  FixedGlyphTextSystem textSystem{12, 12};
+  VulkanGlyphAtlas atlas{textSystem};
+  SharedVulkanCore::Resources resources{};
+  resources.atlas.width = 16;
+  resources.atlas.height = 16;
+  resources.atlasPixels.assign(static_cast<std::size_t>(resources.atlas.width) *
+                                   static_cast<std::size_t>(resources.atlas.height),
+                               Rgba{255, 255, 255, 0});
+
+  std::uint64_t const startingGeneration = resources.atlasGeneration;
+  for (std::uint32_t glyphId = 1; glyphId <= 32; ++glyphId) {
+    VulkanGlyphSlot const* slot = atlas.glyphSlot(resources, 1.f, 0, glyphId, 12.f);
+    REQUIRE(slot != nullptr);
+  }
+
+  CHECK(resources.atlas.width > 16);
+  CHECK(resources.atlas.height > 16);
+  CHECK(resources.atlasGeneration > startingGeneration);
+  CHECK(resources.atlasDirty);
+  CHECK(resources.glyphs.size() == 32);
+  for (auto const& [key, slot] : resources.glyphs) {
+    (void)key;
+    CHECK(slot.u0 >= 0.f);
+    CHECK(slot.v0 >= 0.f);
+    CHECK(slot.u1 <= 1.f);
+    CHECK(slot.v1 <= 1.f);
+    CHECK(slot.u0 < slot.u1);
+    CHECK(slot.v0 < slot.v1);
+    std::size_t const pixelIndex =
+        static_cast<std::size_t>(slot.y) * static_cast<std::size_t>(resources.atlas.width) +
+        static_cast<std::size_t>(slot.x);
+    REQUIRE(pixelIndex < resources.atlasPixels.size());
+    CHECK(resources.atlasPixels[pixelIndex].a == 255);
+  }
+
+  VulkanGlyphSlot const* firstAgain = atlas.glyphSlot(resources, 1.f, 0, 1, 12.f);
+  REQUIRE(firstAgain != nullptr);
+  CHECK(textSystem.rasterizeCounts[1] == 1);
 }
 
 TEST_CASE("VulkanFrameRecorder defers prepared GPU resources when clearing") {

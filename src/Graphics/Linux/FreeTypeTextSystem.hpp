@@ -26,6 +26,9 @@ public:
   std::vector<std::uint8_t> rasterizeGlyph(std::uint32_t fontId, std::uint32_t glyphId, float size,
                                            std::uint32_t& outWidth, std::uint32_t& outHeight,
                                            Point& outBearing) override;
+  void invalidateAll() override;
+  void invalidateForFontChange(std::span<std::uint32_t const> fontIds) override;
+  [[nodiscard]] TextCacheStats stats() const override;
 
 protected:
   std::shared_ptr<TextLayout const> layoutBoxedImpl(AttributedString const& text, Rect const& box,

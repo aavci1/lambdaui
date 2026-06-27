@@ -8,6 +8,7 @@
 #endif
 
 #include <Lambda/Graphics/AttributedString.hpp>
+#include <Lambda/Graphics/TextCacheStats.hpp>
 #include <Lambda/Graphics/TextLayoutOptions.hpp>
 
 #include <chrono>
@@ -233,6 +234,52 @@ int main() {
     }
     double const tPer = secondsSince(t0) / N;
     std::cout << "B8 T_small_warm (plain overload, fresh owner): " << (tPer * 1e6) << " us\n";
+  }
+
+  // B9: long text with fresh owning strings; exercises fixed-size content hash cache keys.
+  {
+    BenchTextSystem sys;
+    constexpr int N = 200;
+    std::string longLabel;
+    for (int i = 0; i < 96; ++i) {
+      longLabel += "Fixed-size content hash cache keys avoid storing full text in the key. ";
+    }
+    std::vector<std::string> owners(N, longLabel);
+    (void)sys.layout(std::string_view(longLabel), f, Colors::black, 640.f, opt);
+
+    auto const t0 = std::chrono::steady_clock::now();
+    for (auto const& owner : owners) {
+      (void)sys.layout(std::string_view(owner), f, Colors::black, 640.f, opt);
+    }
+    double const tPer = secondsSince(t0) / N;
+    TextCacheStats const stats = sys.stats();
+    std::cout << "B9 T_long_warm_hash (fresh owner, fixed key): " << (tPer * 1e6)
+              << " us, L3 hits " << stats.l3_layout.hits << "\n";
+  }
+
+  // B10: boxed layout cache should return the same immutable layout object for identical boxes/options.
+  {
+    BenchTextSystem sys;
+    TextLayoutOptions boxedOpt = opt;
+    boxedOpt.wrapping = TextWrapping::Wrap;
+    boxedOpt.horizontalAlignment = HorizontalAlignment::Center;
+    boxedOpt.verticalAlignment = VerticalAlignment::Center;
+    Rect const box = Rect::sharp(0.f, 0.f, 640.f, 360.f);
+    TextSystem& boxedSystem = sys;
+    auto const warm = boxedSystem.layout(as, box, boxedOpt);
+
+    constexpr int N = 1000;
+    bool pointerReuse = true;
+    auto const t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < N; ++i) {
+      auto const next = boxedSystem.layout(as, box, boxedOpt);
+      pointerReuse = pointerReuse && next.get() == warm.get();
+    }
+    double const tPer = secondsSince(t0) / N;
+    TextCacheStats const stats = sys.stats();
+    std::cout << "B10 T_boxed_warm (same box/options): " << (tPer * 1e6)
+              << " us, pointer_reuse " << (pointerReuse ? "yes" : "no")
+              << ", L4 hits " << stats.l4_boxLayout.hits << "\n";
   }
 
   return 0;

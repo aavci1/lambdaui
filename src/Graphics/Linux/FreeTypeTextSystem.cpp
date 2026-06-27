@@ -3,6 +3,11 @@
 #include <Lambda/Debug/PerfCounters.hpp>
 #include <Lambda/Graphics/AttributedString.hpp>
 
+#include "Graphics/TextSystemPrivate.hpp"
+/* Stack XXH3_state_t / streaming helpers need full state layouts from xxhash.h. */
+#define XXH_STATIC_LINKING_ONLY
+#include "xxhash.h"
+
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <fontconfig/fontconfig.h>
@@ -32,6 +37,141 @@
 namespace lambdaui {
 
 namespace {
+
+Font resolvedFont(Font f);
+
+struct TextContentHash {
+  std::uint64_t low = 0;
+  std::uint64_t high = 0;
+
+  bool operator==(TextContentHash const&) const = default;
+};
+
+struct TextContentHashMapHash {
+  std::size_t operator()(TextContentHash const& key) const noexcept {
+    std::uint64_t h = key.low;
+    h ^= key.high + 0x9e3779b97f4a7c15ULL + (h << 6u) + (h >> 2u);
+    return static_cast<std::size_t>(h);
+  }
+};
+
+class TextContentHasher {
+public:
+  TextContentHasher() {
+    XXH3_128bits_reset(&state_);
+  }
+
+  void appendBytes(void const* data, std::size_t size) noexcept {
+    if (size > 0) {
+      XXH3_128bits_update(&state_, data, size);
+    }
+  }
+
+  template <typename T>
+  void appendPod(T const& value) noexcept {
+    appendBytes(&value, sizeof(value));
+  }
+
+  void appendString(std::string_view value) noexcept {
+    appendPod(static_cast<std::uint64_t>(value.size()));
+    if (!value.empty()) {
+      appendBytes(value.data(), value.size());
+    }
+  }
+
+  void appendFloat(float value) noexcept {
+    std::uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    appendPod(bits);
+  }
+
+  void appendColor(Color const& color) noexcept {
+    appendFloat(color.r);
+    appendFloat(color.g);
+    appendFloat(color.b);
+    appendFloat(color.a);
+    appendPod(color.semantic);
+  }
+
+  [[nodiscard]] TextContentHash finish() const noexcept {
+    XXH128_hash_t const h = XXH3_128bits_digest(&state_);
+    return TextContentHash{h.low64, h.high64};
+  }
+
+private:
+  XXH3_state_t state_{};
+};
+
+void hashLayoutOptions(TextContentHasher& hasher,
+                       float maxWidth,
+                       TextLayoutOptions const& options,
+                       bool includeBoxPlacementOptions = true) {
+  hasher.appendFloat(maxWidth);
+  hasher.appendPod(static_cast<std::uint8_t>(options.horizontalAlignment));
+  if (includeBoxPlacementOptions) {
+    hasher.appendPod(static_cast<std::uint8_t>(options.verticalAlignment));
+  }
+  hasher.appendPod(static_cast<std::uint8_t>(options.wrapping));
+  hasher.appendFloat(options.lineHeight);
+  hasher.appendFloat(options.lineHeightMultiple);
+  hasher.appendPod(options.maxLines);
+  if (includeBoxPlacementOptions) {
+    hasher.appendFloat(options.firstBaselineOffset);
+  }
+}
+
+void hashAttributedRuns(TextContentHasher& hasher, std::vector<AttributedRun> const& runs) {
+  hasher.appendPod(static_cast<std::uint64_t>(runs.size()));
+  for (AttributedRun const& run : runs) {
+    Font const font = resolvedFont(run.font);
+    hasher.appendPod(run.start);
+    hasher.appendPod(run.end);
+    hasher.appendString(font.family);
+    hasher.appendFloat(font.size);
+    hasher.appendFloat(font.weight);
+    hasher.appendPod(static_cast<std::uint8_t>(font.italic ? 1u : 0u));
+    hasher.appendPod(font.semantic);
+    hasher.appendColor(run.color);
+    hasher.appendPod(static_cast<std::uint8_t>(run.backgroundColor.has_value() ? 1u : 0u));
+    if (run.backgroundColor) {
+      hasher.appendColor(*run.backgroundColor);
+    }
+  }
+}
+
+TextContentHash makeLayoutCacheKey(AttributedString const& text,
+                                   float maxWidth,
+                                   TextLayoutOptions const& options) {
+  TextContentHasher hasher;
+  hasher.appendString(text.utf8);
+  hashLayoutOptions(hasher, maxWidth, options);
+  hashAttributedRuns(hasher, text.runs);
+  return hasher.finish();
+}
+
+TextContentHash makeShapeCacheKey(AttributedString const& text, TextLayoutOptions const& options) {
+  TextContentHasher hasher;
+  hasher.appendString(text.utf8);
+  hasher.appendFloat(options.lineHeight);
+  hasher.appendFloat(options.lineHeightMultiple);
+  hashAttributedRuns(hasher, text.runs);
+  return hasher.finish();
+}
+
+TextContentHash makeBoxedCacheKey(AttributedString const& text,
+                                  Rect const& box,
+                                  TextLayoutOptions const& options) {
+  TextContentHasher hasher;
+  float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
+  hasher.appendString(text.utf8);
+  hashLayoutOptions(hasher, maxWidth, options);
+  hashAttributedRuns(hasher, text.runs);
+  hasher.appendFloat(box.x);
+  hasher.appendFloat(box.y);
+  hasher.appendFloat(box.width);
+  hasher.appendFloat(box.height);
+  return hasher.finish();
+}
 
 struct Codepoint {
   char32_t value = 0;
@@ -183,16 +323,23 @@ struct FreeTypeTextSystem::Impl {
   std::unordered_map<std::string, std::uint32_t> idsByPath;
   struct LayoutCacheEntry {
     std::shared_ptr<TextLayout const> layout;
-    std::list<std::string>::iterator order;
+    std::list<TextContentHash>::iterator order;
   };
   struct ShapedCacheEntry {
     std::shared_ptr<ShapedParagraph const> paragraph;
-    std::list<std::string>::iterator order;
+    std::list<TextContentHash>::iterator order;
   };
-  std::unordered_map<std::string, LayoutCacheEntry> layoutCache;
-  std::list<std::string> layoutCacheOrder;
-  std::unordered_map<std::string, ShapedCacheEntry> shapedCache;
-  std::list<std::string> shapedCacheOrder;
+  struct BoxedCacheEntry {
+    std::shared_ptr<TextLayout const> layout;
+    std::list<TextContentHash>::iterator order;
+  };
+  std::unordered_map<TextContentHash, LayoutCacheEntry, TextContentHashMapHash> layoutCache;
+  std::list<TextContentHash> layoutCacheOrder;
+  std::unordered_map<TextContentHash, ShapedCacheEntry, TextContentHashMapHash> shapedCache;
+  std::list<TextContentHash> shapedCacheOrder;
+  std::unordered_map<TextContentHash, BoxedCacheEntry, TextContentHashMapHash> boxedCache;
+  std::list<TextContentHash> boxedCacheOrder;
+  TextCacheStats stats{};
 
   Impl() {
     if (!FcInit()) {
@@ -247,7 +394,7 @@ struct FreeTypeTextSystem::Impl {
     return id;
   }
 
-  void cacheLayout(std::string key, std::shared_ptr<TextLayout const> layout) {
+  void cacheLayout(TextContentHash key, std::shared_ptr<TextLayout const> layout) {
     constexpr std::size_t kMaxLayoutCacheEntries = 1024;
     if (auto it = layoutCache.find(key); it != layoutCache.end()) {
       it->second.layout = std::move(layout);
@@ -260,15 +407,16 @@ struct FreeTypeTextSystem::Impl {
     while (layoutCache.size() > kMaxLayoutCacheEntries) {
       layoutCache.erase(layoutCacheOrder.front());
       layoutCacheOrder.pop_front();
+      ++stats.l3_layout.evictions;
     }
   }
 
-  void promoteLayout(std::unordered_map<std::string, LayoutCacheEntry>::iterator it) {
+  void promoteLayout(decltype(layoutCache)::iterator it) {
     if (it == layoutCache.end()) return;
     layoutCacheOrder.splice(layoutCacheOrder.end(), layoutCacheOrder, it->second.order);
   }
 
-  void cacheShaped(std::string key, std::shared_ptr<ShapedParagraph const> paragraph) {
+  void cacheShaped(TextContentHash key, std::shared_ptr<ShapedParagraph const> paragraph) {
     constexpr std::size_t kMaxShapedCacheEntries = 256;
     if (auto it = shapedCache.find(key); it != shapedCache.end()) {
       it->second.paragraph = std::move(paragraph);
@@ -281,12 +429,44 @@ struct FreeTypeTextSystem::Impl {
     while (shapedCache.size() > kMaxShapedCacheEntries) {
       shapedCache.erase(shapedCacheOrder.front());
       shapedCacheOrder.pop_front();
+      ++stats.l2_5_paragraph.evictions;
     }
   }
 
-  void promoteShaped(std::unordered_map<std::string, ShapedCacheEntry>::iterator it) {
+  void promoteShaped(decltype(shapedCache)::iterator it) {
     if (it == shapedCache.end()) return;
     shapedCacheOrder.splice(shapedCacheOrder.end(), shapedCacheOrder, it->second.order);
+  }
+
+  void cacheBoxed(TextContentHash key, std::shared_ptr<TextLayout const> layout) {
+    constexpr std::size_t kMaxBoxedCacheEntries = 512;
+    if (auto it = boxedCache.find(key); it != boxedCache.end()) {
+      it->second.layout = std::move(layout);
+      promoteBoxed(it);
+      return;
+    }
+    boxedCacheOrder.push_back(key);
+    auto orderIt = std::prev(boxedCacheOrder.end());
+    boxedCache.emplace(std::move(key), BoxedCacheEntry{std::move(layout), orderIt});
+    while (boxedCache.size() > kMaxBoxedCacheEntries) {
+      boxedCache.erase(boxedCacheOrder.front());
+      boxedCacheOrder.pop_front();
+      ++stats.l4_boxLayout.evictions;
+    }
+  }
+
+  void promoteBoxed(decltype(boxedCache)::iterator it) {
+    if (it == boxedCache.end()) return;
+    boxedCacheOrder.splice(boxedCacheOrder.end(), boxedCacheOrder, it->second.order);
+  }
+
+  void clearCaches() {
+    layoutCache.clear();
+    layoutCacheOrder.clear();
+    shapedCache.clear();
+    shapedCacheOrder.clear();
+    boxedCache.clear();
+    boxedCacheOrder.clear();
   }
 };
 
@@ -320,72 +500,20 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(std::string_view ut
 
 std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString const& text, float maxWidth,
                                                              TextLayoutOptions const& options) {
-  auto cacheKey = [&] {
-    std::string key;
-    key.reserve(text.utf8.size() + text.runs.size() * 128 + 128);
-    key.append(text.utf8);
-    key.push_back('\x1f');
-    key.append(std::to_string(maxWidth));
-    key.push_back(':');
-    key.append(std::to_string(static_cast<int>(options.horizontalAlignment)));
-    key.push_back(':');
-    key.append(std::to_string(static_cast<int>(options.verticalAlignment)));
-    key.push_back(':');
-    key.append(std::to_string(static_cast<int>(options.wrapping)));
-    key.push_back(':');
-    key.append(std::to_string(options.lineHeight));
-    key.push_back(':');
-    key.append(std::to_string(options.lineHeightMultiple));
-    key.push_back(':');
-    key.append(std::to_string(options.maxLines));
-    key.push_back(':');
-    key.append(std::to_string(options.firstBaselineOffset));
-    for (AttributedRun const& run : text.runs) {
-      Font const font = resolvedFont(run.font);
-      key.push_back('\x1e');
-      key.append(std::to_string(run.start));
-      key.push_back(':');
-      key.append(std::to_string(run.end));
-      key.push_back(':');
-      key.append(font.family);
-      key.push_back(':');
-      key.append(std::to_string(font.size));
-      key.push_back(':');
-      key.append(std::to_string(font.weight));
-      key.push_back(':');
-      key.push_back(font.italic ? 'i' : 'r');
-      key.push_back(':');
-      key.append(std::to_string(run.color.r));
-      key.push_back(',');
-      key.append(std::to_string(run.color.g));
-      key.push_back(',');
-      key.append(std::to_string(run.color.b));
-      key.push_back(',');
-      key.append(std::to_string(run.color.a));
-      if (run.backgroundColor) {
-        key.push_back(':');
-        key.append(std::to_string(run.backgroundColor->r));
-        key.push_back(',');
-        key.append(std::to_string(run.backgroundColor->g));
-        key.push_back(',');
-        key.append(std::to_string(run.backgroundColor->b));
-        key.push_back(',');
-        key.append(std::to_string(run.backgroundColor->a));
-      }
-    }
-    return key;
-  }();
+  TextContentHash const cacheKey = makeLayoutCacheKey(text, maxWidth, options);
 
   debug::perf::recordTextLayoutCall();
   if (auto it = d->layoutCache.find(cacheKey); it != d->layoutCache.end()) {
     if (!options.suppressCacheStats) {
       debug::perf::recordTextLayoutCacheHit();
+      ++d->stats.l3_layout.hits;
     }
     d->promoteLayout(it);
     return it->second.layout;
   }
   if (!options.suppressCacheStats) {
     debug::perf::recordTextLayoutCacheMiss();
+    ++d->stats.l3_layout.misses;
   }
 
   auto result = std::make_shared<TextLayout>();
@@ -395,55 +523,19 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
     return result;
   }
 
-  auto shapeKey = [&] {
-    std::string key;
-    key.reserve(text.utf8.size() + text.runs.size() * 128 + 96);
-    key.append(text.utf8);
-    key.push_back('\x1f');
-    key.append(std::to_string(options.lineHeight));
-    key.push_back(':');
-    key.append(std::to_string(options.lineHeightMultiple));
-    for (AttributedRun const& run : text.runs) {
-      Font const font = resolvedFont(run.font);
-      key.push_back('\x1e');
-      key.append(std::to_string(run.start));
-      key.push_back(':');
-      key.append(std::to_string(run.end));
-      key.push_back(':');
-      key.append(font.family);
-      key.push_back(':');
-      key.append(std::to_string(font.size));
-      key.push_back(':');
-      key.append(std::to_string(font.weight));
-      key.push_back(':');
-      key.push_back(font.italic ? 'i' : 'r');
-      key.push_back(':');
-      key.append(std::to_string(run.color.r));
-      key.push_back(',');
-      key.append(std::to_string(run.color.g));
-      key.push_back(',');
-      key.append(std::to_string(run.color.b));
-      key.push_back(',');
-      key.append(std::to_string(run.color.a));
-      if (run.backgroundColor) {
-        key.push_back(':');
-        key.append(std::to_string(run.backgroundColor->r));
-        key.push_back(',');
-        key.append(std::to_string(run.backgroundColor->g));
-        key.push_back(',');
-        key.append(std::to_string(run.backgroundColor->b));
-        key.push_back(',');
-        key.append(std::to_string(run.backgroundColor->a));
-      }
-    }
-    return key;
-  }();
+  TextContentHash const shapeKey = makeShapeCacheKey(text, options);
 
   std::shared_ptr<Impl::ShapedParagraph const> paragraph;
   if (auto shapedIt = d->shapedCache.find(shapeKey); shapedIt != d->shapedCache.end()) {
+    if (!options.suppressCacheStats) {
+      ++d->stats.l2_5_paragraph.hits;
+    }
     d->promoteShaped(shapedIt);
     paragraph = shapedIt->second.paragraph;
   } else {
+    if (!options.suppressCacheStats) {
+      ++d->stats.l2_5_paragraph.misses;
+    }
     std::vector<AttributedRun> runs = text.runs;
     if (runs.empty()) {
       runs.push_back(AttributedRun{.start = 0,
@@ -715,6 +807,18 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layout(AttributedString co
 
 std::shared_ptr<TextLayout const> FreeTypeTextSystem::layoutBoxedImpl(AttributedString const& text, Rect const& box,
                                                                       TextLayoutOptions const& options) {
+  TextContentHash const boxedKey = makeBoxedCacheKey(text, box, options);
+  if (auto it = d->boxedCache.find(boxedKey); it != d->boxedCache.end()) {
+    if (!options.suppressCacheStats) {
+      ++d->stats.l4_boxLayout.hits;
+    }
+    d->promoteBoxed(it);
+    return it->second.layout;
+  }
+  if (!options.suppressCacheStats) {
+    ++d->stats.l4_boxLayout.misses;
+  }
+
   float const maxWidth = options.wrapping == TextWrapping::NoWrap ? 0.f : box.width;
   auto layoutResult = cloneTextLayout(*layout(text, maxWidth, options));
   float const contentHeight = layoutResult->measuredSize.height;
@@ -764,7 +868,26 @@ std::shared_ptr<TextLayout const> FreeTypeTextSystem::layoutBoxedImpl(Attributed
   }
   layoutResult->measuredSize.width = std::min(layoutResult->measuredSize.width, box.width);
   layoutResult->measuredSize.height = std::min(layoutResult->measuredSize.height, box.height);
+  d->cacheBoxed(boxedKey, layoutResult);
   return layoutResult;
+}
+
+void FreeTypeTextSystem::invalidateAll() {
+  d->clearCaches();
+}
+
+void FreeTypeTextSystem::invalidateForFontChange(std::span<std::uint32_t const> fontIds) {
+  if (!fontIds.empty()) {
+    d->clearCaches();
+  }
+}
+
+TextCacheStats FreeTypeTextSystem::stats() const {
+  TextCacheStats stats = d->stats;
+  stats.l3_layout.currentBytes = static_cast<std::uint64_t>(d->layoutCache.size());
+  stats.l2_5_paragraph.currentBytes = static_cast<std::uint64_t>(d->shapedCache.size());
+  stats.l4_boxLayout.currentBytes = static_cast<std::uint64_t>(d->boxedCache.size());
+  return stats;
 }
 
 Size FreeTypeTextSystem::measure(std::string_view utf8, Font const& font, Color const& color,

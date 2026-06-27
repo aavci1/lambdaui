@@ -63,9 +63,7 @@ std::string buildOverlayText(TextCacheStats const& oldest, TextCacheStats const&
   o << formatLayer("L3 layout", hitRateWindow(oldest.l3_layout, newest.l3_layout), newest.l3_layout)
     << "\n";
   o << formatLayer("L4 box", hitRateWindow(oldest.l4_boxLayout, newest.l4_boxLayout),
-                   newest.l4_boxLayout)
-    << "\n";
-  o << "collisions: " << newest.contentHashCollisions;
+                   newest.l4_boxLayout);
   return o.str();
 }
 
