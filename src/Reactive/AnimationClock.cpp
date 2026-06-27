@@ -2,8 +2,10 @@
 #include <Lambda/Reactive/Animation.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cstdint>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -22,8 +24,20 @@ double AnimationClock::nowSeconds() {
   return static_cast<double>(ns.count()) * 1e-9;
 }
 
+void AnimationClock::assertOwnerThread() {
+#if defined(LAMBDAUI_TESTING) || !defined(NDEBUG)
+  std::thread::id const current = std::this_thread::get_id();
+  if (ownerThread_ == std::thread::id{}) {
+    ownerThread_ = current;
+    return;
+  }
+  assert(ownerThread_ == current && "AnimationClock is single-UI-thread state");
+#endif
+}
+
 void AnimationClock::setFrameDriver(Reactive::SmallFn<void()> requestFrame,
                                     Reactive::SmallFn<void()> requestRedraw) {
+  assertOwnerThread();
   requestFrame_ = std::move(requestFrame);
   requestRedraw_ = std::move(requestRedraw);
   if (needsFramePump()) {
@@ -32,6 +46,7 @@ void AnimationClock::setFrameDriver(Reactive::SmallFn<void()> requestFrame,
 }
 
 void AnimationClock::clearFrameDriver() {
+  assertOwnerThread();
   requestFrame_ = {};
   requestRedraw_ = {};
   running_ = false;
@@ -39,6 +54,7 @@ void AnimationClock::clearFrameDriver() {
 }
 
 void AnimationClock::notifyFrame(std::int64_t deadlineNanos) {
+  assertOwnerThread();
   framePending_ = false;
   if (!running_) {
     return;
@@ -50,6 +66,7 @@ void AnimationClock::notifyFrame(std::int64_t deadlineNanos) {
 }
 
 void AnimationClock::shutdown() {
+  assertOwnerThread();
   stopFramePump();
   double const now = AnimationClock::nowSeconds();
   for (auto& animation : ownedActive_) {
@@ -66,6 +83,9 @@ void AnimationClock::shutdown() {
   framePending_ = false;
   dispatchingSubscribers_ = false;
   subscribersNeedCompaction_ = false;
+#if defined(LAMBDAUI_TESTING) || !defined(NDEBUG)
+  ownerThread_ = {};
+#endif
 }
 
 bool AnimationClock::needsFramePump() const {
@@ -73,6 +93,7 @@ bool AnimationClock::needsFramePump() const {
 }
 
 void AnimationClock::registerAnimation(AnimationBase* animation) {
+  assertOwnerThread();
   if (!animation) {
     return;
   }
@@ -86,6 +107,7 @@ void AnimationClock::registerAnimation(AnimationBase* animation) {
 }
 
 void AnimationClock::registerAnimation(std::shared_ptr<AnimationBase> animation) {
+  assertOwnerThread();
   if (!animation) {
     return;
   }
@@ -105,6 +127,7 @@ void AnimationClock::registerAnimation(std::shared_ptr<AnimationBase> animation)
 }
 
 void AnimationClock::unregisterAnimation(AnimationBase* animation) {
+  assertOwnerThread();
   if (!animation) {
     return;
   }
@@ -118,6 +141,7 @@ void AnimationClock::unregisterAnimation(AnimationBase* animation) {
 }
 
 ObserverHandle AnimationClock::subscribe(Reactive::SmallFn<FrameAction(AnimationTick const&)> callback) {
+  assertOwnerThread();
   if (!callback) {
     return {};
   }
@@ -130,6 +154,7 @@ ObserverHandle AnimationClock::subscribe(Reactive::SmallFn<FrameAction(Animation
 }
 
 void AnimationClock::unsubscribe(ObserverHandle handle) {
+  assertOwnerThread();
   if (!handle.isValid()) {
     return;
   }
@@ -149,6 +174,7 @@ void AnimationClock::unsubscribe(ObserverHandle handle) {
 }
 
 void AnimationClock::onTick(std::int64_t deadlineNanos) {
+  assertOwnerThread();
   Reactive::detail::BatchGuard batch;
   const double now = static_cast<double>(deadlineNanos) * 1e-9;
   AnimationTick const tick{deadlineNanos, now};
@@ -156,6 +182,7 @@ void AnimationClock::onTick(std::int64_t deadlineNanos) {
 
   static thread_local std::vector<AnimationBase*> snapshotBuffer;
   snapshotBuffer.assign(active_.begin(), active_.end());
+  // Raw active entries are signal-backed animations; their ticks must stay synchronous-callback-free.
   for (AnimationBase* p : snapshotBuffer) {
     if (!p) {
       continue;

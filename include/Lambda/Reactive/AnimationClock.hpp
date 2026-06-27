@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <thread>
 #include <vector>
 
 namespace lambdaui {
@@ -66,6 +67,7 @@ public:
 private:
   AnimationClock();
 
+  void assertOwnerThread();
   void onTick(std::int64_t deadlineNanos);
   void startFramePump();
   void stopFramePump();
@@ -87,6 +89,9 @@ private:
   bool framePending_ = false;
   bool dispatchingSubscribers_ = false;
   bool subscribersNeedCompaction_ = false;
+#if defined(LAMBDAUI_TESTING) || !defined(NDEBUG)
+  std::thread::id ownerThread_{};
+#endif
 };
 
 } // namespace lambdaui
