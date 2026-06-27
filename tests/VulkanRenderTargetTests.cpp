@@ -590,6 +590,37 @@ TEST_CASE("VulkanGlyphAtlas grows CPU atlas instead of rebuilding under capacity
   CHECK(textSystem.rasterizeCounts[1] == 1);
 }
 
+TEST_CASE("VulkanGlyphAtlas evicts and re-rasterizes glyphs after reaching maximum atlas size") {
+  FixedGlyphTextSystem textSystem{512, 512};
+  VulkanGlyphAtlas atlas{textSystem};
+  SharedVulkanCore::Resources resources{};
+  resources.atlas.width = 4096;
+  resources.atlas.height = 4096;
+  resources.atlasPixels.assign(static_cast<std::size_t>(resources.atlas.width) *
+                                   static_cast<std::size_t>(resources.atlas.height),
+                               Rgba{255, 255, 255, 0});
+
+  std::uint64_t const startingGeneration = resources.atlasGeneration;
+  for (std::uint32_t glyphId = 1; glyphId <= 72; ++glyphId) {
+    VulkanGlyphSlot const* slot = atlas.glyphSlot(resources, 1.f, 0, glyphId, 12.f);
+    REQUIRE(slot != nullptr);
+  }
+
+  VulkanGlyphKey const firstKey{0, 1, 12};
+  CHECK(resources.glyphs.find(firstKey) == resources.glyphs.end());
+  CHECK(resources.atlasGeneration > startingGeneration);
+  CHECK(resources.atlasDirty);
+  CHECK(textSystem.rasterizeCounts[1] == 1);
+
+  VulkanGlyphSlot const* rerasterized = atlas.glyphSlot(resources, 1.f, 0, 1, 12.f);
+  REQUIRE(rerasterized != nullptr);
+  CHECK(textSystem.rasterizeCounts[1] == 2);
+  CHECK(rerasterized->u0 >= 0.f);
+  CHECK(rerasterized->v0 >= 0.f);
+  CHECK(rerasterized->u1 <= 1.f);
+  CHECK(rerasterized->v1 <= 1.f);
+}
+
 TEST_CASE("VulkanFrameRecorder defers prepared GPU resources when clearing") {
   VulkanFrameRecorder recorded;
   recorded.allocator = reinterpret_cast<VmaAllocator>(0x1);
