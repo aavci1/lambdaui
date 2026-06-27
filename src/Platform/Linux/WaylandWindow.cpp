@@ -1,5 +1,6 @@
 #include "UI/Platform/WindowFactory.hpp"
 #include "UI/Platform/Application.hpp"
+#include "UI/Platform/WindowEventPump.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
