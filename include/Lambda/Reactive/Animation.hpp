@@ -11,7 +11,6 @@
 #include <concepts>
 #include <cmath>
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -94,7 +93,7 @@ struct AnimationParams {
   /// Interpolation curve. `duration` and `delay` are taken from this parameter struct.
   Transition transition = Transition::ease();
   /// Fired once on natural completion. Explicit cancellation and shutdown do not fire it.
-  std::function<void()> onComplete;
+  Reactive::SmallFn<void()> onComplete;
 };
 
 template<Interpolatable T>
@@ -212,7 +211,7 @@ private:
     }
     cachedValue_ = to_;
     status_ = TimelineClipStatus::Finished;
-    std::function<void()> onComplete = std::move(onComplete_);
+    Reactive::SmallFn<void()> onComplete = std::move(onComplete_);
     onComplete_ = {};
     if (onComplete) {
       onComplete();
@@ -225,7 +224,7 @@ private:
   double delay_ = 0.0;
   double startedAt_ = 0.0;
   Transition transition_ = Transition::ease();
-  std::function<void()> onComplete_;
+  Reactive::SmallFn<void()> onComplete_;
   T cachedValue_{};
   TimelineClipStatus status_ = TimelineClipStatus::Running;
 };

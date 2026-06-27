@@ -10,7 +10,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <vector>
 
@@ -43,7 +42,8 @@ public:
   static double nowSeconds();
 
   /// Framework integration: UI installs callbacks that arm the native frame pump and request redraws.
-  void setFrameDriver(std::function<void()> requestFrame, std::function<void()> requestRedraw);
+  void setFrameDriver(Reactive::SmallFn<void()> requestFrame,
+                      Reactive::SmallFn<void()> requestRedraw);
   void clearFrameDriver();
   /// Called by the owning platform/UI layer when a frame boundary is reached.
   void notifyFrame(std::int64_t deadlineNanos);
@@ -80,8 +80,8 @@ private:
   std::vector<std::shared_ptr<AnimationBase>> ownedActive_;
   std::vector<Subscriber> subscribers_;
   std::uint64_t nextSubscriberId_ = 1;
-  std::function<void()> requestFrame_;
-  std::function<void()> requestRedraw_;
+  Reactive::SmallFn<void()> requestFrame_;
+  Reactive::SmallFn<void()> requestRedraw_;
 
   bool running_ = false;
   bool framePending_ = false;

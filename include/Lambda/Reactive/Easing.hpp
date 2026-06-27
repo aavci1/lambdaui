@@ -5,12 +5,14 @@
 /// Part of the Lambda public API.
 
 
-#include <functional>
+#include <Lambda/Reactive/SmallFn.hpp>
+
 #include <cstddef>
 
 namespace lambdaui {
 
 using EasingFn = float (*)(float);
+using SpringEasingFn = Reactive::SmallFn<float(float), 32>;
 
 namespace Easing {
 
@@ -25,7 +27,7 @@ float easeInOut(float t);
 ///
 /// `stiffness` and `damping` tune the heuristic integrator; they are not physical SI constants.
 /// Integration uses normalized time in [0,1] (aligned with `Transition::duration`), so tuning is empirical.
-std::function<float(float)> spring(float stiffness = 300.f, float damping = 20.f);
+SpringEasingFn spring(float stiffness = 300.f, float damping = 20.f);
 
 #if defined(LAMBDAUI_TESTING)
 std::size_t debugSpringIntegrationStepCount();

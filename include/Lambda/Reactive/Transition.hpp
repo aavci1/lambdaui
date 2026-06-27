@@ -7,7 +7,6 @@
 
 #include <Lambda/Reactive/Easing.hpp>
 
-#include <functional>
 #include <optional>
 #include <vector>
 
@@ -18,7 +17,7 @@ struct Transition {
   float delay = 0.f;
   EasingFn easing = Easing::easeInOut;
 
-  std::optional<std::function<float(float)>> springFn;
+  std::optional<SpringEasingFn> springFn;
 
   static Transition instant();
   static Transition linear(float dur);

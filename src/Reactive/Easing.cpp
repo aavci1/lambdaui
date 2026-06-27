@@ -97,7 +97,7 @@ float easeInOut(float t) {
   return 1.f - (u * u * u) / 2.f;
 }
 
-std::function<float(float)> spring(float stiffness, float damping) {
+SpringEasingFn spring(float stiffness, float damping) {
   auto table = springTable(stiffness, damping);
   return [table = std::move(table)](float t) {
     return sampleSpringTable(*table, t);

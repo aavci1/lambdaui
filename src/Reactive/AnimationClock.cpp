@@ -22,8 +22,8 @@ double AnimationClock::nowSeconds() {
   return static_cast<double>(ns.count()) * 1e-9;
 }
 
-void AnimationClock::setFrameDriver(std::function<void()> requestFrame,
-                                    std::function<void()> requestRedraw) {
+void AnimationClock::setFrameDriver(Reactive::SmallFn<void()> requestFrame,
+                                    Reactive::SmallFn<void()> requestRedraw) {
   requestFrame_ = std::move(requestFrame);
   requestRedraw_ = std::move(requestRedraw);
   if (needsFramePump()) {
