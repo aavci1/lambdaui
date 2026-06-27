@@ -9,13 +9,59 @@
 #include <Lambda/UI/Theme.hpp>
 #include <Lambda/UI/Views/Toggle.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string_view>
 #include <vector>
 
 using namespace lambdaui;
 
+namespace lambdaui::tests {
+void beginAllocationTrackingForTesting() noexcept;
+std::size_t allocationCountForTesting() noexcept;
+void endAllocationTrackingForTesting() noexcept;
+} // namespace lambdaui::tests
+
 namespace {
+
+class AllocationCounterScope {
+public:
+  AllocationCounterScope() {
+    tests::beginAllocationTrackingForTesting();
+  }
+
+  ~AllocationCounterScope() {
+    tests::endAllocationTrackingForTesting();
+  }
+
+  std::size_t count() const {
+    return tests::allocationCountForTesting();
+  }
+};
+
+float highResolutionSpringReference(float t, float stiffness = 300.f, float damping = 20.f) {
+  t = std::clamp(t, 0.f, 1.f);
+  constexpr int steps = 65536;
+  constexpr float dt = 1.f / static_cast<float>(steps);
+  float const scaled = t * static_cast<float>(steps);
+  int const wholeSteps = std::clamp(static_cast<int>(std::floor(scaled)), 0, steps);
+  float const fraction = scaled - static_cast<float>(wholeSteps);
+  float x = 0.f;
+  float v = 0.f;
+  for (int i = 0; i < wholeSteps; ++i) {
+    float const a = stiffness * (1.f - x) - damping * v;
+    v += a * dt;
+    x += v * dt;
+  }
+  if (wholeSteps >= steps || fraction <= 0.f) {
+    return x;
+  }
+  float const a = stiffness * (1.f - x) - damping * v;
+  v += a * dt;
+  float const next = x + v * dt;
+  return x + (next - x) * fraction;
+}
 
 class FakeTextSystem final : public TextSystem {
 public:
@@ -83,6 +129,62 @@ scenegraph::RectNode const* findMovedThumb(scenegraph::SceneNode const& node) {
 }
 
 } // namespace
+
+TEST_CASE("Spring easing builds a cached fixed-step table once") {
+  Easing::debugClearSpringCacheForTesting();
+  Easing::debugResetSpringIntegrationStepCount();
+
+  auto spring = Easing::spring();
+  std::size_t const builtSteps = Easing::debugSpringIntegrationStepCount();
+  CHECK(builtSteps > 0u);
+
+  float sampled = 0.f;
+  for (int i = 0; i < 1000; ++i) {
+    sampled += spring(static_cast<float>(i) / 999.f);
+  }
+  CHECK(sampled > 0.f);
+  CHECK(Easing::debugSpringIntegrationStepCount() == builtSteps);
+
+  auto springAgain = Easing::spring();
+  for (int i = 0; i < 1000; ++i) {
+    sampled += springAgain(static_cast<float>(i) / 999.f);
+  }
+  CHECK(sampled > 0.f);
+  CHECK(Easing::debugSpringIntegrationStepCount() == builtSteps);
+}
+
+TEST_CASE("Spring easing table matches fixed-step reference and preserves overshoot") {
+  Easing::debugClearSpringCacheForTesting();
+  auto spring = Easing::spring();
+
+  float maxDifference = 0.f;
+  float maxValue = 0.f;
+  for (int i = 0; i <= 200; ++i) {
+    float const t = static_cast<float>(i) / 200.f;
+    float const sampled = spring(t);
+    maxDifference = std::max(maxDifference, std::abs(sampled - highResolutionSpringReference(t)));
+    maxValue = std::max(maxValue, sampled);
+    CHECK(std::isfinite(sampled));
+  }
+
+  CHECK(spring(-1.f) == doctest::Approx(0.f));
+  CHECK(maxDifference < 0.002f);
+  CHECK(maxValue > 1.05f);
+}
+
+TEST_CASE("Spring easing evaluation does not allocate") {
+  Easing::debugClearSpringCacheForTesting();
+  auto spring = Easing::spring();
+
+  float sampled = 0.f;
+  AllocationCounterScope allocations;
+  for (int i = 0; i < 1000; ++i) {
+    sampled += spring(static_cast<float>(i) / 999.f);
+  }
+
+  CHECK(sampled > 0.f);
+  CHECK(allocations.count() == 0u);
+}
 
 TEST_CASE("Animated repeats across finite iterations") {
   Animated<float> value{0.f};

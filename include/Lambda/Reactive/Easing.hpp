@@ -6,6 +6,7 @@
 
 
 #include <functional>
+#include <cstddef>
 
 namespace lambdaui {
 
@@ -25,6 +26,12 @@ float easeInOut(float t);
 /// `stiffness` and `damping` tune the heuristic integrator; they are not physical SI constants.
 /// Integration uses normalized time in [0,1] (aligned with `Transition::duration`), so tuning is empirical.
 std::function<float(float)> spring(float stiffness = 300.f, float damping = 20.f);
+
+#if defined(LAMBDAUI_TESTING)
+std::size_t debugSpringIntegrationStepCount();
+void debugResetSpringIntegrationStepCount();
+void debugClearSpringCacheForTesting();
+#endif
 
 } // namespace Easing
 } // namespace lambdaui
