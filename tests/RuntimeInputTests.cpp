@@ -1549,6 +1549,7 @@ TEST_CASE("hover popovers keep the exact hover anchor instead of tracking compon
 TEST_CASE("tooltips observe hover on nested child components") {
   RuntimeHarness harness;
   harness.setRoot(NestedButtonTooltipProbeRoot{});
+  harness.app.eventQueue().dispatch();
 
   harness.pointerMove({10.f, 10.f});
   CHECK(harness.window.overlayManager().top() == nullptr);
