@@ -35,9 +35,11 @@ void AnimationClock::clearFrameDriver() {
   requestFrame_ = {};
   requestRedraw_ = {};
   running_ = false;
+  framePending_ = false;
 }
 
 void AnimationClock::notifyFrame(std::int64_t deadlineNanos) {
+  framePending_ = false;
   if (!running_) {
     return;
   }
@@ -61,6 +63,7 @@ void AnimationClock::shutdown() {
   nextSubscriberId_ = 1;
   requestFrame_ = {};
   requestRedraw_ = {};
+  framePending_ = false;
   dispatchingSubscribers_ = false;
   subscribersNeedCompaction_ = false;
 }
@@ -220,7 +223,10 @@ void AnimationClock::startFramePump() {
   if (!running_) {
     running_ = true;
   }
-  requestFrame_();
+  if (!framePending_) {
+    framePending_ = true;
+    requestFrame_();
+  }
 }
 
 void AnimationClock::stopFramePump() {

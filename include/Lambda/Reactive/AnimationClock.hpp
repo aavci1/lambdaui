@@ -84,6 +84,7 @@ private:
   std::function<void()> requestRedraw_;
 
   bool running_ = false;
+  bool framePending_ = false;
   bool dispatchingSubscribers_ = false;
   bool subscribersNeedCompaction_ = false;
 };

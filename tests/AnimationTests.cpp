@@ -328,9 +328,32 @@ TEST_CASE("AnimationClock delegates frame pump and redraw to installed driver") 
       .startedAt = 30.0,
       .transition = Transition::linear(1.f),
   });
+  auto secondClip = addAnimation<float>(AnimationParams<float>{
+      .from = 1.f,
+      .to = 2.f,
+      .duration = 1.0,
+      .startedAt = 30.0,
+      .transition = Transition::linear(1.f),
+  });
+  auto thirdClip = addAnimation<float>(AnimationParams<float>{
+      .from = 2.f,
+      .to = 3.f,
+      .duration = 1.0,
+      .startedAt = 30.0,
+      .transition = Transition::linear(1.f),
+  });
   (void)clip;
+  (void)secondClip;
+  (void)thirdClip;
 
   CHECK(frameRequests == 1);
+  clock.setFrameDriver([&] {
+    ++frameRequests;
+  }, [&] {
+    ++redrawRequests;
+  });
+  CHECK(frameRequests == 1);
+
   clock.notifyFrame(30'500'000'000LL);
   CHECK(redrawRequests == 1);
   CHECK(frameRequests == 2);
