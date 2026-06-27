@@ -63,6 +63,65 @@ float highResolutionSpringReference(float t, float stiffness = 300.f, float damp
   return x + (next - x) * fraction;
 }
 
+float legacyTimelineEasing(Transition const& transition, float progress) {
+  float t = std::clamp(progress, 0.f, 1.f);
+  if (transition.springFn) {
+    return (*transition.springFn)(t);
+  }
+  if (transition.easing) {
+    return std::clamp(transition.easing(t), 0.f, 1.f);
+  }
+  return t;
+}
+
+float legacyAnimatedValue(float from,
+                          float to,
+                          AnimationOptions const& options,
+                          double startTime,
+                          double nowSeconds) {
+  double const duration = std::max(0.000001, static_cast<double>(options.transition.duration));
+  double const elapsed =
+      nowSeconds - startTime - static_cast<double>(options.transition.delay);
+  if (elapsed < 0.0) {
+    return from;
+  }
+
+  int const repeat = options.repeat == 0 ? 1 : options.repeat;
+  if (repeat != AnimationOptions::kRepeatForever &&
+      elapsed >= duration * static_cast<double>(repeat)) {
+    if (options.autoreverse && (repeat % 2) == 0) {
+      return from;
+    }
+    return to;
+  }
+
+  int const iteration = static_cast<int>(std::floor(elapsed / duration));
+  double const local = elapsed - static_cast<double>(iteration) * duration;
+  float t = static_cast<float>(std::clamp(local / duration, 0.0, 1.0));
+  if (options.autoreverse && (iteration % 2) == 1) {
+    t = 1.f - t;
+  }
+  return lerp(from, to, legacyTimelineEasing(options.transition, t));
+}
+
+float legacyClipValue(float from,
+                      float to,
+                      Transition const& transition,
+                      double duration,
+                      double delay,
+                      double startedAt,
+                      double nowSeconds) {
+  double const elapsed = nowSeconds - startedAt - delay;
+  if (elapsed <= 0.0) {
+    return from;
+  }
+  if (duration <= 0.0 || elapsed >= duration) {
+    return to;
+  }
+  float const t = static_cast<float>(elapsed / duration);
+  return lerp(from, to, legacyTimelineEasing(transition, t));
+}
+
 class FakeTextSystem final : public TextSystem {
 public:
   std::shared_ptr<TextLayout const>
@@ -246,6 +305,80 @@ TEST_CASE("Animation options preserve transition and playback configuration") {
   Transition const custom = Transition::custom(Easing::easeOut, 0.3f);
   CHECK(custom.duration == doctest::Approx(0.3f));
   CHECK(custom.easing == Easing::easeOut);
+}
+
+TEST_CASE("Animation timeline core preserves legacy sampled values") {
+  AnimationClock::instance().shutdown();
+  constexpr double startedAt = 100.0;
+  constexpr float from = 2.f;
+  constexpr float to = 12.f;
+
+  auto checkAnimated = [&](AnimationOptions options, std::initializer_list<double> offsets) {
+    AnimationOptions legacyOptions = options;
+    Animated<float> value{from};
+    value.play(to, std::move(options));
+    value.testSetStartTime(startedAt);
+
+    for (double const offset : offsets) {
+      double const now = startedAt + offset;
+      (void)value.testTick(now);
+      CHECK(value.get() ==
+            doctest::Approx(legacyAnimatedValue(from, to, legacyOptions, startedAt, now)));
+    }
+
+    value.stop();
+  };
+
+  auto checkClip = [&](Transition transition,
+                       double duration,
+                       double delay,
+                       std::initializer_list<double> offsets) {
+    Transition legacyTransition = transition;
+    auto clip = addAnimation<float>(AnimationParams<float>{
+        .from = from,
+        .to = to,
+        .duration = duration,
+        .delay = delay,
+        .startedAt = startedAt,
+        .transition = std::move(transition),
+    });
+
+    for (double const offset : offsets) {
+      double const now = startedAt + offset;
+      CHECK(clip.testValueAt(now) ==
+            doctest::Approx(
+                legacyClipValue(from, to, legacyTransition, duration, delay, startedAt, now)));
+    }
+
+    AnimationClock::instance().shutdown();
+  };
+
+  checkAnimated(AnimationOptions{
+      .transition = Transition::linear(1.f).delayed(0.25f),
+      .repeat = 3,
+      .autoreverse = false,
+  }, {0.0, 0.2, 0.25, 0.75, 1.25, 2.75, 3.25});
+
+  checkAnimated(AnimationOptions{
+      .transition = Transition::ease(0.8f),
+      .repeat = 2,
+      .autoreverse = true,
+  }, {0.0, 0.2, 0.4, 0.8, 1.2, 1.6});
+
+  checkAnimated(AnimationOptions{
+      .transition = Transition::spring(300.f, 20.f, 0.6f).delayed(0.1f),
+      .repeat = 3,
+      .autoreverse = true,
+  }, {0.0, 0.1, 0.25, 0.7, 0.95, 1.3, 1.9});
+
+  checkClip(Transition::linear(1.f).delayed(0.25f), 1.0, 0.25,
+            {0.0, 0.25, 0.5, 1.0, 1.25});
+  checkClip(Transition::ease(0.8f), 0.8, 0.0,
+            {0.0, 0.2, 0.4, 0.8});
+  checkClip(Transition::spring(300.f, 20.f, 0.6f).delayed(0.1f), 0.6, 0.1,
+            {0.0, 0.1, 0.25, 0.5, 0.7});
+
+  AnimationClock::instance().shutdown();
 }
 
 TEST_CASE("Animation clip samples from the timeline on read") {

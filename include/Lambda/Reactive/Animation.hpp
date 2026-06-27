@@ -43,7 +43,7 @@ inline double steadyNowSeconds() {
   return static_cast<double>(ns.count()) * 1e-9;
 }
 
-inline float applyTimelineTransition(Transition const& transition, float progress) {
+inline float applyTimelineEasing(Transition const& transition, float progress) {
   float t = std::clamp(progress, 0.f, 1.f);
   if (transition.springFn) {
     return (*transition.springFn)(t);
@@ -52,6 +52,75 @@ inline float applyTimelineTransition(Transition const& transition, float progres
     return std::clamp(transition.easing(t), 0.f, 1.f);
   }
   return t;
+}
+
+enum class TimelinePhase {
+  Pending,
+  Running,
+  Finished,
+};
+
+struct TimelineEvaluation {
+  TimelinePhase phase = TimelinePhase::Pending;
+  double activeElapsed = 0.0;
+  float progress = 0.f;
+  float easedProgress = 0.f;
+  int repeat = 1;
+  int iteration = 0;
+};
+
+inline int normalizedTimelineRepeat(int repeat) {
+  return repeat == 0 ? 1 : repeat;
+}
+
+inline float finalTimelineProgress(int repeat, bool autoreverse) {
+  int const normalizedRepeat = normalizedTimelineRepeat(repeat);
+  if (autoreverse &&
+      normalizedRepeat != AnimationOptions::kRepeatForever &&
+      (normalizedRepeat % 2) == 0) {
+    return 0.f;
+  }
+  return 1.f;
+}
+
+inline TimelineEvaluation evaluateTimeline(double elapsed,
+                                           double duration,
+                                           double delay,
+                                           Transition const& transition,
+                                           int repeat,
+                                           bool autoreverse) {
+  TimelineEvaluation result{};
+  result.repeat = normalizedTimelineRepeat(repeat);
+  result.activeElapsed = elapsed - delay;
+  if (result.activeElapsed < 0.0) {
+    return result;
+  }
+
+  if (duration <= 0.0) {
+    result.phase = TimelinePhase::Finished;
+    result.progress = finalTimelineProgress(result.repeat, autoreverse);
+    result.easedProgress = applyTimelineEasing(transition, result.progress);
+    return result;
+  }
+
+  if (result.repeat != AnimationOptions::kRepeatForever &&
+      result.activeElapsed >= duration * static_cast<double>(result.repeat)) {
+    result.phase = TimelinePhase::Finished;
+    result.progress = finalTimelineProgress(result.repeat, autoreverse);
+    result.easedProgress = applyTimelineEasing(transition, result.progress);
+    return result;
+  }
+
+  result.phase = TimelinePhase::Running;
+  result.iteration = static_cast<int>(std::floor(result.activeElapsed / duration));
+  double const local =
+      result.activeElapsed - static_cast<double>(result.iteration) * duration;
+  result.progress = static_cast<float>(std::clamp(local / duration, 0.0, 1.0));
+  if (autoreverse && (result.iteration % 2) == 1) {
+    result.progress = 1.f - result.progress;
+  }
+  result.easedProgress = applyTimelineEasing(transition, result.progress);
+  return result;
 }
 
 inline void validateTimelineTiming(double duration, double delay, char const* apiName) {
@@ -121,11 +190,11 @@ public:
     if (isTerminal()) {
       return false;
     }
-    double const elapsed = elapsedSeconds(nowSeconds);
-    if (elapsed < 0.0) {
+    TimelineEvaluation const timeline = timelineAt(nowSeconds);
+    if (timeline.phase == TimelinePhase::Pending) {
       return true;
     }
-    if (duration_ <= 0.0 || elapsed >= duration_) {
+    if (timeline.phase == TimelinePhase::Finished) {
       finish();
       return false;
     }
@@ -144,43 +213,42 @@ public:
     if (status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled) {
       return cachedValue_;
     }
-    double const elapsed = elapsedSeconds(nowSeconds);
-    if (elapsed <= 0.0) {
+    TimelineEvaluation const timeline = timelineAt(nowSeconds);
+    if (timeline.activeElapsed <= 0.0) {
       return from_;
     }
-    if (duration_ <= 0.0 || elapsed >= duration_) {
+    if (timeline.phase == TimelinePhase::Finished) {
       return to_;
     }
-    float const t = static_cast<float>(elapsed / duration_);
-    return lerp(from_, to_, applyTimelineTransition(transition_, t));
+    return lerp(from_, to_, timeline.easedProgress);
   }
 
   bool isStarted(double nowSeconds) const {
     if (status_ == TimelineClipStatus::Cancelled) {
       return true;
     }
-    return nowSeconds >= startedAt_ + delay_;
+    return timelineAt(nowSeconds).phase != TimelinePhase::Pending;
   }
 
   bool isFinished(double nowSeconds) const {
     if (status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled) {
       return true;
     }
-    return nowSeconds >= startedAt_ + delay_ + duration_;
+    return timelineAt(nowSeconds).phase == TimelinePhase::Finished;
   }
 
   float progress(double nowSeconds) const {
     if (status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled) {
       return 1.f;
     }
-    double const elapsed = elapsedSeconds(nowSeconds);
-    if (elapsed <= 0.0) {
+    TimelineEvaluation const timeline = timelineAt(nowSeconds);
+    if (timeline.activeElapsed <= 0.0) {
       return 0.f;
     }
-    if (duration_ <= 0.0 || elapsed >= duration_) {
+    if (timeline.phase == TimelinePhase::Finished) {
       return 1.f;
     }
-    return static_cast<float>(std::clamp(elapsed / duration_, 0.0, 1.0));
+    return timeline.progress;
   }
 
   void cancel(double nowSeconds) {
@@ -201,8 +269,14 @@ private:
     return status_ == TimelineClipStatus::Finished || status_ == TimelineClipStatus::Cancelled;
   }
 
-  double elapsedSeconds(double nowSeconds) const {
-    return nowSeconds - startedAt_ - delay_;
+  TimelineEvaluation timelineAt(double nowSeconds) const {
+    return evaluateTimeline(
+        nowSeconds - startedAt_,
+        duration_,
+        delay_,
+        transition_,
+        1,
+        false);
   }
 
   void finish() {
@@ -431,39 +505,31 @@ private:
         return false;
       }
       double const duration = std::max(0.000001, static_cast<double>(options.transition.duration));
-      double elapsed = nowSeconds - startTime - static_cast<double>(options.transition.delay);
-      if (elapsed < 0.0) {
+      detail::TimelineEvaluation const timeline = detail::evaluateTimeline(
+          nowSeconds - startTime,
+          duration,
+          static_cast<double>(options.transition.delay),
+          options.transition,
+          options.repeat,
+          options.autoreverse);
+      if (timeline.phase == detail::TimelinePhase::Pending) {
         value.set(start);
         return true;
       }
 
-      int const repeat = options.repeat == 0 ? 1 : options.repeat;
-      if (repeat != AnimationOptions::kRepeatForever &&
-          elapsed >= duration * static_cast<double>(repeat)) {
+      if (timeline.phase == detail::TimelinePhase::Finished) {
         running = false;
         paused = false;
         value.set(finalValueForOptions());
         return false;
       }
 
-      int iteration = static_cast<int>(std::floor(elapsed / duration));
-      double local = elapsed - static_cast<double>(iteration) * duration;
-      float t = static_cast<float>(std::clamp(local / duration, 0.0, 1.0));
-      if (options.autoreverse && (iteration % 2) == 1) {
-        t = 1.f - t;
-      }
-      if (options.transition.springFn) {
-        t = (*options.transition.springFn)(t);
-      } else if (options.transition.easing) {
-        t = std::clamp(options.transition.easing(t), 0.f, 1.f);
-      }
-      value.set(lerp(start, target, t));
+      value.set(lerp(start, target, timeline.easedProgress));
       return true;
     }
 
     T finalValueForOptions() const {
-      int const repeat = options.repeat == 0 ? 1 : options.repeat;
-      if (options.autoreverse && repeat != AnimationOptions::kRepeatForever && (repeat % 2) == 0) {
+      if (detail::finalTimelineProgress(options.repeat, options.autoreverse) == 0.f) {
         return start;
       }
       return target;
