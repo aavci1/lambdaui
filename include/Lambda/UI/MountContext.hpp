@@ -27,7 +27,8 @@ public:
   MountContext(Reactive::Scope& owner, TextSystem& textSystem,
                MeasureContext& measureContext, LayoutConstraints constraints,
                LayoutHints hints = {}, Reactive::SmallFn<void()> requestRedraw = {},
-               EnvironmentBinding environmentBinding = {});
+               EnvironmentBinding environmentBinding = {},
+               bool hasAssignedWidth = false, bool hasAssignedHeight = false);
 
   Reactive::Scope& owner() const noexcept { return *owner_; }
   EnvironmentBinding const& environmentBinding() const noexcept { return environmentBinding_; }
@@ -35,9 +36,13 @@ public:
   MeasureContext& measureContext() const noexcept { return measureContext_; }
   LayoutConstraints const& constraints() const noexcept { return constraints_; }
   LayoutHints const& hints() const noexcept { return hints_; }
+  bool hasAssignedWidth() const noexcept { return hasAssignedWidth_; }
+  bool hasAssignedHeight() const noexcept { return hasAssignedHeight_; }
   Reactive::SmallFn<void()> const& redrawCallback() const noexcept { return requestRedraw_; }
 
   MountContext childWithSharedScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
+  MountContext childWithSharedScope(LayoutConstraints constraints, LayoutHints hints,
+                                    bool hasAssignedWidth, bool hasAssignedHeight) const;
   MountContext childWithOwnScope(LayoutConstraints constraints, LayoutHints hints = {}) const;
   MountContext childWithEnvironment(EnvironmentBinding environment, LayoutConstraints constraints,
                                     LayoutHints hints = {}) const;
@@ -49,7 +54,8 @@ private:
                TextSystem& textSystem, MeasureContext& measureContext,
                LayoutConstraints constraints, LayoutHints hints,
                Reactive::SmallFn<void()> requestRedraw,
-               EnvironmentBinding environmentBinding);
+               EnvironmentBinding environmentBinding,
+               bool hasAssignedWidth, bool hasAssignedHeight);
 
   std::shared_ptr<Reactive::Scope> ownedOwner_;
   Reactive::Scope* owner_;
@@ -58,6 +64,8 @@ private:
   MeasureContext& measureContext_;
   LayoutConstraints constraints_;
   LayoutHints hints_;
+  bool hasAssignedWidth_ = false;
+  bool hasAssignedHeight_ = false;
   Reactive::SmallFn<void()> requestRedraw_;
 };
 

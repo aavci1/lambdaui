@@ -19,8 +19,10 @@ namespace lambdaui {
 namespace {
 
 Size measureChild(Element const& child, MeasureContext& ctx, LayoutConstraints constraints,
-                  LayoutHints hints, TextSystem& textSystem) {
-  ctx.pushConstraints(constraints, hints);
+                  LayoutHints hints, TextSystem& textSystem,
+                  bool hasAssignedWidth = false,
+                  bool hasAssignedHeight = false) {
+  ctx.pushConstraints(constraints, hints, hasAssignedWidth, hasAssignedHeight);
   Size size = child.measure(ctx, constraints, hints, textSystem);
   ctx.popConstraints();
   return size;
@@ -46,9 +48,31 @@ bool fixedFiniteHeight(LayoutConstraints const& constraints) {
   return positiveFinite(constraints.maxHeight) && constraints.minHeight >= constraints.maxHeight - 1e-4f;
 }
 
+bool fixedFiniteWidth(LayoutConstraints const& constraints) {
+  return positiveFinite(constraints.maxWidth) && constraints.minWidth >= constraints.maxWidth - 1e-4f;
+}
+
 bool finiteHeightIsConstrained(LayoutConstraints const& constraints, LayoutHints const& hints) {
   return axisStretches(hints.zStackVerticalAlign) ||
          (!hints.zStackVerticalAlign.has_value() && fixedFiniteHeight(constraints));
+}
+
+bool mainAxisExtentIsDefinite(layout::StackAxis axis,
+                              MeasureContext const& ctx,
+                              LayoutConstraints const& constraints,
+                              LayoutHints const& hints) {
+  // Main-axis flex follows the traversal assigned-size flag; tight finite and ZStack stretch
+  // keep direct measurement and retained relayout paths equivalent.
+  bool const frameAssigned = axis == layout::StackAxis::Horizontal
+                                 ? ctx.hasAssignedWidth()
+                                 : ctx.hasAssignedHeight();
+  bool const tightFinite = axis == layout::StackAxis::Horizontal
+                               ? fixedFiniteWidth(constraints)
+                               : fixedFiniteHeight(constraints);
+  bool const zStackStretch = axis == layout::StackAxis::Horizontal
+                                 ? axisStretches(hints.zStackHorizontalAlign)
+                                 : axisStretches(hints.zStackVerticalAlign);
+  return frameAssigned || tightFinite || zStackStretch;
 }
 
 std::vector<layout::StackMainAxisChild> stackChildrenForAxis(std::vector<Element> const& children,
@@ -113,7 +137,9 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   float const assignedWidth = finiteSpan(constraints.maxWidth);
   bool const widthAssigned = assignedWidth > 0.f && finiteWidthIsAssigned(hints);
   float const assignedHeight = finiteSpan(constraints.maxHeight);
-  bool const heightConstrained = assignedHeight > 0.f && finiteHeightIsConstrained(constraints, hints);
+  bool const heightConstrained = assignedHeight > 0.f &&
+                                 mainAxisExtentIsDefinite(layout::StackAxis::Vertical,
+                                                          ctx, constraints, hints);
 
   LayoutConstraints childConstraints = constraints;
   childConstraints.minWidth = 0.f;
@@ -129,7 +155,8 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   std::vector<Size> sizes;
   sizes.reserve(children.size());
   for (std::size_t i = 0; i < children.size(); ++i) {
-    sizes.push_back(measureChild(children[i], ctx, childConstraints, childHints, textSystem));
+    sizes.push_back(measureChild(children[i], ctx, childConstraints, childHints, textSystem,
+                                 widthAssigned, false));
   }
   std::vector<std::size_t> const activeIndices = activeStackIndices(children, sizes);
   std::vector<Size> const activeSizes = sizesForIndices(sizes, activeIndices);
@@ -162,7 +189,9 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   }
 
   float const assignedWidth = finiteSpan(constraints.maxWidth);
-  bool const widthConstrained = assignedWidth > 0.f && finiteWidthIsAssigned(hints);
+  bool const widthConstrained = assignedWidth > 0.f &&
+                                mainAxisExtentIsDefinite(layout::StackAxis::Horizontal,
+                                                         ctx, constraints, hints);
   float const assignedHeight = finiteSpan(constraints.maxHeight);
   bool const heightConstrained = assignedHeight > 0.f && finiteHeightIsConstrained(constraints, hints);
   bool const stretchCrossAxis = alignment == Alignment::Stretch && heightConstrained;
@@ -178,7 +207,8 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   std::vector<Size> initialSizes;
   initialSizes.reserve(children.size());
   for (std::size_t i = 0; i < children.size(); ++i) {
-    initialSizes.push_back(measureChild(children[i], ctx, childConstraints, LayoutHints{}, textSystem));
+    initialSizes.push_back(measureChild(children[i], ctx, childConstraints, LayoutHints{}, textSystem,
+                                        false, stretchCrossAxis));
   }
 
   std::vector<std::size_t> const activeIndices = activeStackIndices(children, initialSizes);
@@ -207,7 +237,8 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
     childMeasure.maxHeight = stretchCrossAxis ? assignedHeight
                                               : std::numeric_limits<float>::infinity();
     layout::clampLayoutMinToMax(childMeasure);
-    Size const size = measureChild(children[childIndex], ctx, childMeasure, rowHints, textSystem);
+    Size const size = measureChild(children[childIndex], ctx, childMeasure, rowHints, textSystem,
+                                   true, stretchCrossAxis);
     rowSizes.push_back(size);
     rowInnerHeight = std::max(rowInnerHeight, size.height);
   }
@@ -247,7 +278,11 @@ Size ZStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   childHints.zStackHorizontalAlign = horizontalAlignment;
   childHints.zStackVerticalAlign = verticalAlignment;
   for (Element const& child : children) {
-    Size const childSize = measureChild(child, ctx, childConstraints, childHints, textSystem);
+    Size const childSize = measureChild(child, ctx, childConstraints, childHints, textSystem,
+                                        assignedWidth > 0.f &&
+                                            horizontalAlignment == Alignment::Stretch,
+                                        assignedHeight > 0.f &&
+                                            verticalAlignment == Alignment::Stretch);
     width = std::max(width, childSize.width);
     height = std::max(height, childSize.height);
   }

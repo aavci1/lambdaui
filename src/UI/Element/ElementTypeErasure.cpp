@@ -230,7 +230,8 @@ void installBinding(MountContext& ctx, Reactive::Bindable<T> binding, Setter set
 }
 
 Size measuredOuterSize(Element const& element, MountContext& ctx) {
-  ctx.measureContext().pushConstraints(ctx.constraints(), ctx.hints());
+  ctx.measureContext().pushConstraints(ctx.constraints(), ctx.hints(),
+                                       ctx.hasAssignedWidth(), ctx.hasAssignedHeight());
   Size size = element.measure(ctx.measureContext(), ctx.constraints(), ctx.hints(), ctx.textSystem());
   ctx.measureContext().popConstraints();
   return Size{positive(size.width), positive(size.height)};
@@ -409,10 +410,19 @@ std::unique_ptr<scenegraph::SceneNode> Element::mount(MountContext& ctx) const {
   EdgeInsets const padding = modifiers.padding.evaluate();
   float const width = modifiers.sizeWidth.evaluate();
   float const height = modifiers.sizeHeight.evaluate();
+  bool const hasResolvedWidth =
+      detail::hasResolvedModifierWidth(activeCtx.constraints(), activeCtx.hints(),
+                                       modifiers.hasSizeWidth);
+  bool const hasResolvedHeight =
+      detail::hasResolvedModifierHeight(activeCtx.constraints(), activeCtx.hints(),
+                                        modifiers.hasSizeHeight);
   LayoutConstraints innerConstraints =
       modifierInnerConstraints(activeCtx.constraints(), padding, activeCtx.hints(), width, height,
                                modifiers.hasSizeWidth, modifiers.hasSizeHeight);
-  MountContext innerCtx = activeCtx.childWithSharedScope(innerConstraints, activeCtx.hints());
+  MountContext innerCtx = activeCtx.childWithSharedScope(
+      innerConstraints, activeCtx.hints(),
+      activeCtx.hasAssignedWidth() || hasResolvedWidth,
+      activeCtx.hasAssignedHeight() || hasResolvedHeight);
   std::unique_ptr<scenegraph::SceneNode> content = impl_->mount(innerCtx);
   if (!content) {
     return nullptr;

@@ -160,6 +160,14 @@ lambdaui::Element box(float width, float height) {
   return lambdaui::Rectangle{}.size(width, height);
 }
 
+lambdaui::Size measureElement(lambdaui::Element element,
+                              lambdaui::LayoutConstraints constraints,
+                              lambdaui::LayoutHints hints = {}) {
+  MeasuringTextSystem textSystem;
+  lambdaui::MeasureContext ctx{textSystem, testEnvironment()};
+  return element.measure(ctx, constraints, hints, textSystem);
+}
+
 struct RelayoutProbeFrame {
   lambdaui::Element child;
   int* relayouts = nullptr;
@@ -242,6 +250,105 @@ TEST_CASE("padding larger than available size clamps child constraints non-negat
   CHECK(seen.minHeight == doctest::Approx(0.f));
   CHECK(measured.width >= 0.f);
   CHECK(measured.height >= 0.f);
+}
+
+TEST_CASE("HStack and VStack flex gating matches under loose finite main-axis caps") {
+  auto makeHStack = [] {
+    return lambdaui::Element{lambdaui::HStack{
+        .children = lambdaui::children(box(10.f, 10.f).flex(1.f)),
+    }};
+  };
+  auto makeVStack = [] {
+    return lambdaui::Element{lambdaui::VStack{
+        .children = lambdaui::children(box(10.f, 10.f).flex(1.f)),
+    }};
+  };
+
+  lambdaui::Size const horizontal = measureElement(
+      makeHStack(),
+      lambdaui::LayoutConstraints{
+          .maxWidth = 100.f,
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 0.f,
+          .minHeight = 0.f,
+      });
+  lambdaui::Size const vertical = measureElement(
+      makeVStack(),
+      lambdaui::LayoutConstraints{
+          .maxWidth = std::numeric_limits<float>::infinity(),
+          .maxHeight = 100.f,
+          .minWidth = 0.f,
+          .minHeight = 0.f,
+      });
+
+  CHECK(horizontal.width == doctest::Approx(vertical.height));
+  CHECK(horizontal.width == doctest::Approx(10.f));
+}
+
+TEST_CASE("HStack and VStack flex gating still fills tight finite main-axis constraints") {
+  auto makeHStack = [] {
+    return lambdaui::Element{lambdaui::HStack{
+        .children = lambdaui::children(box(10.f, 10.f).flex(1.f)),
+    }};
+  };
+  auto makeVStack = [] {
+    return lambdaui::Element{lambdaui::VStack{
+        .children = lambdaui::children(box(10.f, 10.f).flex(1.f)),
+    }};
+  };
+
+  lambdaui::Size const horizontal = measureElement(
+      makeHStack(),
+      lambdaui::LayoutConstraints{
+          .maxWidth = 100.f,
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 100.f,
+          .minHeight = 0.f,
+      });
+  lambdaui::Size const vertical = measureElement(
+      makeVStack(),
+      lambdaui::LayoutConstraints{
+          .maxWidth = std::numeric_limits<float>::infinity(),
+          .maxHeight = 100.f,
+          .minWidth = 0.f,
+          .minHeight = 100.f,
+      });
+
+  CHECK(horizontal.width == doctest::Approx(vertical.height));
+  CHECK(horizontal.width == doctest::Approx(100.f));
+}
+
+TEST_CASE("HStack and VStack flex gating stays natural under infinite main-axis constraints") {
+  auto makeHStack = [] {
+    return lambdaui::Element{lambdaui::HStack{
+        .children = lambdaui::children(box(10.f, 10.f).flex(1.f)),
+    }};
+  };
+  auto makeVStack = [] {
+    return lambdaui::Element{lambdaui::VStack{
+        .children = lambdaui::children(box(10.f, 10.f).flex(1.f)),
+    }};
+  };
+
+  lambdaui::Size const horizontal = measureElement(
+      makeHStack(),
+      lambdaui::LayoutConstraints{
+          .maxWidth = std::numeric_limits<float>::infinity(),
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 0.f,
+          .minHeight = 0.f,
+      });
+  lambdaui::Size const vertical = measureElement(
+      makeVStack(),
+      lambdaui::LayoutConstraints{
+          .maxWidth = std::numeric_limits<float>::infinity(),
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 0.f,
+          .minHeight = 0.f,
+      });
+
+  CHECK(horizontal.width == doctest::Approx(vertical.height));
+  CHECK(horizontal.width == doctest::Approx(10.f));
 }
 
 TEST_CASE("stack, grid, and scroll mount geometry matches same-constraint relayout") {

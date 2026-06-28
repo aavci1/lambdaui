@@ -26,10 +26,25 @@ LayoutConstraints const& MeasureContext::constraints() const { return traversal_
 
 LayoutHints const& MeasureContext::hints() const { return traversal_.frame().hints; }
 
+bool MeasureContext::hasAssignedWidth() const noexcept {
+  return traversal_.frame().hasAssignedWidth;
+}
+
+bool MeasureContext::hasAssignedHeight() const noexcept {
+  return traversal_.frame().hasAssignedHeight;
+}
+
 void MeasureContext::pushConstraints(LayoutConstraints const& c, LayoutHints hints) {
   auto const& frame = traversal_.frame();
   traversal_.pushFrame(c, std::move(hints), frame.origin, frame.key, frame.assignedSize, frame.hasAssignedWidth,
                        frame.hasAssignedHeight);
+}
+
+void MeasureContext::pushConstraints(LayoutConstraints const& c, LayoutHints hints,
+                                     bool hasAssignedWidth, bool hasAssignedHeight) {
+  auto const& frame = traversal_.frame();
+  traversal_.pushFrame(c, std::move(hints), frame.origin, frame.key, frame.assignedSize,
+                       hasAssignedWidth, hasAssignedHeight);
 }
 
 void MeasureContext::popConstraints() {

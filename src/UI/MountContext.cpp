@@ -120,8 +120,29 @@ bool finiteWidthIsAssigned(LayoutHints const& hints) {
   return !hints.zStackHorizontalAlign.has_value() || axisStretches(hints.zStackHorizontalAlign);
 }
 
+bool fixedFiniteWidth(LayoutConstraints const& constraints) {
+  return positiveFinite(constraints.maxWidth) && constraints.minWidth >= constraints.maxWidth - 1e-4f;
+}
+
 bool fixedFiniteHeight(LayoutConstraints const& constraints) {
   return positiveFinite(constraints.maxHeight) && constraints.minHeight >= constraints.maxHeight - 1e-4f;
+}
+
+bool mainAxisExtentIsDefinite(layout::StackAxis axis,
+                              LayoutConstraints const& constraints,
+                              LayoutHints const& hints,
+                              bool hasAssignedWidth = false,
+                              bool hasAssignedHeight = false) {
+  bool const frameAssigned = axis == layout::StackAxis::Horizontal
+                                 ? hasAssignedWidth
+                                 : hasAssignedHeight;
+  bool const tightFinite = axis == layout::StackAxis::Horizontal
+                               ? fixedFiniteWidth(constraints)
+                               : fixedFiniteHeight(constraints);
+  bool const zStackStretch = axis == layout::StackAxis::Horizontal
+                                 ? axisStretches(hints.zStackHorizontalAlign)
+                                 : axisStretches(hints.zStackVerticalAlign);
+  return frameAssigned || tightFinite || zStackStretch;
 }
 
 float textMeasureWidth(TextWrapping wrapping, LayoutConstraints const& constraints) {
@@ -242,8 +263,10 @@ LayoutConstraints stackChildConstraints(LayoutConstraints constraints) {
 }
 
 Size measureChild(Element const& child, MountContext& ctx, LayoutConstraints const& constraints,
-                  LayoutHints const& hints = {}) {
-  ctx.measureContext().pushConstraints(constraints, hints);
+                  LayoutHints const& hints = {},
+                  bool hasAssignedWidth = false,
+                  bool hasAssignedHeight = false) {
+  ctx.measureContext().pushConstraints(constraints, hints, hasAssignedWidth, hasAssignedHeight);
   Size measured = child.measure(ctx.measureContext(), constraints, hints, ctx.textSystem());
   ctx.measureContext().popConstraints();
   return measured;
@@ -485,12 +508,16 @@ void layoutMountedVStack(scenegraph::SceneNode& group,
                          Alignment alignment,
                          JustifyContent justifyContent,
                          LayoutHints const& hints,
-                         LayoutConstraints const& constraints) {
+                         LayoutConstraints const& constraints,
+                         bool hasAssignedWidth,
+                         bool hasAssignedHeight) {
   float const nextAssignedWidth = finiteSpan(constraints.maxWidth);
   bool const widthAssigned = nextAssignedWidth > 0.f && finiteWidthIsAssigned(hints);
   float const nextAssignedHeight = finiteSpan(constraints.maxHeight);
   bool const heightConstrained = nextAssignedHeight > 0.f &&
-                                 finiteHeightIsConstrained(constraints, hints);
+                                 mainAxisExtentIsDefinite(layout::StackAxis::Vertical,
+                                                          constraints, hints,
+                                                          hasAssignedWidth, hasAssignedHeight);
 
   LayoutConstraints childConstraints = stackChildConstraints(constraints);
   childConstraints.maxWidth = nextAssignedWidth > 0.f ? nextAssignedWidth
@@ -527,9 +554,14 @@ void layoutMountedHStack(scenegraph::SceneNode& group,
                          Alignment alignment,
                          JustifyContent justifyContent,
                          LayoutHints const& hints,
-                         LayoutConstraints const& constraints) {
+                         LayoutConstraints const& constraints,
+                         bool hasAssignedWidth,
+                         bool hasAssignedHeight) {
   float const nextAssignedWidth = finiteSpan(constraints.maxWidth);
-  bool const widthConstrained = nextAssignedWidth > 0.f && finiteWidthIsAssigned(hints);
+  bool const widthConstrained = nextAssignedWidth > 0.f &&
+                                mainAxisExtentIsDefinite(layout::StackAxis::Horizontal,
+                                                         constraints, hints,
+                                                         hasAssignedWidth, hasAssignedHeight);
   float const nextAssignedHeight = finiteSpan(constraints.maxHeight);
   bool const heightConstrained = nextAssignedHeight > 0.f &&
                                  finiteHeightIsConstrained(constraints, hints);
@@ -648,20 +680,26 @@ MountContext::MountContext(Reactive::Scope& owner,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
                            Reactive::SmallFn<void()> requestRedraw,
-                           EnvironmentBinding environmentBinding)
+                           EnvironmentBinding environmentBinding,
+                           bool hasAssignedWidth,
+                           bool hasAssignedHeight)
     : owner_(&owner)
     , environmentBinding_(std::move(environmentBinding))
     , textSystem_(textSystem)
     , measureContext_(measureContext)
     , constraints_(constraints)
     , hints_(hints)
+    , hasAssignedWidth_(hasAssignedWidth)
+    , hasAssignedHeight_(hasAssignedHeight)
     , requestRedraw_(std::move(requestRedraw)) {}
 
 MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner,
                            TextSystem& textSystem, MeasureContext& measureContext,
                            LayoutConstraints constraints, LayoutHints hints,
                            Reactive::SmallFn<void()> requestRedraw,
-                           EnvironmentBinding environmentBinding)
+                           EnvironmentBinding environmentBinding,
+                           bool hasAssignedWidth,
+                           bool hasAssignedHeight)
     : ownedOwner_(std::move(owner))
     , owner_(ownedOwner_.get())
     , environmentBinding_(std::move(environmentBinding))
@@ -669,12 +707,24 @@ MountContext::MountContext(std::shared_ptr<Reactive::Scope> owner,
     , measureContext_(measureContext)
     , constraints_(constraints)
     , hints_(hints)
+    , hasAssignedWidth_(hasAssignedWidth)
+    , hasAssignedHeight_(hasAssignedHeight)
     , requestRedraw_(std::move(requestRedraw)) {}
 
 MountContext MountContext::childWithSharedScope(LayoutConstraints constraints,
                                                 LayoutHints hints) const {
   return MountContext{owner(), textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_, environmentBinding_};
+                      hints, requestRedraw_, environmentBinding_,
+                      hasAssignedWidth_, hasAssignedHeight_};
+}
+
+MountContext MountContext::childWithSharedScope(LayoutConstraints constraints,
+                                                LayoutHints hints,
+                                                bool hasAssignedWidth,
+                                                bool hasAssignedHeight) const {
+  return MountContext{owner(), textSystem_, measureContext_, constraints,
+                      hints, requestRedraw_, environmentBinding_,
+                      hasAssignedWidth, hasAssignedHeight};
 }
 
 MountContext MountContext::childWithOwnScope(LayoutConstraints constraints,
@@ -684,14 +734,16 @@ MountContext MountContext::childWithOwnScope(LayoutConstraints constraints,
     childScope->dispose();
   });
   return MountContext{std::move(childScope), textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_, environmentBinding_};
+                      hints, requestRedraw_, environmentBinding_,
+                      hasAssignedWidth_, hasAssignedHeight_};
 }
 
 MountContext MountContext::childWithEnvironment(EnvironmentBinding environment,
                                                 LayoutConstraints constraints,
                                                 LayoutHints hints) const {
   return MountContext{owner(), textSystem_, measureContext_, constraints,
-                      hints, requestRedraw_, std::move(environment)};
+                      hints, requestRedraw_, std::move(environment),
+                      hasAssignedWidth_, hasAssignedHeight_};
 }
 
 void MountContext::requestRedraw() const {
@@ -830,7 +882,10 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
   bool const widthAssigned = assignedWidth > 0.f && finiteWidthIsAssigned(ctx.hints());
   float const assignedHeight = finiteSpan(ctx.constraints().maxHeight);
   bool const heightConstrained = assignedHeight > 0.f &&
-                                 finiteHeightIsConstrained(ctx.constraints(), ctx.hints());
+                                 mainAxisExtentIsDefinite(layout::StackAxis::Vertical,
+                                                          ctx.constraints(), ctx.hints(),
+                                                          ctx.hasAssignedWidth(),
+                                                          ctx.hasAssignedHeight());
 
   LayoutConstraints childConstraints = stackChildConstraints(ctx.constraints());
   childConstraints.maxWidth = assignedWidth > 0.f ? assignedWidth
@@ -843,7 +898,8 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
   std::vector<Size> sizes;
   sizes.reserve(stack.children.size());
   for (Element const& child : stack.children) {
-    sizes.push_back(measureChild(child, ctx, childConstraints, childHints));
+    sizes.push_back(measureChild(child, ctx, childConstraints, childHints,
+                                 widthAssigned, false));
   }
   std::vector<std::size_t> const activeIndices = activeStackIndices(stack.children, sizes);
   std::vector<Size> const activeSizes = sizesForIndices(sizes, activeIndices);
@@ -873,7 +929,8 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
     }
 
     ctx.measureContext().setChildIndex(childIndex);
-    MountContext childCtx = ctx.childWithSharedScope(childConstraints, childHints);
+    MountContext childCtx = ctx.childWithSharedScope(childConstraints, childHints,
+                                                     widthAssigned, false);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
     Point const layoutOrigin =
@@ -915,11 +972,15 @@ std::unique_ptr<scenegraph::SceneNode> mountVStack(VStack const& stack, MountCon
   Alignment const alignment = stack.alignment;
   JustifyContent const justifyContent = stack.justifyContent;
   LayoutHints const relayoutHints = ctx.hints();
+  bool const relayoutAssignedWidth = ctx.hasAssignedWidth();
+  bool const relayoutAssignedHeight = ctx.hasAssignedHeight();
   rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, mountedChildren, spacing, alignment,
-                         justifyContent, relayoutHints](LayoutConstraints const& constraints) {
+                         justifyContent, relayoutHints, relayoutAssignedWidth,
+                         relayoutAssignedHeight](LayoutConstraints const& constraints) {
     layoutMountedVStack(*rawGroup, *mountedChildren, spacing, alignment,
-                        justifyContent, relayoutHints, constraints);
+                        justifyContent, relayoutHints, constraints,
+                        relayoutAssignedWidth, relayoutAssignedHeight);
   });
   return group;
 }
@@ -931,7 +992,11 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
   }
 
   float const assignedWidth = finiteSpan(ctx.constraints().maxWidth);
-  bool const widthConstrained = assignedWidth > 0.f && finiteWidthIsAssigned(ctx.hints());
+  bool const widthConstrained = assignedWidth > 0.f &&
+                                mainAxisExtentIsDefinite(layout::StackAxis::Horizontal,
+                                                         ctx.constraints(), ctx.hints(),
+                                                         ctx.hasAssignedWidth(),
+                                                         ctx.hasAssignedHeight());
   float const assignedHeight = finiteSpan(ctx.constraints().maxHeight);
   bool const heightConstrained = assignedHeight > 0.f &&
                                  finiteHeightIsConstrained(ctx.constraints(), ctx.hints());
@@ -946,7 +1011,8 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
   std::vector<Size> initialSizes;
   initialSizes.reserve(stack.children.size());
   for (Element const& child : stack.children) {
-    initialSizes.push_back(measureChild(child, ctx, initialConstraints, LayoutHints{}));
+    initialSizes.push_back(measureChild(child, ctx, initialConstraints, LayoutHints{},
+                                        false, stretchCrossAxis));
   }
   std::vector<std::size_t> const activeIndices = activeStackIndices(stack.children, initialSizes);
 
@@ -973,7 +1039,8 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
                                               : std::numeric_limits<float>::infinity();
     layout::clampLayoutMinToMax(childMeasure);
     ctx.measureContext().setChildIndex(childIndex);
-    Size const size = measureChild(stack.children[childIndex], ctx, childMeasure, rowHints);
+    Size const size = measureChild(stack.children[childIndex], ctx, childMeasure, rowHints,
+                                   true, stretchCrossAxis);
     rowSizes.push_back(size);
     rowInnerHeight = std::max(rowInnerHeight, size.height);
   }
@@ -1001,7 +1068,8 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
     }
 
     ctx.measureContext().setChildIndex(childIndex);
-    MountContext childCtx = ctx.childWithSharedScope(initialConstraints, rowHints);
+    MountContext childCtx = ctx.childWithSharedScope(initialConstraints, rowHints,
+                                                     false, stretchCrossAxis);
     auto node = child.mount(childCtx);
     Size mountedSize = active ? slot->assignedSize : Size{};
     Point const layoutOrigin =
@@ -1043,11 +1111,15 @@ std::unique_ptr<scenegraph::SceneNode> mountHStack(HStack const& stack, MountCon
   Alignment const alignment = stack.alignment;
   JustifyContent const justifyContent = stack.justifyContent;
   LayoutHints const relayoutHints = ctx.hints();
+  bool const relayoutAssignedWidth = ctx.hasAssignedWidth();
+  bool const relayoutAssignedHeight = ctx.hasAssignedHeight();
   rawGroup->setLayoutConstraints(ctx.constraints());
   rawGroup->setRelayout([rawGroup, mountedChildren, spacing, alignment,
-                         justifyContent, relayoutHints](LayoutConstraints const& constraints) {
+                         justifyContent, relayoutHints, relayoutAssignedWidth,
+                         relayoutAssignedHeight](LayoutConstraints const& constraints) {
     layoutMountedHStack(*rawGroup, *mountedChildren, spacing, alignment,
-                        justifyContent, relayoutHints, constraints);
+                        justifyContent, relayoutHints, constraints,
+                        relayoutAssignedWidth, relayoutAssignedHeight);
   });
   return group;
 }
@@ -1070,7 +1142,11 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
   std::vector<Size> sizes;
   sizes.reserve(stack.children.size());
   for (Element const& child : stack.children) {
-    Size const size = measureChild(child, ctx, childMeasure, childHints);
+    Size const size = measureChild(child, ctx, childMeasure, childHints,
+                                   assignedWidth > 0.f &&
+                                       stack.horizontalAlignment == Alignment::Stretch,
+                                   assignedHeight > 0.f &&
+                                       stack.verticalAlignment == Alignment::Stretch);
     sizes.push_back(size);
     width = std::max(width, size.width);
     height = std::max(height, size.height);
@@ -1097,7 +1173,10 @@ std::unique_ptr<scenegraph::SceneNode> mountZStack(ZStack const& stack, MountCon
       childFrame.height = height;
     }
     ctx.measureContext().setChildIndex(i);
-    MountContext childCtx = ctx.childWithSharedScope(childMeasure, childHints);
+    MountContext childCtx = ctx.childWithSharedScope(
+        childMeasure, childHints,
+        assignedWidth > 0.f && stack.horizontalAlignment == Alignment::Stretch,
+        assignedHeight > 0.f && stack.verticalAlignment == Alignment::Stretch);
     auto node = child.mount(childCtx);
     if (node) {
       relayoutToFixedSizeIfNeeded(*node, childFrame);

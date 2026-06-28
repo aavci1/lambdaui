@@ -108,19 +108,22 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
     innerCs.minHeight = std::min(innerCs.minHeight, innerCs.maxHeight);
   }
 
+  bool const innerAssignedWidth = ctx.hasAssignedWidth() || hasResolvedWidth;
+  bool const innerAssignedHeight = ctx.hasAssignedHeight() || hasResolvedHeight;
   Size sz{};
+  ContainerMeasureScope scope(ctx);
+  ctx.pushConstraints(innerCs, hints, innerAssignedWidth, innerAssignedHeight);
   if (m.overlay) {
-    ContainerMeasureScope scope(ctx);
     Size const szUnder = impl_->measure(ctx, innerCs, hints, textSystem);
     Size const szOver = m.overlay->measure(ctx, innerCs, hints, textSystem);
     sz.width = std::max(szUnder.width, szOver.width) + padW;
     sz.height = std::max(szUnder.height, szOver.height) + padH;
   } else {
-    ContainerMeasureScope scope(ctx);
     sz = impl_->measure(ctx, innerCs, hints, textSystem);
     sz.width += padW;
     sz.height += padH;
   }
+  ctx.popConstraints();
   if (hasResolvedWidth) {
     sz.width = resolvedWidth;
   }

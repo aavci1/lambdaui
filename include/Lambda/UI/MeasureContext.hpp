@@ -31,7 +31,11 @@ public:
 
   LayoutConstraints const& constraints() const;
   LayoutHints const& hints() const;
+  bool hasAssignedWidth() const noexcept;
+  bool hasAssignedHeight() const noexcept;
   void pushConstraints(LayoutConstraints const& c, LayoutHints hints = {});
+  void pushConstraints(LayoutConstraints const& c, LayoutHints hints,
+                       bool hasAssignedWidth, bool hasAssignedHeight);
   void popConstraints();
 
   void pushChildIndex(bool pushKeySegment = true);
