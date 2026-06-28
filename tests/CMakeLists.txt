@@ -24,6 +24,7 @@ set(_lambda_test_sources
   GlyphAtlasAllocatorTests.cpp
   LayoutAlgorithmTests.cpp
   LayoutRelayoutParityTests.cpp
+  LinuxInputMappingTests.cpp
   main.cpp
   MountRootTests.cpp
   ParagraphCacheTests.cpp

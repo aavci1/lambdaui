@@ -4,10 +4,10 @@
 #include <Lambda/UI/Application.hpp>
 #include <Lambda/UI/EventQueue.hpp>
 
+#include "Platform/Linux/Common/LinuxInputMapping.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
 
 #include <libinput.h>
-#include <linux/input-event-codes.h>
 
 #include <algorithm>
 #include <chrono>
@@ -27,20 +27,6 @@ linux_platform::XkbState& xkbState() {
   static bool initialized = state.createDefaultKeymap();
   (void)initialized;
   return state;
-}
-
-MouseButton mouseButtonFromLinux(std::uint32_t button) {
-  if (button == BTN_LEFT) return MouseButton::Left;
-  if (button == BTN_RIGHT) return MouseButton::Right;
-  if (button == BTN_MIDDLE) return MouseButton::Middle;
-  return MouseButton::Other;
-}
-
-std::uint8_t buttonMaskBit(std::uint32_t button) {
-  if (button == BTN_LEFT) return 1u;
-  if (button == BTN_RIGHT) return 2u;
-  if (button == BTN_MIDDLE) return 4u;
-  return 0u;
 }
 
 bool debugKmsInput() {
@@ -308,11 +294,11 @@ void KmsApplication::dispatchPendingInput() {
                     .button = button,
                     .pressed = pressed,
                     .timeMs = libinput_event_pointer_get_time(pointer)});
-      std::uint8_t bit = buttonMaskBit(button);
+      std::uint8_t bit = linux_platform::mouseButtonMaskBitFromLinuxButton(button);
       if (pressed) pressedButtons_ |= bit;
       else pressedButtons_ &= static_cast<std::uint8_t>(~bit);
       routePointer(pointerPos_, pressed ? InputEvent::Kind::PointerDown : InputEvent::Kind::PointerUp,
-                   mouseButtonFromLinux(button));
+                   linux_platform::mouseButtonFromLinuxButton(button));
       break;
     }
     case LIBINPUT_EVENT_POINTER_AXIS: {
@@ -384,7 +370,7 @@ void KmsApplication::dispatchPendingInput() {
       if (libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_DOWN ||
           libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_UP) {
         emitRawInput({.kind = platform::KmsInputEvent::Kind::PointerButton,
-                      .button = BTN_LEFT,
+                      .button = linux_platform::kEvdevButtonLeft,
                       .pressed = libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_DOWN,
                       .timeMs = libinput_event_touch_get_time(touch)});
       }
@@ -399,12 +385,12 @@ void KmsApplication::dispatchPendingInput() {
       global.x += p.x;
       global.y += p.y;
       if (libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_DOWN) {
-        pressedButtons_ |= 1u;
+        pressedButtons_ |= linux_platform::kPressedPrimaryButton;
         routePointer(global, InputEvent::Kind::PointerMove);
         routePointer(global, InputEvent::Kind::PointerDown, MouseButton::Left);
       } else if (libinput_event_get_type(event) == LIBINPUT_EVENT_TOUCH_UP) {
         routePointer(pointerPos_, InputEvent::Kind::PointerUp, MouseButton::Left);
-        pressedButtons_ &= static_cast<std::uint8_t>(~1u);
+        pressedButtons_ &= static_cast<std::uint8_t>(~linux_platform::kPressedPrimaryButton);
       } else {
         routePointer(global, InputEvent::Kind::PointerMove);
       }

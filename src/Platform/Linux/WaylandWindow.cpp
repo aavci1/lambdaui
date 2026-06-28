@@ -1,6 +1,7 @@
 #include "UI/Platform/WindowFactory.hpp"
 #include "UI/Platform/Application.hpp"
 #include "UI/Platform/WindowEventPump.hpp"
+#include "Platform/Linux/Common/LinuxInputMapping.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
@@ -30,7 +31,6 @@
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
-#include <linux/input-event-codes.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/mman.h>
@@ -183,13 +183,6 @@ Point logicalPointFromFixed(wl_fixed_t x, wl_fixed_t y, float scaleX, float scal
   (void)scaleX;
   (void)scaleY;
   return {static_cast<float>(wl_fixed_to_double(x)), static_cast<float>(wl_fixed_to_double(y))};
-}
-
-MouseButton mouseButtonFromLinux(std::uint32_t button) {
-  if (button == BTN_LEFT) return MouseButton::Left;
-  if (button == BTN_RIGHT) return MouseButton::Right;
-  if (button == BTN_MIDDLE) return MouseButton::Middle;
-  return MouseButton::Other;
 }
 
 bool debugDecorations() {
@@ -1732,7 +1725,7 @@ public:
       dispatchPopoverPointerButton(*popover, button, state);
       return;
     }
-    if (!popupMenu_ || popupMenu_->surface != surface || button != BTN_LEFT) {
+    if (!popupMenu_ || popupMenu_->surface != surface || button != linux_platform::kEvdevButtonLeft) {
       return;
     }
     int const row = popupMenu_->hoverRow;
@@ -1807,10 +1800,10 @@ public:
 
   void handlePointerButton(std::uint32_t serial, std::uint32_t button, std::uint32_t state) {
     flushPendingPointerScroll();
-    std::uint8_t const bit = button == BTN_LEFT ? 1u : button == BTN_RIGHT ? 2u : button == BTN_MIDDLE ? 4u : 0u;
+    std::uint8_t const bit = linux_platform::mouseButtonMaskBitFromLinuxButton(button);
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) pressedButtons_ |= bit;
     else pressedButtons_ &= static_cast<std::uint8_t>(~bit);
-    if (button == BTN_LEFT) {
+    if (button == linux_platform::kEvdevButtonLeft) {
       lastPointerButtonSerial_ = state == WL_POINTER_BUTTON_STATE_PRESSED ? serial : 0u;
     }
     Application::instance().eventQueue().post(InputEvent{.kind = state == WL_POINTER_BUTTON_STATE_PRESSED
@@ -1818,7 +1811,7 @@ public:
                                                                      : InputEvent::Kind::PointerUp,
                                                          .handle = handle_,
                                                          .position = pointerPos_,
-                                                         .button = mouseButtonFromLinux(button),
+                                                         .button = linux_platform::mouseButtonFromLinuxButton(button),
                                                          .pressedButtons = pressedButtons_,
                                                          .platformSerial = serial});
   }
@@ -2114,7 +2107,7 @@ private:
       return;
     }
     ++state.dispatchDepth;
-    MouseButton const mouseButton = mouseButtonFromLinux(button);
+    MouseButton const mouseButton = linux_platform::mouseButtonFromLinuxButton(button);
     if (buttonState == WL_POINTER_BUTTON_STATE_PRESSED) {
       state.host->pointerDown(state.pointerPos, mouseButton, currentModifiers_);
     } else {
