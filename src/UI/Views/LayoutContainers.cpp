@@ -128,6 +128,10 @@ void rewindMeasuredChildren(MeasureContext& ctx) {
   ctx.rewindChildKeyIndex();
 }
 
+bool sameFlexMainSize(float a, float b) {
+  return std::fabs(a - b) <= layout::kFlexEpsilon;
+}
+
 } // namespace
 
 Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
@@ -219,28 +223,55 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
       layout::layoutStackMainAxis(stackChildren, spacing, assignedWidth, widthConstrained,
                                   justifyContent);
 
-  rewindMeasuredChildren(ctx);
-
   LayoutHints rowHints{};
   rowHints.hStackCrossAlign = alignment;
   std::vector<Size> rowSizes;
   rowSizes.reserve(activeIndices.size());
   float rowInnerHeight = 0.f;
+
+  bool needsSecondPass = false;
   for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
     std::size_t const childIndex = activeIndices[layoutIndex];
-    LayoutConstraints childMeasure = constraints;
-    childMeasure.minWidth = 0.f;
-    childMeasure.minHeight = 0.f;
-    childMeasure.maxWidth = layoutIndex < mainLayout.mainSizes.size()
-                                ? mainLayout.mainSizes[layoutIndex]
-                                : std::numeric_limits<float>::infinity();
-    childMeasure.maxHeight = stretchCrossAxis ? assignedHeight
-                                              : std::numeric_limits<float>::infinity();
-    layout::clampLayoutMinToMax(childMeasure);
-    Size const size = measureChild(children[childIndex], ctx, childMeasure, rowHints, textSystem,
-                                   true, stretchCrossAxis);
-    rowSizes.push_back(size);
-    rowInnerHeight = std::max(rowInnerHeight, size.height);
+    float const assignedChildWidth = layoutIndex < mainLayout.mainSizes.size()
+                                         ? mainLayout.mainSizes[layoutIndex]
+                                         : initialSizes[childIndex].width;
+    if (!sameFlexMainSize(assignedChildWidth, initialSizes[childIndex].width)) {
+      needsSecondPass = true;
+      break;
+    }
+  }
+
+  if (!needsSecondPass) {
+    for (std::size_t const childIndex : activeIndices) {
+      rowSizes.push_back(initialSizes[childIndex]);
+      rowInnerHeight = std::max(rowInnerHeight, initialSizes[childIndex].height);
+    }
+  } else {
+    rewindMeasuredChildren(ctx);
+    for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
+      std::size_t const childIndex = activeIndices[layoutIndex];
+      float const assignedChildWidth = layoutIndex < mainLayout.mainSizes.size()
+                                           ? mainLayout.mainSizes[layoutIndex]
+                                           : initialSizes[childIndex].width;
+      if (sameFlexMainSize(assignedChildWidth, initialSizes[childIndex].width)) {
+        rowSizes.push_back(initialSizes[childIndex]);
+        rowInnerHeight = std::max(rowInnerHeight, initialSizes[childIndex].height);
+        ctx.advanceChildSlot();
+        continue;
+      }
+
+      LayoutConstraints childMeasure = constraints;
+      childMeasure.minWidth = 0.f;
+      childMeasure.minHeight = 0.f;
+      childMeasure.maxWidth = assignedChildWidth;
+      childMeasure.maxHeight = stretchCrossAxis ? assignedHeight
+                                                : std::numeric_limits<float>::infinity();
+      layout::clampLayoutMinToMax(childMeasure);
+      Size const size = measureChild(children[childIndex], ctx, childMeasure, rowHints, textSystem,
+                                     true, stretchCrossAxis);
+      rowSizes.push_back(size);
+      rowInnerHeight = std::max(rowInnerHeight, size.height);
+    }
   }
 
   float const rowCrossSize = heightConstrained ? assignedHeight : rowInnerHeight;

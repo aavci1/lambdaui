@@ -106,6 +106,49 @@ struct ConstraintProbe {
   }
 };
 
+struct CountingLeaf {
+  int* measures = nullptr;
+  lambdaui::Size size{10.f, 10.f};
+
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx, lambdaui::LayoutConstraints const&,
+                         lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
+    if (measures) {
+      ++*measures;
+    }
+    ctx.advanceChildSlot();
+    return size;
+  }
+
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext&) const {
+    return nullptr;
+  }
+};
+
+struct WidthResponsiveLeaf {
+  int* measures = nullptr;
+  std::vector<lambdaui::ComponentKey>* keys = nullptr;
+
+  lambdaui::Size measure(lambdaui::MeasureContext& ctx,
+                         lambdaui::LayoutConstraints const& constraints,
+                         lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
+    if (measures) {
+      ++*measures;
+    }
+    if (keys) {
+      keys->push_back(ctx.currentElementKey());
+    }
+    ctx.advanceChildSlot();
+    float const width = std::isfinite(constraints.maxWidth)
+                            ? std::max(0.f, constraints.maxWidth)
+                            : 10.f;
+    return {width, width * 0.25f};
+  }
+
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext&) const {
+    return nullptr;
+  }
+};
+
 struct NodeSnapshot {
   lambdaui::Point position{};
   lambdaui::Size size{};
@@ -166,6 +209,17 @@ lambdaui::Size measureElement(lambdaui::Element element,
   MeasuringTextSystem textSystem;
   lambdaui::MeasureContext ctx{textSystem, testEnvironment()};
   return element.measure(ctx, constraints, hints, textSystem);
+}
+
+lambdaui::Element nestedNonFlexHStack(int depth, int* measures) {
+  if (depth <= 0) {
+    return lambdaui::Element{CountingLeaf{.measures = measures}};
+  }
+  return lambdaui::Element{lambdaui::HStack{
+      .children = lambdaui::children(
+          nestedNonFlexHStack(depth - 1, measures),
+          nestedNonFlexHStack(depth - 1, measures)),
+  }};
 }
 
 struct RelayoutProbeFrame {
@@ -349,6 +403,74 @@ TEST_CASE("HStack and VStack flex gating stays natural under infinite main-axis 
 
   CHECK(horizontal.width == doctest::Approx(vertical.height));
   CHECK(horizontal.width == doctest::Approx(10.f));
+}
+
+TEST_CASE("HStack measures non-flex children once") {
+  int firstMeasures = 0;
+  int secondMeasures = 0;
+  int thirdMeasures = 0;
+
+  (void)measureElement(
+      lambdaui::Element{lambdaui::HStack{
+          .children = lambdaui::children(
+              lambdaui::Element{CountingLeaf{.measures = &firstMeasures}},
+              lambdaui::Element{CountingLeaf{.measures = &secondMeasures}},
+              lambdaui::Element{CountingLeaf{.measures = &thirdMeasures}}),
+      }},
+      lambdaui::LayoutConstraints{
+          .maxWidth = 200.f,
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 200.f,
+          .minHeight = 0.f,
+      });
+
+  CHECK(firstMeasures == 1);
+  CHECK(secondMeasures == 1);
+  CHECK(thirdMeasures == 1);
+}
+
+TEST_CASE("Nested non-flex HStacks measure leaves linearly") {
+  int measures = 0;
+
+  (void)measureElement(
+      nestedNonFlexHStack(4, &measures),
+      lambdaui::LayoutConstraints{
+          .maxWidth = 500.f,
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 500.f,
+          .minHeight = 0.f,
+      });
+
+  CHECK(measures == 16);
+}
+
+TEST_CASE("HStack remeasures children whose flex width changes") {
+  int fixedMeasures = 0;
+  int flexMeasures = 0;
+  std::vector<lambdaui::ComponentKey> flexKeys;
+
+  lambdaui::Size const measured = measureElement(
+      lambdaui::Element{lambdaui::HStack{
+          .spacing = 0.f,
+          .children = lambdaui::children(
+              lambdaui::Element{CountingLeaf{.measures = &fixedMeasures}},
+              lambdaui::Element{WidthResponsiveLeaf{
+                  .measures = &flexMeasures,
+                  .keys = &flexKeys,
+              }}.flex(1.f, 1.f, 0.f)),
+      }},
+      lambdaui::LayoutConstraints{
+          .maxWidth = 100.f,
+          .maxHeight = std::numeric_limits<float>::infinity(),
+          .minWidth = 100.f,
+          .minHeight = 0.f,
+      });
+
+  CHECK(fixedMeasures == 1);
+  CHECK(flexMeasures == 2);
+  CHECK(measured.height == doctest::Approx(22.5f));
+  REQUIRE(flexKeys.size() == 2);
+  CHECK(flexKeys[0] == flexKeys[1]);
 }
 
 TEST_CASE("stack, grid, and scroll mount geometry matches same-constraint relayout") {
