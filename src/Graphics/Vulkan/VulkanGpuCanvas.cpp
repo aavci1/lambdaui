@@ -7,6 +7,7 @@
 
 #include "Graphics/CanvasGeometry.hpp"
 #include "Graphics/PathFlattener.hpp"
+#include "Graphics/PathTessellationCache.hpp"
 #include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
 #include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
@@ -44,7 +45,6 @@
 #include <iomanip>
 #include <iterator>
 #include <limits>
-#include <list>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -120,30 +120,6 @@ struct ImageBatch {
   std::uint32_t count = 0;
 };
 
-struct PathCacheKey {
-  std::uint64_t pathHash = 0;
-  std::uint64_t styleHash = 0;
-  int viewportW = 0;
-  int viewportH = 0;
-
-  bool operator==(PathCacheKey const &) const = default;
-};
-
-struct PathCacheKeyHash {
-  std::size_t operator()(PathCacheKey const &key) const noexcept {
-    std::size_t h = static_cast<std::size_t>(key.pathHash);
-    h ^= static_cast<std::size_t>(key.styleHash + 0x9e3779b97f4a7c15ULL + (h << 6u) + (h >> 2u));
-    h ^= static_cast<std::size_t>(key.viewportW) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
-    h ^= static_cast<std::size_t>(key.viewportH) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
-    return h;
-  }
-};
-
-struct CachedPath {
-  std::vector<VulkanPathVertex> vertices;
-  std::list<PathCacheKey>::iterator lruIt;
-};
-
 void putColor(float out[4], Color c, float opacity = 1.f) {
   out[0] = c.r;
   out[1] = c.g;
@@ -179,75 +155,6 @@ void hashBytes(std::uint64_t &h, void const *data, std::size_t size) {
 template <typename T>
 void hashValue(std::uint64_t &h, T const &value) {
   hashBytes(h, &value, sizeof(value));
-}
-
-void hashColor(std::uint64_t &h, Color c) {
-  hashValue(h, c.r);
-  hashValue(h, c.g);
-  hashValue(h, c.b);
-  hashValue(h, c.a);
-}
-
-void hashPoint(std::uint64_t &h, Point p) {
-  hashValue(h, p.x);
-  hashValue(h, p.y);
-}
-
-void hashStops(std::uint64_t &h, std::array<GradientStop, kMaxGradientStops> const &stops, std::uint8_t count) {
-  hashValue(h, count);
-  for (std::uint8_t i = 0; i < count; ++i) {
-    hashValue(h, stops[i].position);
-    hashColor(h, stops[i].color);
-  }
-}
-
-std::uint64_t hashFill(FillStyle const &fill) {
-  std::uint64_t h = 14695981039346656037ULL;
-  hashValue(h, fill.fillRule);
-  hashValue(h, fill.data.index());
-  Color solid{};
-  if (fill.solidColor(&solid)) {
-    hashColor(h, solid);
-  }
-  LinearGradient linear{};
-  if (fill.linearGradient(&linear)) {
-    hashPoint(h, linear.start);
-    hashPoint(h, linear.end);
-    hashStops(h, linear.stops, linear.stopCount);
-  }
-  RadialGradient radial{};
-  if (fill.radialGradient(&radial)) {
-    hashPoint(h, radial.center);
-    hashValue(h, radial.radius);
-    hashStops(h, radial.stops, radial.stopCount);
-  }
-  ConicalGradient conical{};
-  if (fill.conicalGradient(&conical)) {
-    hashPoint(h, conical.center);
-    hashValue(h, conical.startAngleRadians);
-    hashStops(h, conical.stops, conical.stopCount);
-  }
-  return h;
-}
-
-std::uint64_t hashStroke(StrokeStyle const &stroke) {
-  std::uint64_t h = 14695981039346656037ULL;
-  hashValue(h, stroke.type);
-  hashColor(h, stroke.color);
-  hashValue(h, stroke.width);
-  hashValue(h, stroke.cap);
-  hashValue(h, stroke.join);
-  hashValue(h, stroke.miterLimit);
-  return h;
-}
-
-std::uint64_t hashTransform(Mat3 const &transform, float opacity) {
-  std::uint64_t h = 14695981039346656037ULL;
-  for (float value : transform.m) {
-    hashValue(h, value);
-  }
-  hashValue(h, opacity);
-  return h;
 }
 
 Rect unionRects(Rect a, Rect b) {
@@ -3347,24 +3254,22 @@ private:
     if (path.isEmpty())
       return;
     RecordingTarget target = recordingTarget();
-    PathCacheKey const cacheKey{
+    PathTessellationCacheKey const cacheKey{
         .pathHash = path.contentHash(),
-        .styleHash = hashFill(fill) ^ (hashStroke(stroke) + 0x9e3779b97f4a7c15ULL) ^
-                     (hashTransform(state_.transform, state_.opacity) << 1u) ^
-                     (currentRoundedClipHash() << 2u),
+        .styleHash = pathTessellationStyleHash(fill, stroke, state_.transform, state_.opacity,
+                                               currentRoundedClipHash()),
         .viewportW = width_,
         .viewportH = height_,
     };
-    if (auto it = pathCache_.find(cacheKey); it != pathCache_.end()) {
-      pathCacheLru_.splice(pathCacheLru_.end(), pathCacheLru_, it->second.lruIt);
+    if (auto const* cached = pathCache_.find(cacheKey)) {
       std::uint32_t const firstVertex = static_cast<std::uint32_t>(target.pathVerts.size());
-      target.pathVerts.insert(target.pathVerts.end(), it->second.vertices.begin(), it->second.vertices.end());
-      if (!it->second.vertices.empty()) {
+      target.pathVerts.insert(target.pathVerts.end(), cached->begin(), cached->end());
+      if (!cached->empty()) {
         appendSignedDrawOp(target,
                            makeDrawOp(DrawOp::Kind::Path,
                                       nullptr,
                                       firstVertex,
-                                      static_cast<std::uint32_t>(it->second.vertices.size())));
+                                      static_cast<std::uint32_t>(cached->size())));
       }
       return;
     }
@@ -3434,34 +3339,8 @@ private:
     std::uint32_t const vertexCount = static_cast<std::uint32_t>(target.pathVerts.size()) - firstVertex;
     if (vertexCount > 0) {
       std::vector<VulkanPathVertex> cached(target.pathVerts.begin() + firstVertex, target.pathVerts.end());
-      pathCacheLru_.push_back(cacheKey);
-      auto lruIt = std::prev(pathCacheLru_.end());
-      auto [it, inserted] = pathCache_.emplace(cacheKey, CachedPath{std::move(cached), lruIt});
-      if (inserted) {
-        cachedPathVertexCount_ += it->second.vertices.size();
-      } else {
-        pathCacheLru_.erase(lruIt);
-      }
-      trimPathCache();
+      pathCache_.insert(cacheKey, std::move(cached));
       appendSignedDrawOp(target, makeDrawOp(DrawOp::Kind::Path, nullptr, firstVertex, vertexCount));
-    }
-  }
-
-  void trimPathCache() {
-    constexpr std::size_t kMaxCachedPathVertices = 500'000;
-    while (cachedPathVertexCount_ > kMaxCachedPathVertices && !pathCache_.empty()) {
-      if (pathCacheLru_.empty()) {
-        pathCache_.clear();
-        cachedPathVertexCount_ = 0;
-        return;
-      }
-      PathCacheKey const key = pathCacheLru_.front();
-      auto it = pathCache_.find(key);
-      if (it != pathCache_.end()) {
-        cachedPathVertexCount_ -= it->second.vertices.size();
-        pathCache_.erase(it);
-      }
-      pathCacheLru_.pop_front();
     }
   }
 
@@ -5083,9 +4962,7 @@ private:
   std::vector<ImageBatch> batches_;
   std::vector<DrawOp> ops_;
   std::vector<VulkanPathVertex> pathVerts_;
-  std::unordered_map<PathCacheKey, CachedPath, PathCacheKeyHash> pathCache_;
-  std::list<PathCacheKey> pathCacheLru_;
-  std::size_t cachedPathVertexCount_ = 0;
+  BasicPathTessellationCache<VulkanPathVertex> pathCache_;
 
   VkInstance instance_ = VK_NULL_HANDLE;
   VkSurfaceKHR surface_ = VK_NULL_HANDLE;

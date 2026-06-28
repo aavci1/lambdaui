@@ -29,6 +29,7 @@ set(_lambda_test_sources
   MountRootTests.cpp
   ParagraphCacheTests.cpp
   ParagraphCacheIncrementalTests.cpp
+  PathTessellationCacheTests.cpp
   PathFlattenerTests.cpp
   Reactive/SignalTests.cpp
   Reactive/ComputedTests.cpp

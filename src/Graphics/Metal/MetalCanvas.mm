@@ -16,6 +16,7 @@
 #include "Graphics/Metal/MetalDeviceResources.hpp"
 #include "Graphics/Metal/MetalFrameRecorder.hpp"
 #include "Graphics/Metal/MetalPathRasterizer.hpp"
+#include "Graphics/PathTessellationCache.hpp"
 #include "Debug/PerfCounters.hpp"
 
 namespace lambdaui {
@@ -1197,26 +1198,12 @@ public:
         (void)fillProbe;
         save();
         translate(shadow.offset.x, shadow.offset.y);
-        std::size_t const nShadow = recorder.pathOps.size();
-        metalPathRasterizeToMesh(path, FillStyle::solid(shadow.color), StrokeStyle::none(), currentState().transform,
-                                 dpiScaleX_, dpiScaleY_, effectiveOpacity(), frameDrawableW_, frameDrawableH_,
-                                 recorder.pathVerts, recorder.pathOps, recorder.opOrder,
-                                 currentState().blendMode);
-        if (recorder.pathOps.size() > nShadow) {
-          tagOpWithClip(recorder.pathOps.back(), clipScissorValid_, clipScissor_, clipRoundedStack_);
-        }
+        appendPathMesh(path, FillStyle::solid(shadow.color), StrokeStyle::none());
         restore();
       }
     }
 
-    std::size_t const nOpsBefore = recorder.pathOps.size();
-    metalPathRasterizeToMesh(path, fs, ss, currentState().transform, dpiScaleX_, dpiScaleY_, effectiveOpacity(),
-                             frameDrawableW_, frameDrawableH_, recorder.pathVerts, recorder.pathOps,
-                             recorder.opOrder,
-                             currentState().blendMode);
-    if (recorder.pathOps.size() > nOpsBefore) {
-      tagOpWithClip(recorder.pathOps.back(), clipScissorValid_, clipScissor_, clipRoundedStack_);
-    }
+    appendPathMesh(path, fs, ss);
   }
 
   void drawCircle(Point center, float radius, FillStyle const& fs, StrokeStyle const& ss) override {
@@ -1547,6 +1534,7 @@ private:
 
   MetalFrameRecorder frame_;
   MetalFrameRecorder* captureRecorder_{nullptr};
+  PathTessellationCache pathCache_;
   std::vector<GpuState> stateStack_;
 
   MTLScissorRect clipScissor_{};
@@ -1557,6 +1545,68 @@ private:
   GpuState const& currentState() const { return stateStack_.back(); }
   MetalFrameRecorder& activeRecorder() { return captureRecorder_ ? *captureRecorder_ : frame_; }
   MetalFrameRecorder const& activeRecorder() const { return captureRecorder_ ? *captureRecorder_ : frame_; }
+
+  PathTessellationCacheKey pathMeshCacheKey(Path const& path, FillStyle const& fill,
+                                            StrokeStyle const& stroke) const {
+    return PathTessellationCacheKey{
+        .pathHash = path.contentHash(),
+        .styleHash = pathTessellationStyleHash(fill, stroke, currentState().transform, effectiveOpacity(),
+                                               pathTessellationScaleHash(dpiScaleX_, dpiScaleY_)),
+        .viewportW = static_cast<int>(std::lround(frameDrawableW_)),
+        .viewportH = static_cast<int>(std::lround(frameDrawableH_)),
+    };
+  }
+
+  bool appendCachedPathMesh(MetalFrameRecorder& recorder, std::vector<PathVertex> const& vertices) {
+    if (vertices.empty()) {
+      return false;
+    }
+    std::uint32_t const firstVertex = static_cast<std::uint32_t>(recorder.pathVerts.size());
+    std::size_t const vertexCapacity = recorder.pathVerts.capacity();
+    recorder.pathVerts.insert(recorder.pathVerts.end(), vertices.begin(), vertices.end());
+    recordVectorCapacityIncrease(vertexCapacity, recorder.pathVerts);
+
+    MetalPathOp op{};
+    op.pathStart = firstVertex;
+    op.pathCount = static_cast<std::uint32_t>(vertices.size());
+    op.blendMode = currentState().blendMode;
+    tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
+
+    std::size_t const orderCapacity = recorder.opOrder.capacity();
+    std::size_t const pathOpCapacity = recorder.pathOps.capacity();
+    recorder.opOrder.push_back(MetalOpRef{
+        .kind = MetalOpRef::Path,
+        .index = static_cast<std::uint32_t>(recorder.pathOps.size()),
+    });
+    recorder.pathOps.push_back(op);
+    recordVectorCapacityIncrease(orderCapacity, recorder.opOrder);
+    recordVectorCapacityIncrease(pathOpCapacity, recorder.pathOps);
+    return true;
+  }
+
+  bool appendPathMesh(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) {
+    if (frameDrawableW_ < 1.f || frameDrawableH_ < 1.f) {
+      return false;
+    }
+    MetalFrameRecorder& recorder = activeRecorder();
+    PathTessellationCacheKey const cacheKey = pathMeshCacheKey(path, fill, stroke);
+    if (auto const* cached = pathCache_.find(cacheKey)) {
+      return appendCachedPathMesh(recorder, *cached);
+    }
+
+    std::size_t const pathBegin = recorder.pathVerts.size();
+    std::size_t const nOpsBefore = recorder.pathOps.size();
+    metalPathRasterizeToMesh(path, fill, stroke, currentState().transform, dpiScaleX_, dpiScaleY_,
+                             effectiveOpacity(), frameDrawableW_, frameDrawableH_, recorder.pathVerts,
+                             recorder.pathOps, recorder.opOrder, currentState().blendMode);
+    if (recorder.pathOps.size() <= nOpsBefore) {
+      return false;
+    }
+    tagOpWithClip(recorder.pathOps.back(), clipScissorValid_, clipScissor_, clipRoundedStack_);
+    pathCache_.insert(cacheKey, PathTessellationCache::VertexList(recorder.pathVerts.begin() + pathBegin,
+                                                                  recorder.pathVerts.end()));
+    return true;
+  }
 
   static id<MTLTexture> textureFromSpec(MetalRenderTargetSpec const& spec) {
     return (__bridge id<MTLTexture>)spec.texture;
