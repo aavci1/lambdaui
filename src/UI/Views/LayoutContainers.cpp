@@ -158,6 +158,7 @@ Size VStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   childHints.vStackCrossAlign = alignment;
   std::vector<Size> sizes;
   sizes.reserve(children.size());
+  // Vertical children receive their final cross width up front, so their heights are stable in one pass.
   for (std::size_t i = 0; i < children.size(); ++i) {
     sizes.push_back(measureChild(children[i], ctx, childConstraints, childHints, textSystem,
                                  widthAssigned, false));
@@ -229,6 +230,7 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
   rowSizes.reserve(activeIndices.size());
   float rowInnerHeight = 0.f;
 
+  // Horizontal child height can depend on final width; remeasure only children whose width changed.
   bool needsSecondPass = false;
   for (std::size_t layoutIndex = 0; layoutIndex < activeIndices.size(); ++layoutIndex) {
     std::size_t const childIndex = activeIndices[layoutIndex];
