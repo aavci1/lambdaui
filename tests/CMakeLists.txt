@@ -21,6 +21,7 @@ set(_lambda_test_sources
   EventQueueTests.cpp
   FileDialogTests.cpp
   ForTests.cpp
+  GlyphAtlasAllocatorTests.cpp
   LayoutAlgorithmTests.cpp
   LayoutRelayoutParityTests.cpp
   main.cpp

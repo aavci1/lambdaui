@@ -23,6 +23,7 @@ set(LAMBDA_GRAPHICS_SOURCES
   Graphics/Styles.cpp
   Graphics/AttributedString.cpp
   Graphics/Canvas.cpp
+  Graphics/GlyphAtlasAllocator.cpp
   Graphics/ImageLoader.cpp
   Graphics/RenderTarget.cpp
   Graphics/TextCacheDebugOverlay.cpp

@@ -3331,6 +3331,8 @@ private:
     auto &res = resources();
     res.atlas.width = 2048;
     res.atlas.height = 2048;
+    res.glyphAtlasAllocator.reset(static_cast<std::uint32_t>(res.atlas.width),
+                                  static_cast<std::uint32_t>(res.atlas.height));
     res.atlasPixels.assign(static_cast<std::size_t>(res.atlas.width) * res.atlas.height, Rgba{255, 255, 255, 0});
     createTexture(res.atlas,
                   res.atlas.width,

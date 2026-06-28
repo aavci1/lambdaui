@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Graphics/GlyphAtlasAllocator.hpp"
 #include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
 
 #include <Lambda/Core/Geometry.hpp>
@@ -29,21 +30,8 @@ struct Rgba {
   std::uint8_t a = 255;
 };
 
-struct VulkanGlyphKey {
-  std::uint32_t fontId = 0;
-  std::uint32_t glyphId = 0;
-  std::uint16_t size = 0;
-  bool operator==(VulkanGlyphKey const&) const = default;
-};
-
-struct VulkanGlyphKeyHash {
-  std::size_t operator()(VulkanGlyphKey const& key) const noexcept {
-    std::size_t h = std::hash<std::uint32_t>{}(key.fontId);
-    h ^= std::hash<std::uint32_t>{}(key.glyphId) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
-    h ^= std::hash<std::uint16_t>{}(key.size) + 0x9e3779b9 + (h << 6u) + (h >> 2u);
-    return h;
-  }
-};
+using VulkanGlyphKey = GlyphAtlasKey;
+using VulkanGlyphKeyHash = GlyphAtlasKeyHash;
 
 struct VulkanGlyphSlot {
   float u0 = 0;
@@ -116,12 +104,10 @@ struct SharedVulkanCore {
     std::vector<Rgba> atlasPixels;
     int atlasTextureWidth = 0;
     int atlasTextureHeight = 0;
-    int atlasX = 1;
-    int atlasY = 1;
-    int atlasRowH = 0;
     bool atlasDirty = false;
     std::uint64_t atlasGeneration = 1;
     std::uint64_t atlasUseCounter = 0;
+    GlyphAtlasAllocator glyphAtlasAllocator;
     std::unordered_map<VulkanGlyphKey, VulkanGlyphSlot, VulkanGlyphKeyHash> glyphs;
   } resources;
 

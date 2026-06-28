@@ -4,33 +4,18 @@
 
 #include "Graphics/Metal/GlyphAtlas.hpp"
 
-#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
 namespace lambdaui {
 
-std::size_t GlyphKeyHash::operator()(GlyphKey const& k) const noexcept {
-  std::size_t h = std::hash<std::uint32_t>{}(k.fontId);
-  h ^= std::hash<std::uint32_t>{}(k.glyphId) + 0x9e3779b9 + (h << 6) + (h >> 2);
-  h ^= std::hash<std::uint16_t>{}(k.sizeQ8) + 0x9e3779b9 + (h << 6) + (h >> 2);
-  return h;
-}
-
-namespace {
-
-constexpr std::uint32_t kMaxAtlasDim = 4096;
-constexpr std::uint32_t kCellPad = 1; // 1px border inside cell around glyph bitmap
-
-} // namespace
-
 GlyphAtlas::GlyphAtlas(id<MTLDevice> device, TextSystem& textSystem, id<MTLCommandQueue> queue)
     : device_(device), queue_(queue ? queue : [device_ newCommandQueue]), textSystem_(textSystem) {
-  texture_ = createTexture(atlasWidth_, atlasHeight_);
+  texture_ = createTexture(allocator_.width(), allocator_.height());
   if (!texture_ || !queue_) {
     throw std::runtime_error("GlyphAtlas: failed to create atlas resources");
   }
-  if (!clearTexture(texture_, atlasWidth_, atlasHeight_)) {
+  if (!clearTexture(texture_, allocator_.width(), allocator_.height())) {
     throw std::runtime_error("GlyphAtlas: failed to clear atlas texture");
   }
 }
@@ -135,11 +120,7 @@ void GlyphAtlas::flushUploads(id<MTLCommandBuffer> commandBuffer) {
 }
 
 bool GlyphAtlas::pressureHighForHeadroom() const {
-  if (atlasWidth_ >= kMaxAtlasDim || atlasHeight_ >= kMaxAtlasDim) {
-    return false;
-  }
-  std::uint64_t const usedBottom = static_cast<std::uint64_t>(shelfY_) + static_cast<std::uint64_t>(shelfH_);
-  return usedBottom * 100u > static_cast<std::uint64_t>(atlasHeight_) * 75u;
+  return allocator_.pressureHighForHeadroom();
 }
 
 void GlyphAtlas::prepareForFrameBegin() {
@@ -158,14 +139,15 @@ bool GlyphAtlas::grow() {
     pendingGrow_ = true;
     return false;
   }
-  if (atlasWidth_ >= kMaxAtlasDim || atlasHeight_ >= kMaxAtlasDim) {
+  std::optional<GlyphAtlasSize> const nextSize = allocator_.nextDoubledSize();
+  if (!nextSize) {
     throw std::runtime_error("GlyphAtlas: atlas exceeds maximum size");
   }
 
-  std::uint32_t const oldWidth = atlasWidth_;
-  std::uint32_t const oldHeight = atlasHeight_;
-  std::uint32_t const newWidth = std::min(atlasWidth_ * 2, kMaxAtlasDim);
-  std::uint32_t const newHeight = std::min(atlasHeight_ * 2, kMaxAtlasDim);
+  std::uint32_t const oldWidth = allocator_.width();
+  std::uint32_t const oldHeight = allocator_.height();
+  std::uint32_t const newWidth = nextSize->width;
+  std::uint32_t const newHeight = nextSize->height;
   id<MTLTexture> oldTexture = texture_;
   id<MTLTexture> newTex = createTexture(newWidth, newHeight);
   if (!newTex) {
@@ -210,8 +192,7 @@ bool GlyphAtlas::grow() {
   [blit endEncoding];
   [commandBuffer commit];
 
-  atlasWidth_ = newWidth;
-  atlasHeight_ = newHeight;
+  allocator_.resize(newWidth, newHeight);
   texture_ = newTex;
   ++generation_;
   pendingUploads_.clear();
@@ -222,7 +203,7 @@ bool GlyphAtlas::grow() {
 }
 
 std::optional<AtlasEntry> GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
-  float const size = static_cast<float>(key.sizeQ8) / 4.f;
+  float const size = static_cast<float>(key.size) / 4.f;
   std::uint32_t gw = 0;
   std::uint32_t gh = 0;
   Point bearing{};
@@ -232,35 +213,20 @@ std::optional<AtlasEntry> GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
     return AtlasEntry{};
   }
 
-  std::uint32_t const cellW = gw + kCellPad * 2;
-  std::uint32_t const cellH = gh + kCellPad * 2;
-
-  auto ensureSpace = [&] {
-    if (shelfX_ + cellW + 1 > atlasWidth_) {
-      shelfY_ += shelfH_ + 1;
-      shelfX_ = 1;
-      shelfH_ = 0;
-    }
-    return shelfY_ + cellH + 1 <= atlasHeight_;
-  };
-
-  while (!ensureSpace()) {
+  while (!allocator_.hasSpace(gw, gh)) {
     if (!grow()) {
       return std::nullopt;
     }
   }
-
-  shelfH_ = std::max(shelfH_, cellH);
-
-  std::uint32_t const u = shelfX_ + kCellPad;
-  std::uint32_t const v = shelfY_ + kCellPad;
-  queueUpload(u, v, gw, gh, bits);
-
-  shelfX_ += cellW + 1;
+  std::optional<GlyphAtlasPlacement> const placement = allocator_.allocate(gw, gh);
+  if (!placement) {
+    return std::nullopt;
+  }
+  queueUpload(placement->x, placement->y, gw, gh, bits);
 
   AtlasEntry e{};
-  e.u = static_cast<std::uint16_t>(u);
-  e.v = static_cast<std::uint16_t>(v);
+  e.u = static_cast<std::uint16_t>(placement->x);
+  e.v = static_cast<std::uint16_t>(placement->y);
   e.width = static_cast<std::uint16_t>(gw);
   e.height = static_cast<std::uint16_t>(gh);
   e.bearing = bearing;
@@ -268,16 +234,18 @@ std::optional<AtlasEntry> GlyphAtlas::allocateAndUpload(GlyphKey const& key) {
 }
 
 AtlasEntry const& GlyphAtlas::getOrUpload(GlyphKey const& key) {
-  auto it = entries_.find(key);
-  if (it != entries_.end()) {
-    return it->second;
+  if (allocator_.find(key)) {
+    return allocator_.touch(key);
   }
   std::optional<AtlasEntry> e = allocateAndUpload(key);
   if (!e) {
     return transientEmptyEntry_;
   }
-  auto ins = entries_.emplace(key, *e);
-  return ins.first->second;
+  return allocator_.insert(key,
+                           GlyphAtlasPlacement{.x = e->u, .y = e->v},
+                           e->width,
+                           e->height,
+                           e->bearing);
 }
 
 } // namespace lambdaui

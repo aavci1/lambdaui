@@ -1389,7 +1389,7 @@ public:
         key.fontId = text.fontId;
         key.glyphId = text.glyphIds[i];
         unsigned const q = static_cast<unsigned>(physicalFontSize * 4.f);
-        key.sizeQ8 = static_cast<std::uint16_t>(std::min(65535u, q));
+        key.size = static_cast<std::uint16_t>(std::min(65535u, q));
         (void)glyphAtlas_->getOrUpload(key);
       }
     }
@@ -1445,7 +1445,7 @@ public:
         key.fontId = text.fontId;
         key.glyphId = text.glyphIds[i];
         unsigned const q = static_cast<unsigned>(physicalFontSize * 4.f);
-        key.sizeQ8 = static_cast<std::uint16_t>(std::min(65535u, q));
+        key.size = static_cast<std::uint16_t>(std::min(65535u, q));
 
         AtlasEntry const& entry = glyphAtlas_->getOrUpload(key);
         if (entry.width == 0 || entry.height == 0) {

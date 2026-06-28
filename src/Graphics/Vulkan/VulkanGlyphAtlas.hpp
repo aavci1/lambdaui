@@ -3,6 +3,7 @@
 #include "Graphics/Vulkan/VulkanCanvasShared.hpp"
 
 #include <cstdint>
+#include <optional>
 
 namespace lambdaui {
 
@@ -21,14 +22,18 @@ public:
   bool atlasUploadNeeded(SharedVulkanCore::Resources const& resources) const noexcept;
 
 private:
-  bool atlasHasSpace(SharedVulkanCore::Resources const& resources,
+  void syncAllocatorToAtlas(SharedVulkanCore::Resources& resources) const;
+  bool atlasHasSpace(SharedVulkanCore::Resources& resources,
                      std::uint32_t width,
                      std::uint32_t height) const;
   void updateSlotTexCoords(SharedVulkanCore::Resources const& resources, VulkanGlyphSlot& slot) const;
   bool growAtlasForSpace(SharedVulkanCore::Resources& resources,
                          std::uint32_t width,
                          std::uint32_t height);
-  void placeGlyphInAtlas(SharedVulkanCore::Resources& resources, VulkanGlyphSlot& slot);
+  bool placeGlyphInAtlas(SharedVulkanCore::Resources& resources,
+                         VulkanGlyphKey const& key,
+                         VulkanGlyphSlot& slot,
+                         std::optional<std::uint64_t> lastUsed = std::nullopt);
   void rebuildAtlas(SharedVulkanCore::Resources& resources);
   bool evictGlyphsForAtlasSpace(SharedVulkanCore::Resources& resources,
                                 std::uint32_t width,

@@ -329,7 +329,7 @@ TEST_CASE("Metal GlyphAtlas keeps glyph padding transparent") {
     GlyphKey key{};
     key.fontId = run.fontId;
     key.glyphId = run.glyphIds.front();
-    key.sizeQ8 = static_cast<std::uint16_t>(std::lround(run.fontSize * 4.f));
+    key.size = static_cast<std::uint16_t>(std::lround(run.fontSize * 4.f));
     AtlasEntry const entry = atlas.getOrUpload(key);
     REQUIRE(entry.width > 0);
     REQUIRE(entry.height > 0);
