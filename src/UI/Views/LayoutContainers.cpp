@@ -181,10 +181,10 @@ Size HStack::measure(MeasureContext& ctx, LayoutConstraints const& constraints,
     initialSizes.push_back(measureChild(children[i], ctx, childConstraints, LayoutHints{}, textSystem));
   }
 
-  std::vector<layout::StackMainAxisChild> stackChildren =
-      stackChildrenForAxis(children, initialSizes, activeStackIndices(children, initialSizes),
-                           layout::StackAxis::Horizontal);
   std::vector<std::size_t> const activeIndices = activeStackIndices(children, initialSizes);
+  std::vector<layout::StackMainAxisChild> stackChildren =
+      stackChildrenForAxis(children, initialSizes, activeIndices,
+                           layout::StackAxis::Horizontal);
   layout::StackMainAxisLayout const mainLayout =
       layout::layoutStackMainAxis(stackChildren, spacing, assignedWidth, widthConstrained,
                                   justifyContent);
