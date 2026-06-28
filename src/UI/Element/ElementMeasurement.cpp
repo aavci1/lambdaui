@@ -83,10 +83,10 @@ Size Element::measureWithModifiersImpl(MeasureContext& ctx, LayoutConstraints co
   LayoutConstraints innerCs = constraints;
   if (padW > 0.f || padH > 0.f) {
     if (std::isfinite(innerCs.maxWidth)) {
-      innerCs.maxWidth -= padW;
+      innerCs.maxWidth = std::max(0.f, innerCs.maxWidth - padW);
     }
     if (std::isfinite(innerCs.maxHeight)) {
-      innerCs.maxHeight -= padH;
+      innerCs.maxHeight = std::max(0.f, innerCs.maxHeight - padH);
     }
     innerCs.minWidth = std::max(0.f, innerCs.minWidth - padW);
     innerCs.minHeight = std::max(0.f, innerCs.minHeight - padH);

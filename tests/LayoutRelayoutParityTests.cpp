@@ -87,6 +87,25 @@ struct ElementRoot {
   }
 };
 
+struct ConstraintProbe {
+  lambdaui::LayoutConstraints* seen = nullptr;
+
+  lambdaui::Size measure(lambdaui::MeasureContext&, lambdaui::LayoutConstraints const& constraints,
+                         lambdaui::LayoutHints const&, lambdaui::TextSystem&) const {
+    if (seen) {
+      *seen = constraints;
+    }
+    return {
+        std::max(0.f, constraints.maxWidth),
+        std::max(0.f, constraints.maxHeight),
+    };
+  }
+
+  std::unique_ptr<lambdaui::scenegraph::SceneNode> mount(lambdaui::MountContext&) const {
+    return nullptr;
+  }
+};
+
 struct NodeSnapshot {
   lambdaui::Point position{};
   lambdaui::Size size{};
@@ -193,6 +212,37 @@ struct CollapsedMountedBox {
 };
 
 } // namespace
+
+TEST_CASE("padding larger than available size clamps child constraints non-negative") {
+  MeasuringTextSystem textSystem;
+  lambdaui::MeasureContext ctx{textSystem, testEnvironment()};
+  lambdaui::LayoutConstraints seen{};
+  lambdaui::Element element = lambdaui::Element{ConstraintProbe{.seen = &seen}}
+                                  .padding(lambdaui::EdgeInsets{
+                                      .top = 20.f,
+                                      .right = 24.f,
+                                      .bottom = 20.f,
+                                      .left = 24.f,
+                                  });
+
+  lambdaui::Size const measured = element.measure(
+      ctx,
+      lambdaui::LayoutConstraints{
+          .maxWidth = 30.f,
+          .maxHeight = 28.f,
+          .minWidth = 0.f,
+          .minHeight = 0.f,
+      },
+      {},
+      textSystem);
+
+  CHECK(seen.maxWidth == doctest::Approx(0.f));
+  CHECK(seen.maxHeight == doctest::Approx(0.f));
+  CHECK(seen.minWidth == doctest::Approx(0.f));
+  CHECK(seen.minHeight == doctest::Approx(0.f));
+  CHECK(measured.width >= 0.f);
+  CHECK(measured.height >= 0.f);
+}
 
 TEST_CASE("stack, grid, and scroll mount geometry matches same-constraint relayout") {
   checkRelayoutParity(lambdaui::VStack{
