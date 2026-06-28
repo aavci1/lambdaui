@@ -5,7 +5,9 @@
 #include <Lambda/Graphics/RenderTarget.hpp>
 #include <Lambda/Graphics/TextSystem.hpp>
 
+#include "Graphics/BatchPredicates.hpp"
 #include "Graphics/CanvasGeometry.hpp"
+#include "Graphics/PathGradient.hpp"
 #include "Graphics/PathFlattener.hpp"
 #include "Graphics/PathTessellationCache.hpp"
 #include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
@@ -726,9 +728,7 @@ VulkanPathVertex makeVulkanPathVertex(PathVertex const &src, FillStyle const *fi
   out.y = src.y;
   std::copy(std::begin(src.color), std::end(src.color), std::begin(out.color));
   std::copy(std::begin(src.viewport), std::end(src.viewport), std::begin(out.viewport));
-  float const invW = 1.f / std::max(bounds.width, 1e-4f);
-  float const invH = 1.f / std::max(bounds.height, 1e-4f);
-  Point const local{(src.x - bounds.x) * invW, (src.y - bounds.y) * invH};
+  Point const local = pathGradientUnitPoint(Point{src.x, src.y}, bounds);
   out.local[0] = local.x;
   out.local[1] = local.y;
   out.params[3] = opacity;
@@ -2430,27 +2430,21 @@ private:
     appendDrawOp(target.ops, op);
   }
 
-  static bool sameRect(Rect a, Rect b) {
-    constexpr float eps = 1e-4f;
-    return std::abs(a.x - b.x) <= eps &&
-           std::abs(a.y - b.y) <= eps &&
-           std::abs(a.width - b.width) <= eps &&
-           std::abs(a.height - b.height) <= eps;
-  }
-
   static bool canMergeDrawOps(DrawOp const &a, DrawOp const &b) {
+    constexpr float eps = 1e-4f;
     return a.kind == b.kind &&
            a.texture == b.texture &&
            a.first + a.count == b.first &&
-           sameRect(a.clip, b.clip) &&
+           sameBatchRect(a.clip, b.clip, eps) &&
            a.hasBlurCacheClip == b.hasBlurCacheClip &&
-           (!a.hasBlurCacheClip || sameRect(a.blurCacheClip, b.blurCacheClip)) &&
+           (!a.hasBlurCacheClip || sameBatchRect(a.blurCacheClip, b.blurCacheClip, eps)) &&
            a.sourceImage == b.sourceImage &&
            a.externalStorageDescriptor == b.externalStorageDescriptor &&
            a.externalVertexBuffer == b.externalVertexBuffer &&
            a.premultipliedAlpha == b.premultipliedAlpha &&
-           std::abs(a.externalTranslationX - b.externalTranslationX) <= 1e-4f &&
-           std::abs(a.externalTranslationY - b.externalTranslationY) <= 1e-4f;
+           sameBatchTranslation(BatchTranslation{.x = a.externalTranslationX, .y = a.externalTranslationY},
+                                BatchTranslation{.x = b.externalTranslationX, .y = b.externalTranslationY},
+                                eps);
   }
 
   static void appendDrawOp(std::vector<DrawOp> &ops, DrawOp op) {

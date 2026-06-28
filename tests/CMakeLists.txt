@@ -15,6 +15,7 @@ FetchContent_MakeAvailable(doctest)
 set(_lambda_test_sources
   AlertTests.cpp
   AnimationTests.cpp
+  BatchPredicatesTests.cpp
   BindableInferenceTests.cpp
   EnvironmentKeyOtherTU.cpp
   EnvironmentKeyTests.cpp
@@ -29,6 +30,7 @@ set(_lambda_test_sources
   MountRootTests.cpp
   ParagraphCacheTests.cpp
   ParagraphCacheIncrementalTests.cpp
+  PathGradientTests.cpp
   PathTessellationCacheTests.cpp
   PathFlattenerTests.cpp
   Reactive/SignalTests.cpp

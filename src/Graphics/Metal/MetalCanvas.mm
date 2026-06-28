@@ -9,6 +9,7 @@
 #include <Lambda/Graphics/TextSystem.hpp>
 #include <Lambda/Graphics/TextLayout.hpp>
 
+#include "Graphics/BatchPredicates.hpp"
 #include "Graphics/CanvasGeometry.hpp"
 #include "Graphics/Metal/GlyphAtlas.hpp"
 #include "Graphics/Metal/MetalImage.hpp"
@@ -303,24 +304,27 @@ void* retainTexturePointer(void* texture) {
 
 template <typename T>
 bool sameScissorForBatch(T const& a, T const& b) {
-  if (a.scissorValid != b.scissorValid) {
-    return false;
-  }
-  if (!a.scissorValid) {
-    return true;
-  }
-  return a.scissorX == b.scissorX && a.scissorY == b.scissorY && a.scissorW == b.scissorW &&
-         a.scissorH == b.scissorH;
+  return sameBatchScissor(BatchScissor{.valid = a.scissorValid,
+                                       .x = a.scissorX,
+                                       .y = a.scissorY,
+                                       .width = a.scissorW,
+                                       .height = a.scissorH},
+                          BatchScissor{.valid = b.scissorValid,
+                                       .x = b.scissorX,
+                                       .y = b.scissorY,
+                                       .width = b.scissorW,
+                                       .height = b.scissorH});
 }
 
 template <typename T>
 bool sameRoundedClipForBatch(T const& a, T const& b) {
-  return std::memcmp(&a.roundedClip, &b.roundedClip, sizeof(MetalRoundedClipStack)) == 0;
+  return sameBatchPayloadBytes(&a.roundedClip, &b.roundedClip, sizeof(MetalRoundedClipStack));
 }
 
 template <typename T>
 bool sameTranslationForBatch(T const& a, T const& b) {
-  return a.translation.x == b.translation.x && a.translation.y == b.translation.y;
+  return sameBatchTranslation(BatchTranslation{.x = a.translation.x, .y = a.translation.y},
+                              BatchTranslation{.x = b.translation.x, .y = b.translation.y});
 }
 
 template <typename Vec>
