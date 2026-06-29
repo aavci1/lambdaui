@@ -243,6 +243,11 @@ struct WebGpuQuadInstance {
   float clipEntries[kRoundedClipEntryCount][4]{};
 };
 
+struct WebGpuRoundedClipState {
+  Rect rect{};
+  CornerRadius radii{};
+};
+
 char const kRectShaderWgsl[] = R"wgsl(
 struct RectInstance {
   rect: vec4<f32>,
@@ -331,9 +336,6 @@ fn rounded_clip_coverage(r: RectInstance, world: vec2<f32>) -> f32 {
     let clipRect = r.clipEntries[u32(i * 2)];
     let clipRadii = r.clipEntries[u32(i * 2 + 1)];
     if (clipRect.z <= 0.0 || clipRect.w <= 0.0) {
-      continue;
-    }
-    if (max(max(clipRadii.x, clipRadii.y), max(clipRadii.z, clipRadii.w)) <= 0.0) {
       continue;
     }
     let halfSize = clipRect.zw * 0.5;
@@ -498,9 +500,6 @@ fn rounded_clip_coverage(q: QuadInstance, world: vec2<f32>) -> f32 {
     let clipRect = q.clipEntries[u32(i * 2)];
     let clipRadii = q.clipEntries[u32(i * 2 + 1)];
     if (clipRect.z <= 0.0 || clipRect.w <= 0.0) {
-      continue;
-    }
-    if (max(max(clipRadii.x, clipRadii.y), max(clipRadii.z, clipRadii.w)) <= 0.0) {
       continue;
     }
     let halfSize = clipRect.zw * 0.5;
@@ -739,6 +738,7 @@ public:
         surface_(createSurface(context_.instance(), nativeSurface_)) {
     context_.initializeDevice(surface_);
     configureSurface();
+    clip_ = viewportBounds();
   }
 
   ~WebGpuCanvas() override {
@@ -761,6 +761,9 @@ public:
     }
     size_ = {static_cast<float>(width), static_cast<float>(height)};
     configureSurface();
+    if (!frameActive_) {
+      clip_ = viewportBounds();
+    }
   }
 
   void updateDpiScale(float scaleX, float scaleY) override {
@@ -775,6 +778,12 @@ public:
     quads_.clear();
     pathVertices_.clear();
     drawOps_.clear();
+    stateStack_.clear();
+    transform_ = Mat3::identity();
+    opacity_ = 1.f;
+    blendMode_ = BlendMode::Normal;
+    clip_ = viewportBounds();
+    clipMaskCount_ = 0;
     frameActive_ = true;
   }
 
@@ -807,6 +816,9 @@ public:
     transform_ = restored.transform;
     opacity_ = restored.opacity;
     blendMode_ = restored.blendMode;
+    clip_ = restored.clip;
+    clipMasks_ = restored.clipMasks;
+    clipMaskCount_ = restored.clipMaskCount;
   }
 
   void setTransform(Mat3 const& m) override { transform_ = m; }
@@ -819,9 +831,50 @@ public:
   void rotate(float radians, Point pivot) override { transform(Mat3::rotate(radians, pivot)); }
   Mat3 currentTransform() const override { return transform_; }
 
-  void clipRect(Rect, CornerRadius const&, bool) override {}
-  Rect clipBounds() const override { return Rect{0.f, 0.f, size_.width, size_.height}; }
-  bool quickReject(Rect) const override { return false; }
+  void clipRect(Rect rect, CornerRadius const& cornerRadius, bool) override {
+    Rect const bounds = transformedBounds(rect);
+    Rect const effective = intersectRects(clip_, bounds);
+    clip_ = effective;
+    if (effective.width <= 0.f || effective.height <= 0.f) {
+      clipMaskCount_ = 0;
+      return;
+    }
+
+    float const sx = std::hypot(transform_.m[0], transform_.m[1]);
+    float const sy = std::hypot(transform_.m[3], transform_.m[4]);
+    float const radiusScale = std::max(0.f, std::min(sx, sy));
+    CornerRadius radii{
+        cornerRadius.topLeft * radiusScale,
+        cornerRadius.topRight * radiusScale,
+        cornerRadius.bottomRight * radiusScale,
+        cornerRadius.bottomLeft * radiusScale,
+    };
+    constexpr float eps = 1e-3f;
+    bool const clipped = std::abs(effective.x - bounds.x) > eps || std::abs(effective.y - bounds.y) > eps ||
+                         std::abs(effective.width - bounds.width) > eps ||
+                         std::abs(effective.height - bounds.height) > eps;
+    if (clipped) {
+      radii = cornerRadiiAfterAxisAlignedClip(bounds, effective, radii);
+    }
+    radii = clampedRadii(radii, effective.width, effective.height);
+
+    WebGpuRoundedClipState const mask{
+        .rect = effective,
+        .radii = radii,
+    };
+    if (clipMaskCount_ < kRoundedClipMaskCapacity) {
+      clipMasks_[clipMaskCount_++] = mask;
+    } else {
+      clipMasks_[kRoundedClipMaskCapacity - 1] = WebGpuRoundedClipState{
+          .rect = effective,
+          .radii = CornerRadius{},
+      };
+    }
+  }
+  Rect clipBounds() const override { return clip_; }
+  bool quickReject(Rect rect) const override {
+    return clip_.width <= 0.f || clip_.height <= 0.f || !clip_.intersects(transformedBounds(rect));
+  }
 
   void setOpacity(float opacity) override { opacity_ = opacity; }
   float opacity() const override { return opacity_; }
@@ -874,7 +927,7 @@ public:
   }
 
   void drawLine(Point from, Point to, StrokeStyle const& stroke) override {
-    if (!frameActive_ || stroke.isNone()) {
+    if (!frameActive_ || stroke.isNone() || clip_.width <= 0.f || clip_.height <= 0.f) {
       return;
     }
     Color strokeColor{};
@@ -890,6 +943,13 @@ public:
       return;
     }
     float const halfWidth = stroke.width * 0.5f;
+    Rect const lineBounds = Rect::sharp(std::min(a.x, b.x) - halfWidth,
+                                        std::min(a.y, b.y) - halfWidth,
+                                        std::abs(dx) + stroke.width,
+                                        std::abs(dy) + stroke.width);
+    if (!clip_.intersects(lineBounds)) {
+      return;
+    }
     Point const normal{-dy / length * halfWidth, dx / length * halfWidth};
     WebGpuRectInstance instance{};
     instance.rect[2] = length;
@@ -908,6 +968,7 @@ public:
     putColor(instance.fill0, strokeColor);
     instance.params[1] = 1.f;
     instance.params[3] = opacity_;
+    applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(rects_.size());
     rects_.push_back(instance);
     drawOps_.push_back(WebGpuDrawOp{
@@ -1057,6 +1118,9 @@ private:
     Mat3 transform = Mat3::identity();
     float opacity = 1.f;
     BlendMode blendMode = BlendMode::Normal;
+    Rect clip{};
+    std::array<WebGpuRoundedClipState, kRoundedClipMaskCapacity> clipMasks{};
+    std::uint32_t clipMaskCount = 0;
   };
 
   struct WebGpuDrawOp {
@@ -1102,7 +1166,35 @@ private:
         .transform = transform_,
         .opacity = opacity_,
         .blendMode = blendMode_,
+        .clip = clip_,
+        .clipMasks = clipMasks_,
+        .clipMaskCount = clipMaskCount_,
     };
+  }
+
+  Rect viewportBounds() const noexcept {
+    return Rect::sharp(0.f, 0.f, std::max(1.f, size_.width), std::max(1.f, size_.height));
+  }
+
+  Rect transformedBounds(Rect rect) const {
+    return boundsOfTransformedRect(rect, transform_);
+  }
+
+  template <typename Instance>
+  void applyCurrentClip(Instance& instance) const {
+    std::uint32_t const count = std::min<std::uint32_t>(clipMaskCount_, kRoundedClipMaskCapacity);
+    instance.clipHeader[0] = static_cast<float>(count);
+    for (std::uint32_t i = 0; i < count; ++i) {
+      WebGpuRoundedClipState const& clip = clipMasks_[i];
+      instance.clipEntries[i * 2u][0] = clip.rect.x;
+      instance.clipEntries[i * 2u][1] = clip.rect.y;
+      instance.clipEntries[i * 2u][2] = clip.rect.width;
+      instance.clipEntries[i * 2u][3] = clip.rect.height;
+      instance.clipEntries[i * 2u + 1u][0] = clip.radii.topLeft;
+      instance.clipEntries[i * 2u + 1u][1] = clip.radii.topRight;
+      instance.clipEntries[i * 2u + 1u][2] = clip.radii.bottomRight;
+      instance.clipEntries[i * 2u + 1u][3] = clip.radii.bottomLeft;
+    }
   }
 
   void configureSurface() {
@@ -1291,6 +1383,9 @@ private:
     if (rect.width <= 0.f || rect.height <= 0.f) {
       return;
     }
+    if (clip_.width <= 0.f || clip_.height <= 0.f || !clip_.intersects(transformedBounds(rect))) {
+      return;
+    }
     Point const p0 = transform_.apply({rect.x, rect.y});
     Point const p1 = transform_.apply({rect.x + rect.width, rect.y});
     Point const p3 = transform_.apply({rect.x, rect.y + rect.height});
@@ -1315,6 +1410,7 @@ private:
       instance.params[2] = stroke.width;
     }
     instance.params[3] = opacity;
+    applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(rects_.size());
     rects_.push_back(instance);
     drawOps_.push_back(WebGpuDrawOp{
@@ -1333,6 +1429,9 @@ private:
     Size const imageSize = image.size();
     if (imageSize.width <= 0.f || imageSize.height <= 0.f ||
         src.width <= 0.f || src.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) {
+      return;
+    }
+    if (clip_.width <= 0.f || clip_.height <= 0.f || !clip_.intersects(transformedBounds(dst))) {
       return;
     }
 
@@ -1358,6 +1457,7 @@ private:
     instance.radii[1] = radii.topRight;
     instance.radii[2] = radii.bottomRight;
     instance.radii[3] = radii.bottomLeft;
+    applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
     quads_.push_back(instance);
     WebGpuDrawOp op{
@@ -1393,6 +1493,9 @@ private:
     float const viewportW = std::max(1.f, size_.width);
     float const viewportH = std::max(1.f, size_.height);
     Rect const fillBounds = boundsOfSubpaths(subpaths);
+    if (clip_.width <= 0.f || clip_.height <= 0.f || !clip_.intersects(fillBounds)) {
+      return;
+    }
 
     auto appendVertices = [this](TessellatedPath&& tessellated) {
       if (tessellated.vertices.empty()) {
@@ -2057,6 +2160,9 @@ private:
   Mat3 transform_{Mat3::identity()};
   float opacity_ = 1.f;
   BlendMode blendMode_ = BlendMode::Normal;
+  Rect clip_{};
+  std::array<WebGpuRoundedClipState, kRoundedClipMaskCapacity> clipMasks_{};
+  std::uint32_t clipMaskCount_ = 0;
   Color clearColor_ = Colors::transparent;
   std::vector<State> stateStack_;
   std::vector<WebGpuRectInstance> rects_;
