@@ -15,6 +15,7 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -653,10 +654,12 @@ class WebGpuCanvas final : public Canvas {
 public:
   WebGpuCanvas(WebGpuNativeSurface nativeSurface,
                unsigned int handle,
+               TextSystem& textSystem,
                Size initialSize,
                bool transparentSurface)
       : nativeSurface_(nativeSurface),
         handle_(handle),
+        textSystem_(textSystem),
         size_(initialSize),
         transparentSurface_(transparentSurface),
         context_(),
@@ -872,7 +875,42 @@ public:
     drawRect(rect, CornerRadius::pill(rect), fill, stroke, ShadowStyle::none());
   }
 
-  void drawTextLayout(TextLayout const&, Point) override {}
+  void drawTextLayout(TextLayout const& layout, Point origin) override {
+    if (!frameActive_) {
+      return;
+    }
+    for (TextLayout::PlacedRun const& placed : layout.runs) {
+      if (placed.run.backgroundColor) {
+        drawRect(Rect::sharp(origin.x + placed.origin.x,
+                             origin.y + placed.origin.y - placed.run.ascent,
+                             placed.run.width,
+                             placed.run.ascent + placed.run.descent),
+                 CornerRadius{},
+                 FillStyle::solid(*placed.run.backgroundColor),
+                 StrokeStyle::none(),
+                 ShadowStyle::none());
+      }
+
+      std::size_t const glyphCount = std::min(placed.run.glyphIds.size(), placed.run.positions.size());
+      for (std::size_t i = 0; i < glyphCount; ++i) {
+        GlyphImage const* glyph = glyphImage(placed.run.fontId, placed.run.glyphIds[i], placed.run.fontSize);
+        if (!glyph || !glyph->image || glyph->width == 0 || glyph->height == 0) {
+          continue;
+        }
+        Point const pos = origin + placed.origin + placed.run.positions[i];
+        Rect const glyphRect = Rect::sharp(pos.x + glyph->bearing.x / dpiScale_,
+                                           pos.y - glyph->bearing.y / dpiScale_,
+                                           static_cast<float>(glyph->width) / dpiScale_,
+                                           static_cast<float>(glyph->height) / dpiScale_);
+        pushImageInstance(*glyph->image,
+                          Rect::sharp(0.f, 0.f, static_cast<float>(glyph->width), static_cast<float>(glyph->height)),
+                          glyphRect,
+                          CornerRadius{},
+                          placed.run.color,
+                          1.f);
+      }
+    }
+  }
   void drawImage(Image const& image,
                  Rect const& src,
                  Rect const& dst,
@@ -885,50 +923,7 @@ public:
     if (!webgpuImage) {
       return;
     }
-    Size const imageSize = image.size();
-    if (imageSize.width <= 0.f || imageSize.height <= 0.f) {
-      return;
-    }
-
-    Point const p0 = transform_.apply({dst.x, dst.y});
-    Point const p1 = transform_.apply({dst.x + dst.width, dst.y});
-    Point const p3 = transform_.apply({dst.x, dst.y + dst.height});
-    WebGpuQuadInstance instance{};
-    instance.rect[2] = dst.width;
-    instance.rect[3] = dst.height;
-    instance.axisX[0] = p0.x;
-    instance.axisX[1] = p0.y;
-    instance.axisX[2] = p1.x - p0.x;
-    instance.axisX[3] = p1.y - p0.y;
-    instance.axisY[0] = p3.x - p0.x;
-    instance.axisY[1] = p3.y - p0.y;
-    instance.uv[0] = src.x / imageSize.width;
-    instance.uv[1] = src.y / imageSize.height;
-    instance.uv[2] = (src.x + src.width) / imageSize.width;
-    instance.uv[3] = (src.y + src.height) / imageSize.height;
-    instance.color[0] = 1.f;
-    instance.color[1] = 1.f;
-    instance.color[2] = 1.f;
-    instance.color[3] = opacity_ * opacity;
-    CornerRadius const radii = clampedRadii(corners, dst.width, dst.height);
-    instance.radii[0] = radii.topLeft;
-    instance.radii[1] = radii.topRight;
-    instance.radii[2] = radii.bottomRight;
-    instance.radii[3] = radii.bottomLeft;
-    std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
-    quads_.push_back(instance);
-    WebGpuDrawOp op{
-        .kind = WebGpuDrawOp::Kind::Image,
-        .first = first,
-        .count = 1,
-        .image = webgpuImage,
-    };
-    try {
-      op.imageRef = image.shared_from_this();
-    } catch (std::bad_weak_ptr const&) {
-      op.imageRef.reset();
-    }
-    drawOps_.push_back(std::move(op));
+    pushImageInstance(*webgpuImage, src, dst, corners, Colors::white, opacity);
   }
 
   void drawImageTiled(Image const& image, Rect const& dst, CornerRadius const& corners, float opacity) override {
@@ -988,6 +983,30 @@ private:
     std::uint32_t count = 0;
     WebGpuImage const* image = nullptr;
     std::shared_ptr<Image const> imageRef;
+  };
+
+  struct GlyphKey {
+    std::uint32_t fontId = 0;
+    std::uint32_t glyphId = 0;
+    std::uint16_t pixelSize = 0;
+
+    bool operator==(GlyphKey const&) const = default;
+  };
+
+  struct GlyphKeyHash {
+    std::size_t operator()(GlyphKey const& key) const noexcept {
+      std::size_t h = static_cast<std::size_t>(key.fontId) * 0x9e3779b1u;
+      h ^= static_cast<std::size_t>(key.glyphId) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
+      h ^= static_cast<std::size_t>(key.pixelSize) + 0x9e3779b9u + (h << 6u) + (h >> 2u);
+      return h;
+    }
+  };
+
+  struct GlyphImage {
+    std::shared_ptr<WebGpuImage> image;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    Point bearing{};
   };
 
   State state() const noexcept {
@@ -1199,6 +1218,97 @@ private:
         .first = first,
         .count = 1,
     });
+  }
+
+  void pushImageInstance(WebGpuImage const& image,
+                         Rect const& src,
+                         Rect const& dst,
+                         CornerRadius const& corners,
+                         Color tint,
+                         float opacity) {
+    Size const imageSize = image.size();
+    if (imageSize.width <= 0.f || imageSize.height <= 0.f ||
+        src.width <= 0.f || src.height <= 0.f || dst.width <= 0.f || dst.height <= 0.f) {
+      return;
+    }
+
+    Point const p0 = transform_.apply({dst.x, dst.y});
+    Point const p1 = transform_.apply({dst.x + dst.width, dst.y});
+    Point const p3 = transform_.apply({dst.x, dst.y + dst.height});
+    WebGpuQuadInstance instance{};
+    instance.rect[2] = dst.width;
+    instance.rect[3] = dst.height;
+    instance.axisX[0] = p0.x;
+    instance.axisX[1] = p0.y;
+    instance.axisX[2] = p1.x - p0.x;
+    instance.axisX[3] = p1.y - p0.y;
+    instance.axisY[0] = p3.x - p0.x;
+    instance.axisY[1] = p3.y - p0.y;
+    instance.uv[0] = src.x / imageSize.width;
+    instance.uv[1] = src.y / imageSize.height;
+    instance.uv[2] = (src.x + src.width) / imageSize.width;
+    instance.uv[3] = (src.y + src.height) / imageSize.height;
+    putColor(instance.color, tint, opacity_ * opacity);
+    CornerRadius const radii = clampedRadii(corners, dst.width, dst.height);
+    instance.radii[0] = radii.topLeft;
+    instance.radii[1] = radii.topRight;
+    instance.radii[2] = radii.bottomRight;
+    instance.radii[3] = radii.bottomLeft;
+    std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
+    quads_.push_back(instance);
+    WebGpuDrawOp op{
+        .kind = WebGpuDrawOp::Kind::Image,
+        .first = first,
+        .count = 1,
+        .image = &image,
+    };
+    try {
+      op.imageRef = image.shared_from_this();
+    } catch (std::bad_weak_ptr const&) {
+      op.imageRef.reset();
+    }
+    drawOps_.push_back(std::move(op));
+  }
+
+  GlyphImage const* glyphImage(std::uint32_t fontId, std::uint32_t glyphId, float fontSize) {
+    std::uint16_t const pixelSize =
+        static_cast<std::uint16_t>(std::clamp(std::round(fontSize * dpiScale_), 1.f, 512.f));
+    GlyphKey const key{
+        .fontId = fontId,
+        .glyphId = glyphId,
+        .pixelSize = pixelSize,
+    };
+    auto it = glyphs_.find(key);
+    if (it != glyphs_.end()) {
+      return &it->second;
+    }
+
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    Point bearing{};
+    std::vector<std::uint8_t> alpha = textSystem_.rasterizeGlyph(fontId, glyphId, static_cast<float>(pixelSize),
+                                                                 width, height, bearing);
+    GlyphImage glyph{};
+    glyph.width = width;
+    glyph.height = height;
+    glyph.bearing = bearing;
+    if (width > 0 && height > 0 && alpha.size() == static_cast<std::size_t>(width) * height) {
+      std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width) * height * 4u);
+      for (std::size_t i = 0; i < alpha.size(); ++i) {
+        pixels[i * 4u + 0u] = 255;
+        pixels[i * 4u + 1u] = 255;
+        pixels[i * 4u + 2u] = 255;
+        pixels[i * 4u + 3u] = alpha[i];
+      }
+      glyph.image = std::make_shared<WebGpuImage>(width,
+                                                  height,
+                                                  std::move(pixels),
+                                                  Image::PixelFormat::Rgba8888,
+                                                  false);
+    }
+    auto [inserted, ok] = glyphs_.emplace(key, std::move(glyph));
+    (void)ok;
+    return &inserted->second;
   }
 
   void ensureBuffer(WGPUBuffer& buffer,
@@ -1636,6 +1746,7 @@ private:
 
   WebGpuNativeSurface nativeSurface_{};
   unsigned int handle_ = 0;
+  TextSystem& textSystem_;
   Size size_{};
   bool transparentSurface_ = false;
   WebGpuContext context_;
@@ -1656,6 +1767,7 @@ private:
   std::vector<WebGpuRectInstance> rects_;
   std::vector<WebGpuQuadInstance> quads_;
   std::vector<WebGpuDrawOp> drawOps_;
+  std::unordered_map<GlyphKey, GlyphImage, GlyphKeyHash> glyphs_;
 
   WGPUBindGroupLayout rectBindGroupLayout_ = nullptr;
   WGPUPipelineLayout rectPipelineLayout_ = nullptr;
@@ -1684,10 +1796,10 @@ private:
 
 std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuNativeSurface nativeSurface,
                                            unsigned int handle,
-                                           TextSystem&,
+                                           TextSystem& textSystem,
                                            Size initialSize,
                                            bool transparentSurface) {
-  return std::make_unique<WebGpuCanvas>(nativeSurface, handle, initialSize, transparentSurface);
+  return std::make_unique<WebGpuCanvas>(nativeSurface, handle, textSystem, initialSize, transparentSurface);
 }
 
 } // namespace lambdaui::webgpu
