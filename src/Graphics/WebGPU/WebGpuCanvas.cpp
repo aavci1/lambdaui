@@ -207,6 +207,7 @@ namespace {
 
 inline constexpr std::size_t kRoundedClipMaskCapacity = 4;
 inline constexpr std::size_t kRoundedClipEntryCount = kRoundedClipMaskCapacity * 2;
+inline constexpr std::uint32_t kWebGpuCopyBytesPerRowAlignment = 256;
 
 struct WebGpuRectInstance {
   float rect[4]{};
@@ -246,6 +247,11 @@ struct WebGpuQuadInstance {
 struct WebGpuRoundedClipState {
   Rect rect{};
   CornerRadius radii{};
+};
+
+struct WebGpuMapWaitState {
+  WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Error;
+  bool done = false;
 };
 
 char const kRectShaderWgsl[] = R"wgsl(
@@ -582,6 +588,16 @@ bool containsPresentMode(WGPUSurfaceCapabilities const& capabilities, WGPUPresen
   return false;
 }
 
+std::uint32_t alignTo(std::uint32_t value, std::uint32_t alignment) noexcept {
+  return (value + alignment - 1u) / alignment * alignment;
+}
+
+void frameCaptureMapCallback(WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*) {
+  auto* state = static_cast<WebGpuMapWaitState*>(userdata1);
+  state->status = status;
+  state->done = true;
+}
+
 void putColor(float out[4], Color color, float opacity = 1.f) noexcept {
   out[0] = color.r;
   out[1] = color.g;
@@ -743,6 +759,7 @@ public:
 
   ~WebGpuCanvas() override {
     releaseFrameObjects();
+    clearPendingFrameCapture();
     releaseDrawResources();
     if (surface_) {
       wgpuSurfaceUnconfigure(surface_);
@@ -792,6 +809,8 @@ public:
       return;
     }
     encodeFramePass();
+    bool const captureThisFrame = enqueueFrameCaptureCopy();
+    bool submitted = false;
     if (commandEncoder_) {
       WGPUCommandBufferDescriptor finishDescriptor = WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
       finishDescriptor.label = stringView("LambdaUI WebGPU Command Buffer");
@@ -799,7 +818,13 @@ public:
       if (commandBuffer) {
         wgpuQueueSubmit(context_.queue(), 1, &commandBuffer);
         wgpuCommandBufferRelease(commandBuffer);
+        submitted = true;
       }
+    }
+    if (captureThisFrame && submitted) {
+      finishFrameCaptureReadback();
+    } else if (captureThisFrame) {
+      clearPendingFrameCapture();
     }
     wgpuSurfacePresent(surface_);
     releaseFrameObjects();
@@ -1099,8 +1124,27 @@ public:
 
   void* gpuDevice() const override { return context_.device(); }
 
-  bool requestNextFrameCapture() override { return false; }
-  bool takeCapturedFrame(std::vector<std::uint8_t>&, std::uint32_t&, std::uint32_t&) override { return false; }
+  bool requestNextFrameCapture() override {
+    if (!surfaceCopySrcSupported_ || !frameCaptureFormatSupported()) {
+      return false;
+    }
+    frameCaptureRequested_ = true;
+    return true;
+  }
+
+  bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width, std::uint32_t& height) override {
+    if (!capturedFrameAvailable_) {
+      return false;
+    }
+    out = std::move(capturedFrameBytes_);
+    width = capturedFrameWidth_;
+    height = capturedFrameHeight_;
+    capturedFrameBytes_.clear();
+    capturedFrameWidth_ = 0;
+    capturedFrameHeight_ = 0;
+    capturedFrameAvailable_ = false;
+    return true;
+  }
   std::unique_ptr<RecordedOps> beginRecordedOpsCapture() override { return nullptr; }
   void endRecordedOpsCapture() override {}
   std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(std::unique_ptr<RecordedOps>) override {
@@ -1233,10 +1277,15 @@ private:
       }
     }
 
+    surfaceCopySrcSupported_ = (capabilities.usages & WGPUTextureUsage_CopySrc) != 0;
+
     WGPUSurfaceConfiguration config = WGPU_SURFACE_CONFIGURATION_INIT;
     config.device = context_.device();
     config.format = surfaceFormat_;
     config.usage = WGPUTextureUsage_RenderAttachment;
+    if (surfaceCopySrcSupported_) {
+      config.usage |= WGPUTextureUsage_CopySrc;
+    }
     config.width = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width)));
     config.height = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height)));
     config.presentMode = presentMode;
@@ -1358,6 +1407,131 @@ private:
       wgpuRenderPassEncoderEnd(pass);
       wgpuRenderPassEncoderRelease(pass);
     }
+  }
+
+  bool frameCaptureFormatSupported() const noexcept {
+    return surfaceFormat_ == WGPUTextureFormat_BGRA8Unorm || surfaceFormat_ == WGPUTextureFormat_RGBA8Unorm;
+  }
+
+  bool enqueueFrameCaptureCopy() {
+    if (!frameCaptureRequested_) {
+      return false;
+    }
+    frameCaptureRequested_ = false;
+    capturedFrameAvailable_ = false;
+    capturedFrameBytes_.clear();
+    if (!surfaceCopySrcSupported_ || !frameCaptureFormatSupported() || !commandEncoder_ || !currentTexture_) {
+      return false;
+    }
+
+    pendingFrameCaptureWidth_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width)));
+    pendingFrameCaptureHeight_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height)));
+    pendingFrameCaptureBytesPerRow_ =
+        alignTo(pendingFrameCaptureWidth_ * 4u, kWebGpuCopyBytesPerRowAlignment);
+    pendingFrameCaptureBufferSize_ =
+        static_cast<std::uint64_t>(pendingFrameCaptureBytesPerRow_) * pendingFrameCaptureHeight_;
+    pendingFrameCaptureFormat_ = surfaceFormat_;
+
+    if (pendingFrameCaptureBuffer_) {
+      wgpuBufferRelease(pendingFrameCaptureBuffer_);
+      pendingFrameCaptureBuffer_ = nullptr;
+    }
+    WGPUBufferDescriptor bufferDescriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
+    bufferDescriptor.label = stringView("LambdaUI WebGPU Frame Capture Readback");
+    bufferDescriptor.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+    bufferDescriptor.size = pendingFrameCaptureBufferSize_;
+    pendingFrameCaptureBuffer_ = wgpuDeviceCreateBuffer(context_.device(), &bufferDescriptor);
+    if (!pendingFrameCaptureBuffer_) {
+      clearPendingFrameCapture();
+      return false;
+    }
+
+    WGPUTexelCopyTextureInfo source = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+    source.texture = currentTexture_;
+    source.aspect = WGPUTextureAspect_All;
+    WGPUTexelCopyBufferInfo destination = WGPU_TEXEL_COPY_BUFFER_INFO_INIT;
+    destination.buffer = pendingFrameCaptureBuffer_;
+    destination.layout.bytesPerRow = pendingFrameCaptureBytesPerRow_;
+    destination.layout.rowsPerImage = pendingFrameCaptureHeight_;
+    WGPUExtent3D copySize = WGPU_EXTENT_3D_INIT;
+    copySize.width = pendingFrameCaptureWidth_;
+    copySize.height = pendingFrameCaptureHeight_;
+    copySize.depthOrArrayLayers = 1;
+    wgpuCommandEncoderCopyTextureToBuffer(commandEncoder_, &source, &destination, &copySize);
+    return true;
+  }
+
+  void finishFrameCaptureReadback() {
+    if (!pendingFrameCaptureBuffer_ || pendingFrameCaptureWidth_ == 0 || pendingFrameCaptureHeight_ == 0 ||
+        pendingFrameCaptureBufferSize_ == 0) {
+      clearPendingFrameCapture();
+      return;
+    }
+
+    WebGpuMapWaitState mapState{};
+    WGPUBufferMapCallbackInfo callback = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+    callback.mode = WGPUCallbackMode_WaitAnyOnly;
+    callback.callback = frameCaptureMapCallback;
+    callback.userdata1 = &mapState;
+    WGPUFuture const future = wgpuBufferMapAsync(pendingFrameCaptureBuffer_,
+                                                 WGPUMapMode_Read,
+                                                 0,
+                                                 static_cast<std::size_t>(pendingFrameCaptureBufferSize_),
+                                                 callback);
+    WGPUFutureWaitInfo waitInfo = WGPU_FUTURE_WAIT_INFO_INIT;
+    waitInfo.future = future;
+    WGPUWaitStatus const waitStatus = wgpuInstanceWaitAny(context_.instance(), 1, &waitInfo, UINT64_MAX);
+    if (waitStatus != WGPUWaitStatus_Success || !waitInfo.completed || !mapState.done ||
+        mapState.status != WGPUMapAsyncStatus_Success) {
+      clearPendingFrameCapture();
+      return;
+    }
+
+    auto const* mapped = static_cast<std::uint8_t const*>(
+        wgpuBufferGetConstMappedRange(pendingFrameCaptureBuffer_,
+                                      0,
+                                      static_cast<std::size_t>(pendingFrameCaptureBufferSize_)));
+    if (!mapped) {
+      clearPendingFrameCapture();
+      return;
+    }
+
+    capturedFrameBytes_.resize(static_cast<std::size_t>(pendingFrameCaptureWidth_) *
+                               pendingFrameCaptureHeight_ * 4u);
+    for (std::uint32_t row = 0; row < pendingFrameCaptureHeight_; ++row) {
+      std::uint8_t const* src = mapped + static_cast<std::size_t>(row) * pendingFrameCaptureBytesPerRow_;
+      std::uint8_t* dst = capturedFrameBytes_.data() +
+                          static_cast<std::size_t>(row) * pendingFrameCaptureWidth_ * 4u;
+      if (pendingFrameCaptureFormat_ == WGPUTextureFormat_BGRA8Unorm) {
+        for (std::uint32_t x = 0; x < pendingFrameCaptureWidth_; ++x) {
+          dst[x * 4u + 0u] = src[x * 4u + 2u];
+          dst[x * 4u + 1u] = src[x * 4u + 1u];
+          dst[x * 4u + 2u] = src[x * 4u + 0u];
+          dst[x * 4u + 3u] = src[x * 4u + 3u];
+        }
+      } else {
+        std::memcpy(dst, src, static_cast<std::size_t>(pendingFrameCaptureWidth_) * 4u);
+      }
+    }
+    capturedFrameWidth_ = pendingFrameCaptureWidth_;
+    capturedFrameHeight_ = pendingFrameCaptureHeight_;
+    capturedFrameAvailable_ = true;
+    clearPendingFrameCapture();
+  }
+
+  void clearPendingFrameCapture() noexcept {
+    if (pendingFrameCaptureBuffer_) {
+      if (wgpuBufferGetMapState(pendingFrameCaptureBuffer_) == WGPUBufferMapState_Mapped) {
+        wgpuBufferUnmap(pendingFrameCaptureBuffer_);
+      }
+      wgpuBufferRelease(pendingFrameCaptureBuffer_);
+      pendingFrameCaptureBuffer_ = nullptr;
+    }
+    pendingFrameCaptureWidth_ = 0;
+    pendingFrameCaptureHeight_ = 0;
+    pendingFrameCaptureBytesPerRow_ = 0;
+    pendingFrameCaptureBufferSize_ = 0;
+    pendingFrameCaptureFormat_ = WGPUTextureFormat_Undefined;
   }
 
   void releaseFrameObjects() noexcept {
@@ -2150,6 +2324,7 @@ private:
   WebGpuContext context_;
   WGPUSurface surface_ = nullptr;
   WGPUTextureFormat surfaceFormat_ = WGPUTextureFormat_Undefined;
+  bool surfaceCopySrcSupported_ = false;
 
   WGPUTexture currentTexture_ = nullptr;
   WGPUTextureView currentView_ = nullptr;
@@ -2198,6 +2373,18 @@ private:
   WGPUTextureFormat pathPipelineFormat_ = WGPUTextureFormat_Undefined;
   WGPUBuffer pathBuffer_ = nullptr;
   std::uint64_t pathBufferCapacity_ = 0;
+
+  bool frameCaptureRequested_ = false;
+  bool capturedFrameAvailable_ = false;
+  std::vector<std::uint8_t> capturedFrameBytes_;
+  std::uint32_t capturedFrameWidth_ = 0;
+  std::uint32_t capturedFrameHeight_ = 0;
+  WGPUBuffer pendingFrameCaptureBuffer_ = nullptr;
+  std::uint32_t pendingFrameCaptureWidth_ = 0;
+  std::uint32_t pendingFrameCaptureHeight_ = 0;
+  std::uint32_t pendingFrameCaptureBytesPerRow_ = 0;
+  std::uint64_t pendingFrameCaptureBufferSize_ = 0;
+  WGPUTextureFormat pendingFrameCaptureFormat_ = WGPUTextureFormat_Undefined;
 };
 
 } // namespace
