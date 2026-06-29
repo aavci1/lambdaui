@@ -739,6 +739,43 @@ WGPUSurface createSurface(WGPUInstance instance, WebGpuNativeSurface native) {
 }
 
 class WebGpuCanvas final : public Canvas {
+  struct WebGpuDrawOp {
+    enum class Kind {
+      Rect,
+      Image,
+      Path,
+    };
+
+    Kind kind = Kind::Rect;
+    std::uint32_t first = 0;
+    std::uint32_t count = 0;
+    WebGpuImage const* image = nullptr;
+    std::shared_ptr<Image const> imageRef;
+  };
+
+  struct WebGpuFrameRecorder final : RecordedOps {
+    std::vector<WebGpuDrawOp> drawOps;
+    std::vector<WebGpuRectInstance> rects;
+    std::vector<WebGpuQuadInstance> quads;
+    std::vector<PathVertex> pathVertices;
+    bool containsClipState = false;
+
+    Backend backend() const noexcept override { return Backend::WebGPU; }
+  };
+
+  class WebGpuCanvasPreparedRenderOps final : public scenegraph::PreparedRenderOps {
+  public:
+    explicit WebGpuCanvasPreparedRenderOps(WebGpuFrameRecorder recorded)
+        : recorded_(std::move(recorded)) {}
+
+    bool replay(Canvas& canvas) const override {
+      return canvas.replayRecordedLocalOps(recorded_);
+    }
+
+  private:
+    WebGpuFrameRecorder recorded_;
+  };
+
 public:
   WebGpuCanvas(WebGpuNativeSurface nativeSurface,
                unsigned int handle,
@@ -857,6 +894,9 @@ public:
   Mat3 currentTransform() const override { return transform_; }
 
   void clipRect(Rect rect, CornerRadius const& cornerRadius, bool) override {
+    if (captureTarget_) {
+      captureTarget_->containsClipState = true;
+    }
     Rect const bounds = transformedBounds(rect);
     Rect const effective = intersectRects(clip_, bounds);
     clip_ = effective;
@@ -1145,13 +1185,71 @@ public:
     capturedFrameAvailable_ = false;
     return true;
   }
-  std::unique_ptr<RecordedOps> beginRecordedOpsCapture() override { return nullptr; }
-  void endRecordedOpsCapture() override {}
-  std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(std::unique_ptr<RecordedOps>) override {
-    return nullptr;
+  std::unique_ptr<RecordedOps> beginRecordedOpsCapture() override {
+    if (!frameActive_ || captureTarget_) {
+      return nullptr;
+    }
+    auto recorded = std::make_unique<WebGpuFrameRecorder>();
+    beginRecordedOpsCapture(recorded.get());
+    return recorded;
   }
-  bool replayRecordedOps(RecordedOps const&, RecordedOpsReplaySlice const*) override { return false; }
-  bool replayRecordedLocalOps(RecordedOps const&, RecordedOpsReplaySlice const*) override { return false; }
+
+  void endRecordedOpsCapture() override {
+    if (!captureTarget_) {
+      return;
+    }
+
+    captureTarget_->rects.assign(rects_.begin() + static_cast<std::ptrdiff_t>(captureRectStart_), rects_.end());
+    captureTarget_->quads.assign(quads_.begin() + static_cast<std::ptrdiff_t>(captureQuadStart_), quads_.end());
+    captureTarget_->pathVertices.assign(pathVertices_.begin() + static_cast<std::ptrdiff_t>(capturePathVertexStart_),
+                                        pathVertices_.end());
+    captureTarget_->drawOps.assign(drawOps_.begin() + static_cast<std::ptrdiff_t>(captureDrawOpStart_),
+                                   drawOps_.end());
+    for (WebGpuDrawOp& op : captureTarget_->drawOps) {
+      switch (op.kind) {
+        case WebGpuDrawOp::Kind::Rect:
+          op.first -= captureRectStart_;
+          break;
+        case WebGpuDrawOp::Kind::Image:
+          op.first -= captureQuadStart_;
+          break;
+        case WebGpuDrawOp::Kind::Path:
+          op.first -= capturePathVertexStart_;
+          break;
+      }
+    }
+
+    rects_.resize(captureRectStart_);
+    quads_.resize(captureQuadStart_);
+    pathVertices_.resize(capturePathVertexStart_);
+    drawOps_.resize(captureDrawOpStart_);
+    captureTarget_ = nullptr;
+    restoreAfterRecordedOpsCapture();
+  }
+
+  std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(std::unique_ptr<RecordedOps> recorded) override {
+    WebGpuFrameRecorder* webgpuRecorded = asWebGpuRecordedOps(recorded.get());
+    if (!webgpuRecorded || recordedOpsContainClipState(*webgpuRecorded)) {
+      return nullptr;
+    }
+    return std::make_unique<WebGpuCanvasPreparedRenderOps>(std::move(*webgpuRecorded));
+  }
+
+  bool replayRecordedOps(RecordedOps const& recorded, RecordedOpsReplaySlice const* slice) override {
+    if (slice && slice->backend != Backend::WebGPU) {
+      return false;
+    }
+    WebGpuFrameRecorder const* webgpuRecorded = asWebGpuRecordedOps(recorded);
+    return webgpuRecorded && appendRecordedOps(*webgpuRecorded, false);
+  }
+
+  bool replayRecordedLocalOps(RecordedOps const& recorded, RecordedOpsReplaySlice const* slice) override {
+    if (slice && slice->backend != Backend::WebGPU) {
+      return false;
+    }
+    WebGpuFrameRecorder const* webgpuRecorded = asWebGpuRecordedOps(recorded);
+    return webgpuRecorded && appendRecordedOps(*webgpuRecorded, true);
+  }
 
   void clear(Color color) override {
     clearColor_ = color;
@@ -1165,20 +1263,6 @@ private:
     Rect clip{};
     std::array<WebGpuRoundedClipState, kRoundedClipMaskCapacity> clipMasks{};
     std::uint32_t clipMaskCount = 0;
-  };
-
-  struct WebGpuDrawOp {
-    enum class Kind {
-      Rect,
-      Image,
-      Path,
-    };
-
-    Kind kind = Kind::Rect;
-    std::uint32_t first = 0;
-    std::uint32_t count = 0;
-    WebGpuImage const* image = nullptr;
-    std::shared_ptr<Image const> imageRef;
   };
 
   struct GlyphKey {
@@ -1239,6 +1323,165 @@ private:
       instance.clipEntries[i * 2u + 1u][2] = clip.radii.bottomRight;
       instance.clipEntries[i * 2u + 1u][3] = clip.radii.bottomLeft;
     }
+  }
+
+  static WebGpuFrameRecorder* asWebGpuRecordedOps(RecordedOps* recorded) noexcept {
+    return recorded && recorded->backend() == Backend::WebGPU
+               ? static_cast<WebGpuFrameRecorder*>(recorded)
+               : nullptr;
+  }
+
+  static WebGpuFrameRecorder const* asWebGpuRecordedOps(RecordedOps const& recorded) noexcept {
+    return recorded.backend() == Backend::WebGPU
+               ? static_cast<WebGpuFrameRecorder const*>(&recorded)
+               : nullptr;
+  }
+
+  static bool instanceHasClip(float const (&clipHeader)[4]) noexcept {
+    return clipHeader[0] > 0.5f;
+  }
+
+  static bool recordedOpsContainPathGeometry(WebGpuFrameRecorder const& recorded) noexcept {
+    return std::any_of(recorded.drawOps.begin(), recorded.drawOps.end(), [](WebGpuDrawOp const& op) {
+      return op.kind == WebGpuDrawOp::Kind::Path && op.count > 0;
+    });
+  }
+
+  static bool recordedOpsContainClipState(WebGpuFrameRecorder const& recorded) noexcept {
+    if (recorded.containsClipState) {
+      return true;
+    }
+    bool const rectClip = std::any_of(recorded.rects.begin(), recorded.rects.end(), [](WebGpuRectInstance const& inst) {
+      return instanceHasClip(inst.clipHeader);
+    });
+    if (rectClip) {
+      return true;
+    }
+    return std::any_of(recorded.quads.begin(), recorded.quads.end(), [](WebGpuQuadInstance const& inst) {
+      return instanceHasClip(inst.clipHeader);
+    });
+  }
+
+  void beginRecordedOpsCapture(WebGpuFrameRecorder* target) {
+    if (!target || captureTarget_) {
+      return;
+    }
+    target->drawOps.clear();
+    target->rects.clear();
+    target->quads.clear();
+    target->pathVertices.clear();
+    target->containsClipState = false;
+
+    captureRectStart_ = static_cast<std::uint32_t>(rects_.size());
+    captureQuadStart_ = static_cast<std::uint32_t>(quads_.size());
+    capturePathVertexStart_ = static_cast<std::uint32_t>(pathVertices_.size());
+    captureDrawOpStart_ = static_cast<std::uint32_t>(drawOps_.size());
+    captureSavedState_ = state();
+    captureSavedStack_ = stateStack_;
+    captureTarget_ = target;
+
+    stateStack_.clear();
+    transform_ = Mat3::identity();
+    opacity_ = 1.f;
+    blendMode_ = BlendMode::Normal;
+    clip_ = viewportBounds();
+    clipMaskCount_ = 0;
+  }
+
+  void restoreAfterRecordedOpsCapture() {
+    transform_ = captureSavedState_.transform;
+    opacity_ = captureSavedState_.opacity;
+    blendMode_ = captureSavedState_.blendMode;
+    clip_ = captureSavedState_.clip;
+    clipMasks_ = captureSavedState_.clipMasks;
+    clipMaskCount_ = captureSavedState_.clipMaskCount;
+    stateStack_ = std::move(captureSavedStack_);
+    captureSavedState_ = {};
+    captureSavedStack_.clear();
+    captureRectStart_ = 0;
+    captureQuadStart_ = 0;
+    capturePathVertexStart_ = 0;
+    captureDrawOpStart_ = 0;
+  }
+
+  static void translateRectInstance(WebGpuRectInstance& inst, float dx, float dy, float opacityScale) noexcept {
+    inst.axisX[0] += dx;
+    inst.axisX[1] += dy;
+    inst.params[3] *= opacityScale;
+  }
+
+  static void translateQuadInstance(WebGpuQuadInstance& inst, float dx, float dy, float opacityScale) noexcept {
+    inst.axisX[0] += dx;
+    inst.axisX[1] += dy;
+    inst.color[3] *= opacityScale;
+  }
+
+  static void translatePathVertex(PathVertex& vertex, float dx, float dy, float opacityScale) noexcept {
+    vertex.x += dx;
+    vertex.y += dy;
+    vertex.color[3] *= opacityScale;
+  }
+
+  bool appendRecordedOps(WebGpuFrameRecorder const& recorded, bool localReplay) {
+    if (!frameActive_) {
+      return false;
+    }
+    if (localReplay && !transform_.isTranslationOnly()) {
+      return false;
+    }
+    if (localReplay && clipMaskCount_ > 0 && recordedOpsContainPathGeometry(recorded)) {
+      return false;
+    }
+
+    float const dx = localReplay ? transform_.m[6] : 0.f;
+    float const dy = localReplay ? transform_.m[7] : 0.f;
+    float const opacityScale = localReplay ? opacity_ : 1.f;
+    std::uint32_t const rectBase = static_cast<std::uint32_t>(rects_.size());
+    std::uint32_t const quadBase = static_cast<std::uint32_t>(quads_.size());
+    std::uint32_t const pathBase = static_cast<std::uint32_t>(pathVertices_.size());
+
+    rects_.reserve(rects_.size() + recorded.rects.size());
+    for (WebGpuRectInstance inst : recorded.rects) {
+      if (localReplay) {
+        translateRectInstance(inst, dx, dy, opacityScale);
+        applyCurrentClip(inst);
+      }
+      rects_.push_back(inst);
+    }
+
+    quads_.reserve(quads_.size() + recorded.quads.size());
+    for (WebGpuQuadInstance inst : recorded.quads) {
+      if (localReplay) {
+        translateQuadInstance(inst, dx, dy, opacityScale);
+        applyCurrentClip(inst);
+      }
+      quads_.push_back(inst);
+    }
+
+    pathVertices_.reserve(pathVertices_.size() + recorded.pathVertices.size());
+    for (PathVertex vertex : recorded.pathVertices) {
+      if (localReplay) {
+        translatePathVertex(vertex, dx, dy, opacityScale);
+      }
+      pathVertices_.push_back(vertex);
+    }
+
+    drawOps_.reserve(drawOps_.size() + recorded.drawOps.size());
+    for (WebGpuDrawOp op : recorded.drawOps) {
+      switch (op.kind) {
+        case WebGpuDrawOp::Kind::Rect:
+          op.first += rectBase;
+          break;
+        case WebGpuDrawOp::Kind::Image:
+          op.first += quadBase;
+          break;
+        case WebGpuDrawOp::Kind::Path:
+          op.first += pathBase;
+          break;
+      }
+      drawOps_.push_back(std::move(op));
+    }
+    return true;
   }
 
   void configureSurface() {
@@ -2345,6 +2588,13 @@ private:
   std::vector<PathVertex> pathVertices_;
   std::vector<WebGpuDrawOp> drawOps_;
   std::unordered_map<GlyphKey, GlyphImage, GlyphKeyHash> glyphs_;
+  WebGpuFrameRecorder* captureTarget_ = nullptr;
+  State captureSavedState_{};
+  std::vector<State> captureSavedStack_;
+  std::uint32_t captureRectStart_ = 0;
+  std::uint32_t captureQuadStart_ = 0;
+  std::uint32_t capturePathVertexStart_ = 0;
+  std::uint32_t captureDrawOpStart_ = 0;
 
   WGPUBindGroupLayout rectBindGroupLayout_ = nullptr;
   WGPUPipelineLayout rectPipelineLayout_ = nullptr;
