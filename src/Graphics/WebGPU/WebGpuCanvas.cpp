@@ -244,6 +244,17 @@ struct WebGpuQuadInstance {
   float clipEntries[kRoundedClipEntryCount][4]{};
 };
 
+struct WebGpuPathVertex {
+  float x = 0.f;
+  float y = 0.f;
+  float color[4]{};
+  float viewport[2]{};
+  float clipHeader[4]{};
+  float clipEntries[kRoundedClipEntryCount][4]{};
+};
+
+static_assert(sizeof(WebGpuPathVertex) == 176);
+
 struct WebGpuRoundedClipState {
   Rect rect{};
   CornerRadius radii{};
@@ -537,27 +548,100 @@ char const kPathShaderWgsl[] = R"wgsl(
 struct VertexOut {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec4<f32>,
+  @location(1) world: vec2<f32>,
+  @location(2) @interpolate(flat) clipHeader: vec4<f32>,
+  @location(3) @interpolate(flat) clip0: vec4<f32>,
+  @location(4) @interpolate(flat) clip1: vec4<f32>,
+  @location(5) @interpolate(flat) clip2: vec4<f32>,
+  @location(6) @interpolate(flat) clip3: vec4<f32>,
+  @location(7) @interpolate(flat) clip4: vec4<f32>,
+  @location(8) @interpolate(flat) clip5: vec4<f32>,
+  @location(9) @interpolate(flat) clip6: vec4<f32>,
+  @location(10) @interpolate(flat) clip7: vec4<f32>,
 };
 
 @vertex
 fn vs_main(@location(0) position: vec2<f32>,
            @location(1) color: vec4<f32>,
-           @location(2) viewport: vec2<f32>) -> VertexOut {
+           @location(2) viewport: vec2<f32>,
+           @location(3) clipHeader: vec4<f32>,
+           @location(4) clip0: vec4<f32>,
+           @location(5) clip1: vec4<f32>,
+           @location(6) clip2: vec4<f32>,
+           @location(7) clip3: vec4<f32>,
+           @location(8) clip4: vec4<f32>,
+           @location(9) clip5: vec4<f32>,
+           @location(10) clip6: vec4<f32>,
+           @location(11) clip7: vec4<f32>) -> VertexOut {
   let safeViewport = max(viewport, vec2<f32>(1.0, 1.0));
   let ndc = vec2<f32>(position.x / safeViewport.x * 2.0 - 1.0,
                       1.0 - position.y / safeViewport.y * 2.0);
   var out: VertexOut;
   out.position = vec4<f32>(ndc, 0.0, 1.0);
   out.color = color;
+  out.world = position;
+  out.clipHeader = clipHeader;
+  out.clip0 = clip0;
+  out.clip1 = clip1;
+  out.clip2 = clip2;
+  out.clip3 = clip3;
+  out.clip4 = clip4;
+  out.clip5 = clip5;
+  out.clip6 = clip6;
+  out.clip7 = clip7;
   return out;
+}
+
+fn rounded_rect_sdf(p: vec2<f32>, halfSize: vec2<f32>, radii: vec4<f32>) -> f32 {
+  let r = select(select(radii.x, radii.y, p.x > 0.0),
+                 select(radii.w, radii.z, p.x > 0.0),
+                 p.y > 0.0);
+  let q = abs(p) - halfSize + vec2<f32>(r, r);
+  return min(max(q.x, q.y), 0.0) + length(max(q, vec2<f32>(0.0, 0.0))) - r;
+}
+
+fn distance_coverage(d: f32) -> f32 {
+  let aa = max(0.75 * length(vec2<f32>(dpdx(d), dpdy(d))), 0.0001);
+  return 1.0 - smoothstep(-aa, aa, d);
+}
+
+fn clip_entry(in: VertexOut, index: u32) -> vec4<f32> {
+  switch index {
+    case 0u: { return in.clip0; }
+    case 1u: { return in.clip1; }
+    case 2u: { return in.clip2; }
+    case 3u: { return in.clip3; }
+    case 4u: { return in.clip4; }
+    case 5u: { return in.clip5; }
+    case 6u: { return in.clip6; }
+    default: { return in.clip7; }
+  }
+}
+
+fn rounded_clip_coverage(in: VertexOut) -> f32 {
+  let count = clamp(i32(in.clipHeader.x + 0.5), 0, 4);
+  var coverage = 1.0;
+  for (var i = 0; i < count; i = i + 1) {
+    let clipRect = clip_entry(in, u32(i * 2));
+    let clipRadii = clip_entry(in, u32(i * 2 + 1));
+    if (clipRect.z <= 0.0 || clipRect.w <= 0.0) {
+      continue;
+    }
+    let halfSize = clipRect.zw * 0.5;
+    let local = in.world - clipRect.xy - halfSize;
+    coverage = coverage * distance_coverage(rounded_rect_sdf(local, halfSize, clipRadii));
+  }
+  return coverage;
 }
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-  if (in.color.a <= 0.001) {
+  let coverage = rounded_clip_coverage(in);
+  let alpha = in.color.a * coverage;
+  if (alpha <= 0.001) {
     discard;
   }
-  return in.color;
+  return vec4<f32>(in.color.rgb, alpha);
 }
 )wgsl";
 
@@ -757,7 +841,7 @@ class WebGpuCanvas final : public Canvas {
     std::vector<WebGpuDrawOp> drawOps;
     std::vector<WebGpuRectInstance> rects;
     std::vector<WebGpuQuadInstance> quads;
-    std::vector<PathVertex> pathVertices;
+    std::vector<WebGpuPathVertex> pathVertices;
     bool containsClipState = false;
 
     Backend backend() const noexcept override { return Backend::WebGPU; }
@@ -1353,6 +1437,16 @@ private:
     }
   }
 
+  WebGpuPathVertex makePathVertex(PathVertex const& source) const {
+    WebGpuPathVertex vertex{};
+    vertex.x = source.x;
+    vertex.y = source.y;
+    std::memcpy(vertex.color, source.color, sizeof(vertex.color));
+    std::memcpy(vertex.viewport, source.viewport, sizeof(vertex.viewport));
+    applyCurrentClip(vertex);
+    return vertex;
+  }
+
   static WebGpuFrameRecorder* asWebGpuRecordedOps(RecordedOps* recorded) noexcept {
     return recorded && recorded->backend() == Backend::WebGPU
                ? static_cast<WebGpuFrameRecorder*>(recorded)
@@ -1369,12 +1463,6 @@ private:
     return clipHeader[0] > 0.5f;
   }
 
-  static bool recordedOpsContainPathGeometry(WebGpuFrameRecorder const& recorded) noexcept {
-    return std::any_of(recorded.drawOps.begin(), recorded.drawOps.end(), [](WebGpuDrawOp const& op) {
-      return op.kind == WebGpuDrawOp::Kind::Path && op.count > 0;
-    });
-  }
-
   static bool recordedOpsContainClipState(WebGpuFrameRecorder const& recorded) noexcept {
     if (recorded.containsClipState) {
       return true;
@@ -1385,8 +1473,14 @@ private:
     if (rectClip) {
       return true;
     }
-    return std::any_of(recorded.quads.begin(), recorded.quads.end(), [](WebGpuQuadInstance const& inst) {
+    bool const quadClip = std::any_of(recorded.quads.begin(), recorded.quads.end(), [](WebGpuQuadInstance const& inst) {
       return instanceHasClip(inst.clipHeader);
+    });
+    if (quadClip) {
+      return true;
+    }
+    return std::any_of(recorded.pathVertices.begin(), recorded.pathVertices.end(), [](WebGpuPathVertex const& vertex) {
+      return instanceHasClip(vertex.clipHeader);
     });
   }
 
@@ -1444,10 +1538,23 @@ private:
     inst.color[3] *= opacityScale;
   }
 
-  static void translatePathVertex(PathVertex& vertex, float dx, float dy, float opacityScale) noexcept {
+  static void translateClipEntries(float (&clipHeader)[4],
+                                   float (&clipEntries)[kRoundedClipEntryCount][4],
+                                   float dx,
+                                   float dy) noexcept {
+    std::uint32_t const count = static_cast<std::uint32_t>(
+        std::clamp(static_cast<int>(clipHeader[0] + 0.5f), 0, static_cast<int>(kRoundedClipMaskCapacity)));
+    for (std::uint32_t i = 0; i < count; ++i) {
+      clipEntries[i * 2u][0] += dx;
+      clipEntries[i * 2u][1] += dy;
+    }
+  }
+
+  static void translatePathVertex(WebGpuPathVertex& vertex, float dx, float dy, float opacityScale) noexcept {
     vertex.x += dx;
     vertex.y += dy;
     vertex.color[3] *= opacityScale;
+    translateClipEntries(vertex.clipHeader, vertex.clipEntries, dx, dy);
   }
 
   bool appendRecordedOps(WebGpuFrameRecorder const& recorded, bool localReplay) {
@@ -1455,9 +1562,6 @@ private:
       return false;
     }
     if (localReplay && !transform_.isTranslationOnly()) {
-      return false;
-    }
-    if (localReplay && clipMaskCount_ > 0 && recordedOpsContainPathGeometry(recorded)) {
       return false;
     }
 
@@ -1487,9 +1591,10 @@ private:
     }
 
     pathVertices_.reserve(pathVertices_.size() + recorded.pathVertices.size());
-    for (PathVertex vertex : recorded.pathVertices) {
+    for (WebGpuPathVertex vertex : recorded.pathVertices) {
       if (localReplay) {
         translatePathVertex(vertex, dx, dy, opacityScale);
+        applyCurrentClip(vertex);
       }
       pathVertices_.push_back(vertex);
     }
@@ -1988,7 +2093,10 @@ private:
       if (tessellated.vertices.empty()) {
         return;
       }
-      pathVertices_.insert(pathVertices_.end(), tessellated.vertices.begin(), tessellated.vertices.end());
+      pathVertices_.reserve(pathVertices_.size() + tessellated.vertices.size());
+      for (PathVertex const& vertex : tessellated.vertices) {
+        pathVertices_.push_back(makePathVertex(vertex));
+      }
     };
 
     if (!fill.isNone()) {
@@ -2163,14 +2271,14 @@ private:
     }
     ensureBuffer(pathBuffer_,
                  pathBufferCapacity_,
-                 static_cast<std::uint64_t>(pathVertices_.size() * sizeof(PathVertex)),
+                 static_cast<std::uint64_t>(pathVertices_.size() * sizeof(WebGpuPathVertex)),
                  WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst,
                  "LambdaUI WebGPU Path Vertices");
     wgpuQueueWriteBuffer(context_.queue(),
                          pathBuffer_,
                          0,
                          pathVertices_.data(),
-                         pathVertices_.size() * sizeof(PathVertex));
+                         pathVertices_.size() * sizeof(WebGpuPathVertex));
   }
 
   void ensureRectBindGroup() {
@@ -2480,25 +2588,33 @@ private:
       throw std::runtime_error("Lambda WebGPU: failed to create path shader module");
     }
 
-    WGPUVertexAttribute attributes[3] = {
-        WGPU_VERTEX_ATTRIBUTE_INIT,
-        WGPU_VERTEX_ATTRIBUTE_INIT,
-        WGPU_VERTEX_ATTRIBUTE_INIT,
-    };
+    WGPUVertexAttribute attributes[4 + kRoundedClipEntryCount];
+    for (WGPUVertexAttribute& attribute : attributes) {
+      attribute = WGPU_VERTEX_ATTRIBUTE_INIT;
+    }
     attributes[0].format = WGPUVertexFormat_Float32x2;
-    attributes[0].offset = offsetof(PathVertex, x);
+    attributes[0].offset = offsetof(WebGpuPathVertex, x);
     attributes[0].shaderLocation = 0;
     attributes[1].format = WGPUVertexFormat_Float32x4;
-    attributes[1].offset = offsetof(PathVertex, color);
+    attributes[1].offset = offsetof(WebGpuPathVertex, color);
     attributes[1].shaderLocation = 1;
     attributes[2].format = WGPUVertexFormat_Float32x2;
-    attributes[2].offset = offsetof(PathVertex, viewport);
+    attributes[2].offset = offsetof(WebGpuPathVertex, viewport);
     attributes[2].shaderLocation = 2;
+    attributes[3].format = WGPUVertexFormat_Float32x4;
+    attributes[3].offset = offsetof(WebGpuPathVertex, clipHeader);
+    attributes[3].shaderLocation = 3;
+    for (std::uint32_t i = 0; i < kRoundedClipEntryCount; ++i) {
+      WGPUVertexAttribute& attribute = attributes[4u + i];
+      attribute.format = WGPUVertexFormat_Float32x4;
+      attribute.offset = offsetof(WebGpuPathVertex, clipEntries) + static_cast<std::uint64_t>(i) * sizeof(float[4]);
+      attribute.shaderLocation = 4u + i;
+    }
 
     WGPUVertexBufferLayout vertexBufferLayout = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
     vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-    vertexBufferLayout.arrayStride = sizeof(PathVertex);
-    vertexBufferLayout.attributeCount = 3;
+    vertexBufferLayout.arrayStride = sizeof(WebGpuPathVertex);
+    vertexBufferLayout.attributeCount = 4 + kRoundedClipEntryCount;
     vertexBufferLayout.attributes = attributes;
 
     WGPUBlendState blend = WGPU_BLEND_STATE_INIT;
@@ -2658,7 +2774,7 @@ private:
   std::vector<State> stateStack_;
   std::vector<WebGpuRectInstance> rects_;
   std::vector<WebGpuQuadInstance> quads_;
-  std::vector<PathVertex> pathVertices_;
+  std::vector<WebGpuPathVertex> pathVertices_;
   std::vector<WebGpuDrawOp> drawOps_;
   std::unordered_map<GlyphKey, GlyphImage, GlyphKeyHash> glyphs_;
   WebGpuFrameRecorder* captureTarget_ = nullptr;
