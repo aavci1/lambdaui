@@ -1,6 +1,6 @@
 #include <Lambda/Graphics/Image.hpp>
 
-#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND) || defined(LAMBDAUI_PLATFORM_LINUX_KMS)
+#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
 #include <cairo.h>
 #include <librsvg/rsvg.h>
 #endif
@@ -98,7 +98,7 @@ std::optional<DecodedImageRgba> decodeImageRgbaFromBytes(std::span<std::uint8_t 
   return result;
 }
 
-#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND) || defined(LAMBDAUI_PLATFORM_LINUX_KMS)
+#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
 std::optional<DecodedImageRgba> decodeSvgRgbaFromFile(std::filesystem::path const& path,
                                                       std::uint32_t maxLongEdge) {
   GError* error = nullptr;
@@ -316,7 +316,7 @@ bool Image::updatePixelsRegion(std::span<std::uint8_t const>,
 
 std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path, std::uint32_t maxLongEdge) {
   std::filesystem::path const imagePath{std::string(path)};
-#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND) || defined(LAMBDAUI_PLATFORM_LINUX_KMS)
+#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   if (isSvgPath(imagePath)) {
     return decodeSvgRgbaFromFile(imagePath, maxLongEdge);
   }

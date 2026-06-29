@@ -164,7 +164,7 @@ public:
   std::string name() const;
   std::string userDataDir() const;
   std::string cacheDir() const;
-  /// Returns platform output names when available. KMS returns DRM connector names such as "eDP-1" or "HDMI-A-1".
+  /// Returns platform output names when available.
   std::vector<std::string> availableOutputs() const;
   /// True when another live window is registered as a modal child of this window.
   bool isWindowInputBlockedByModal(unsigned int handle) const;

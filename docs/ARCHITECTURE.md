@@ -28,7 +28,6 @@ Use `include/Lambda.hpp` as the broad umbrella include. Use narrower headers fro
 - `SceneGraph`: retained nodes, layout constraints, hit testing, interaction metadata, traversal, and scene rendering.
 - `Layout`: layout primitives and stack algorithms.
 - `UI`: `Application`, `Window`, `Element`, components, hooks, environments, commands, menus, overlays, popovers, and built-in views.
-- `Platform`: public platform-specific entry points, currently including Linux KMS output control.
 - `Debug`: debug flags and performance counters.
 
 The implementation mirrors these modules in `src/`. Platform-specific code lives under `src/Platform`, `src/Graphics/Metal`, `src/Graphics/Vulkan`, and `src/Graphics/Linux`.
@@ -133,7 +132,7 @@ Linux rendering:
 - Vulkan canvas and render targets.
 - FreeType/fontconfig/HarfBuzz text system.
 - GLSL shaders compiled to SPIR-V headers at build time.
-- Wayland client or KMS presentation depending on platform selection.
+- Wayland client presentation.
 
 Rendering code is split across:
 
@@ -184,13 +183,6 @@ Backend selection is controlled by `LAMBDAUI_PLATFORM`.
 - Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
 - Defines `LAMBDAUI_VULKAN=1`.
 
-`LINUX_KMS`:
-
-- Uses DRM/KMS, GBM, libinput, libseat, libudev, and Vulkan.
-- Can target named display outputs and display modes through `WindowConfig`.
-- Exposes lower-level output/presenter APIs in `include/Lambda/Platform/Linux/KmsOutput.hpp`.
-- Defines `LAMBDAUI_VULKAN=1`.
-
 ## Runtime Resources
 
 `resources/fonts/MaterialSymbolsRounded.ttf` is copied next to app executables by `lambdaui_add_app`. Icons and icon names are generated from that bundled font through the tools under `tools/`.
@@ -202,7 +194,7 @@ Backend selection is controlled by `LAMBDAUI_PLATFORM`.
 - Change layout behavior: `include/Lambda/Layout`, `src/Layout`, `SceneNode::relayout`, and layout tests.
 - Change rendering output: `src/SceneGraph/SceneRenderer.cpp` plus the relevant Metal/Vulkan canvas code.
 - Change input routing: `src/UI/Runtime.cpp`, `include/Lambda/SceneGraph/SceneTraversal.hpp`, and runtime input tests.
-- Change platform window behavior: `src/Platform/Mac`, `src/Platform/Linux/Wayland*`, or `src/Platform/Linux/Kms*`.
+- Change platform window behavior: `src/Platform/Mac` or `src/Platform/Linux/Wayland*`.
 - Change app build integration: `cmake/LambdaApp.cmake`.
 
 When in doubt, start with the public header in `include/Lambda/...`, then follow the matching implementation in `src/...`.

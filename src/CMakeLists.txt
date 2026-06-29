@@ -224,43 +224,9 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     Platform/Linux/WaylandWindow.cpp
   )
   target_link_libraries(lambdaui PRIVATE lambda_wayland_client_protocols)
-elseif(LAMBDAUI_PLATFORM_LINUX_KMS)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
-  pkg_check_modules(GBM REQUIRED IMPORTED_TARGET gbm)
-  pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
-  pkg_check_modules(LIBSEAT REQUIRED IMPORTED_TARGET libseat)
-  pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
-  pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
-  pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
-  pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
-  pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
-  pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
-  pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
-  pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
-  find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
-  target_sources(lambdaui PRIVATE
-    UI/Application.cpp
-    Graphics/Linux/FreeTypeTextSystem.cpp
-    Graphics/Vulkan/VulkanAllocator.cpp
-    Graphics/Vulkan/VulkanContext.cpp
-    Graphics/Vulkan/VulkanDrawCommands.cpp
-    Graphics/Vulkan/VulkanFrameRecorder.cpp
-    Graphics/Vulkan/VulkanGlyphAtlas.cpp
-    Graphics/Vulkan/VulkanGpuCanvas.cpp
-    Graphics/Vulkan/VulkanImage.cpp
-    Graphics/Vulkan/VulkanPipelines.cpp
-    Graphics/Vulkan/VulkanRenderTarget.cpp
-    Graphics/Vulkan/VulkanSwapchain.cpp
-    Platform/Linux/Common/XkbState.cpp
-    Platform/Linux/KmsApplication.cpp
-    Platform/Linux/KmsWindow.cpp
-    Platform/Linux/KmsOutput.cpp
-    Platform/Linux/KmsInput.cpp
-  )
 endif()
 
-if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   set(LAMBDA_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
   file(MAKE_DIRECTORY ${LAMBDA_VULKAN_GENERATED_DIR})
   set(_lambda_vulkan_shader_headers)
@@ -347,22 +313,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::WAYLAND_CURSOR
     PkgConfig::LIBDRM
-    PkgConfig::XKBCOMMON
-    PkgConfig::VULKAN
-    PkgConfig::FREETYPE
-    PkgConfig::FONTCONFIG
-    PkgConfig::HARFBUZZ
-    PkgConfig::LIBRSVG
-    PkgConfig::ZLIB
-    ${CMAKE_DL_LIBS})
-elseif(LAMBDAUI_PLATFORM_LINUX_KMS)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_KMS=1)
-  target_link_libraries(lambdaui PRIVATE
-    PkgConfig::LIBDRM
-    PkgConfig::GBM
-    PkgConfig::LIBINPUT
-    PkgConfig::LIBSEAT
-    PkgConfig::LIBUDEV
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
     PkgConfig::FREETYPE

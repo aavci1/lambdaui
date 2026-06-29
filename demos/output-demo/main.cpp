@@ -4,28 +4,38 @@
 #include <Lambda/UI/Views/Text.hpp>
 #include <Lambda/UI/Views/VStack.hpp>
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
 using namespace lambdaui;
 
 struct OutputRoot {
-  std::string title;
+  std::vector<std::string> outputs;
 
   auto body() const {
+    std::string outputList;
+    if (outputs.empty()) {
+      outputList = "No named outputs reported";
+    } else {
+      for (std::size_t index = 0; index < outputs.size(); ++index) {
+        if (index > 0) outputList += "\n";
+        outputList += outputs[index];
+      }
+    }
+
     return VStack{
         .spacing = 12.f,
         .alignment = Alignment::Center,
         .children = children(
             Text{
-                .text = title.empty() ? std::string("Default Output") : title,
+                .text = "Reported Outputs",
                 .font = Font::largeTitle(),
                 .color = Color::primary(),
                 .horizontalAlignment = HorizontalAlignment::Center,
             },
             Text{
-                .text = title.empty() ? std::string("No named outputs reported")
-                                      : std::string("WindowConfig::outputName = ") + title,
+                .text = outputList,
                 .font = Font::body(),
                 .color = Color::secondary(),
                 .horizontalAlignment = HorizontalAlignment::Center,
@@ -39,18 +49,12 @@ int main(int argc, char* argv[]) {
   app.setName("Output Demo");
 
   std::vector<std::string> outputs = app.availableOutputs();
-  if (outputs.empty()) {
-    outputs.push_back({});
-  }
 
-  for (std::string const& output : outputs) {
-    auto& window = app.createWindow<Window>({
-        .size = {640, 420},
-        .title = output.empty() ? std::string("Output Demo") : std::string("Output Demo - ") + output,
-        .outputName = output,
-    });
-    window.setView(OutputRoot{.title = output});
-  }
+  auto& window = app.createWindow<Window>({
+      .size = {640, 420},
+      .title = "Output Demo",
+  });
+  window.setView(OutputRoot{.outputs = outputs});
 
   return app.exec();
 }

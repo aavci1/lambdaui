@@ -43,14 +43,10 @@ void logUnsupportedWindowConfigOnce(char const* feature) {
   static bool loggedBackground = false;
   static bool loggedLayerShell = false;
   static bool loggedBackgroundBlur = false;
-  static bool loggedOutputName = false;
-  static bool loggedDisplayMode = false;
   bool* slot = nullptr;
   if (std::strcmp(feature, "background") == 0) slot = &loggedBackground;
   else if (std::strcmp(feature, "layerShell") == 0) slot = &loggedLayerShell;
   else if (std::strcmp(feature, "backgroundBlur") == 0) slot = &loggedBackgroundBlur;
-  else if (std::strcmp(feature, "outputName") == 0) slot = &loggedOutputName;
-  else if (std::strcmp(feature, "displayMode") == 0) slot = &loggedDisplayMode;
   if (!slot || *slot) return;
   *slot = true;
   if (std::strcmp(feature, "background") == 0) {
@@ -69,13 +65,6 @@ void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities
   }
   if (config.layerShell.backgroundBlur && !capabilities.supportsBackgroundBlur) {
     logUnsupportedWindowConfigOnce("backgroundBlur");
-  }
-  if (!config.outputName.empty() && !capabilities.supportsOutputSelection) {
-    logUnsupportedWindowConfigOnce("outputName");
-  }
-  if ((config.displayMode.width > 0 || config.displayMode.height > 0 || config.displayMode.refreshHz > 0) &&
-      !capabilities.supportsDisplayMode) {
-    logUnsupportedWindowConfigOnce("displayMode");
   }
 }
 
@@ -283,7 +272,6 @@ Window::Window(const WindowConfig& config) {
       .kind = WindowLifecycleEvent::Kind::Registered,
       .handle = handle(),
       .window = this,
-      .outputName = {},
   });
 }
 
@@ -298,7 +286,6 @@ Window::~Window() {
         .kind = WindowLifecycleEvent::Kind::Unregistered,
         .handle = id,
         .window = nullptr,
-        .outputName = {},
     });
   }
 }

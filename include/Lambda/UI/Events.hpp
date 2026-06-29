@@ -18,14 +18,12 @@ namespace lambdaui {
 class Window;
 
 struct WindowLifecycleEvent {
-  enum class Kind : std::uint8_t { Registered, Unregistered, OutputAdded, OutputRemoved };
+  enum class Kind : std::uint8_t { Registered, Unregistered };
   Kind kind = Kind::Registered;
   /// Stable handle from the platform window; valid for window registration events.
   unsigned int handle = 0;
   /// Valid only when `kind == Registered` (during `Window` construction).
   Window* window = nullptr;
-  /// Valid for output lifecycle events on platforms that expose named outputs.
-  std::string outputName;
 };
 
 struct WindowEvent {

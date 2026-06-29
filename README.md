@@ -11,7 +11,7 @@ The public API lives under `include/Lambda`, implementation lives under `src`, a
 - Retained scene graph with reactive bindings, keyed control-flow views, hit testing, layout, and render caching.
 - Built-in views for text, stacks, grids, scroll views, buttons, text input, menus, popovers, dialogs, alerts, sliders, tables, icons, SVG, and more.
 - Metal renderer on macOS with Cocoa/CoreText integration.
-- Vulkan renderer on Linux with Wayland and KMS backends.
+- Vulkan renderer on Linux with a Wayland backend.
 - CMake helpers for apps and demos, plus doctest-based unit/integration tests.
 
 ## Quick Start
@@ -22,7 +22,6 @@ Prerequisites:
 - A C++23-capable compiler.
 - macOS: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
 - Linux Wayland: development packages for Wayland, wayland-protocols, libdrm, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
-- Linux KMS: the Wayland graphics/text dependencies plus GBM, libinput, libseat, and libudev.
 
 Build the library, demos, and tests:
 
@@ -43,7 +42,6 @@ Choose a backend explicitly when needed:
 ```sh
 cmake -S . -B build -DLAMBDAUI_PLATFORM=MACOS
 cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_WAYLAND
-cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_KMS
 ```
 
 `LAMBDAUI_PLATFORM=AUTO` is the default. It selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
@@ -111,7 +109,7 @@ docs/                 Project documentation
 
 ## Important CMake Options
 
-- `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, `LINUX_WAYLAND`, or `LINUX_KMS`.
+- `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, or `LINUX_WAYLAND`.
 - `LAMBDAUI_BUILD_DEMOS`: build `demos/`.
 - `LAMBDAUI_BUILD_TESTS`: build `lambda-tests` and register it with CTest.
 - `LAMBDAUI_BUILD_BENCHMARKS`: build optional benchmarks.

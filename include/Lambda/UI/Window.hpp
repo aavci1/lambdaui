@@ -51,25 +51,15 @@ class SceneGraph;
 
 class OverlayManager;
 
-struct DisplayMode {
-  int width = 0;
-  int height = 0;
-  /// Refresh rate in Hz. A value of 0 means any refresh rate at the requested resolution.
-  int refreshHz = 0;
-};
-
 /// Per-backend window feature support. Query with `Window::platformCapabilities()`.
 ///
 /// Backend matrix (config field → capability):
 /// - `background.kind == Glass` → native/compositor-backed window material where available
 /// - `layerShell` / `backgroundBlur` → Wayland compositor client only
-/// - `outputName` / `displayMode` → KMS only
 struct PlatformWindowCapabilities {
   bool supportsWindowGlass = false;
   bool supportsLayerShell = false;
   bool supportsBackgroundBlur = false;
-  bool supportsOutputSelection = false;
-  bool supportsDisplayMode = false;
 };
 
 enum class LayerShellLayer {
@@ -183,12 +173,6 @@ struct WindowConfig {
   Size minSize{};
   Size maxSize{};
   std::string restoreId;
-  /// On KMS, bind this window to a named output connector (for example "HDMI-A-1" or "DP-1").
-  /// Empty means the platform default output. Other backends currently ignore this value.
-  std::string outputName;
-  /// On KMS, request a specific connector mode. Zero values use the output's preferred mode.
-  /// Other backends currently ignore this value.
-  DisplayMode displayMode{};
   /// On Wayland, create this window as a layer-shell surface instead of an xdg_toplevel.
   /// Other backends currently ignore this value.
   LayerShellOptions layerShell{};

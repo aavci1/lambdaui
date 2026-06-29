@@ -24,12 +24,6 @@ Linux Wayland requirements:
 - `libdrm`, `xkbcommon`, Vulkan loader/headers, FreeType, fontconfig, HarfBuzz, librsvg, and zlib.
 - `glslangValidator` or `glslang` for shader compilation.
 
-Linux KMS requirements:
-
-- The Linux graphics/text dependencies above.
-- GBM, libinput, libseat, and libudev.
-- Permission to access the relevant DRM and input devices.
-
 Package names vary by distribution. Install development packages, not just runtime packages.
 
 ## Build
@@ -71,17 +65,16 @@ The main platform switch is `LAMBDAUI_PLATFORM`:
 cmake -S . -B build -DLAMBDAUI_PLATFORM=AUTO
 cmake -S . -B build -DLAMBDAUI_PLATFORM=MACOS
 cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_WAYLAND
-cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_KMS
 ```
 
-`AUTO` selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts. `LINUX_KMS` must be requested explicitly.
+`AUTO` selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
 
 Platform defines exported to consumers:
 
 - `LAMBDAUI_METAL=1`, `LAMBDAUI_VULKAN=0` on macOS.
-- `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1` on Linux backends.
+- `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1` on Linux.
 
-Use these defines to guard platform-specific APIs such as Vulkan image import or KMS output control.
+Use these defines to guard platform-specific APIs such as Vulkan image import.
 
 ## Useful Build Options
 

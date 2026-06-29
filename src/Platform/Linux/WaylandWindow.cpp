@@ -1318,8 +1318,6 @@ public:
         .supportsWindowGlass = shared_ && shared_->backgroundEffectManager,
         .supportsLayerShell = true,
         .supportsBackgroundBlur = shared_ && shared_->backgroundEffectManager,
-        .supportsOutputSelection = false,
-        .supportsDisplayMode = false,
     };
   }
 

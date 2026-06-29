@@ -55,7 +55,7 @@ if(LAMBDAUI_PLATFORM_MACOS)
     RenderOpacityTests.mm)
 endif()
 
-if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   list(APPEND _lambda_test_sources
     FreeTypeTextSystemTests.cpp
     VulkanRenderTargetTests.cpp
@@ -71,7 +71,7 @@ target_link_libraries(lambda-tests PRIVATE
   lambdaui
   doctest::doctest)
 
-if(LAMBDAUI_PLATFORM_LINUX_WAYLAND OR LAMBDAUI_PLATFORM_LINUX_KMS)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
