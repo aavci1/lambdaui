@@ -139,6 +139,7 @@ Linux rendering:
 WebGPU rendering:
 
 - Dawn `webgpu.h` device/surface setup.
+- Dawn is discovered as an installed CMake package, added from `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched with `LAMBDAUI_DAWN_FETCH`.
 - CAMetalLayer surfaces on macOS and Wayland surfaces on Linux.
 - Initial rect/line/primitive-shape pipeline in WGSL.
 

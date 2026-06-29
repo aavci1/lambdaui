@@ -46,6 +46,7 @@ cmake -S . -B build -DLAMBDAUI_PLATFORM=MACOS
 cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_WAYLAND
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
+cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
 ```
 
 `LAMBDAUI_PLATFORM=AUTO` is the default. It selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
@@ -117,6 +118,9 @@ docs/                 Project documentation
 - `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, or `LINUX_WAYLAND`.
 - `LAMBDAUI_RENDERER`: `NATIVE` or `WEBGPU`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
+- `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` for WebGPU builds.
+- `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.
+- `LAMBDAUI_DAWN_GIT_TAG`: Dawn tag, branch, or commit used by `LAMBDAUI_DAWN_FETCH`.
 - `LAMBDAUI_BUILD_DEMOS`: build `demos/`.
 - `LAMBDAUI_BUILD_TESTS`: build `lambda-tests` and register it with CTest.
 - `LAMBDAUI_BUILD_BENCHMARKS`: build optional benchmarks.

@@ -28,7 +28,7 @@ Package names vary by distribution. Install development packages, not just runti
 
 WebGPU renderer requirements:
 
-- Dawn with the `dawn::webgpu_dawn` CMake target, either installed and discoverable through `CMAKE_PREFIX_PATH` or supplied as a source checkout with `LAMBDAUI_DAWN_SOURCE_DIR`.
+- Dawn with the `dawn::webgpu_dawn` CMake target, either installed and discoverable through `CMAKE_PREFIX_PATH`, supplied as a source checkout with `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched by CMake with `LAMBDAUI_DAWN_FETCH=ON`.
 
 ## Build
 
@@ -79,6 +79,7 @@ The renderer switch is `LAMBDAUI_RENDERER`:
 cmake -S . -B build -DLAMBDAUI_RENDERER=NATIVE
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
+cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
 ```
 
 `NATIVE` is the default while the Dawn/WebGPU renderer is being ported. WebGPU builds define `LAMBDAUI_WEBGPU=1` and do not require Vulkan/libdrm/glslang on Linux.
@@ -96,6 +97,9 @@ Use these defines to guard platform-specific APIs such as Vulkan image import.
 - `LAMBDAUI_BUILD_DEMOS`: build standalone demos under `demos/`.
 - `LAMBDAUI_RENDERER`: select `NATIVE` or `WEBGPU`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
+- `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` when an installed package or source checkout is not provided.
+- `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.
+- `LAMBDAUI_DAWN_GIT_TAG`: Dawn tag, branch, or commit used by `LAMBDAUI_DAWN_FETCH`.
 - `LAMBDAUI_BUILD_TESTS`: build `lambda-tests` and register it with CTest.
 - `LAMBDAUI_BUILD_BENCHMARKS`: build benchmarks under `bench/`.
 - `LAMBDAUI_ENABLE_ASAN`: enable AddressSanitizer for framework, apps, and tests.
