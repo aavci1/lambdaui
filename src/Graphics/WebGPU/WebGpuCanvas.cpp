@@ -1390,7 +1390,13 @@ public:
       }
     }
   }
-  void drawBackdropBlur(Rect const&, float, Color, CornerRadius const&) override {}
+  void drawBackdropBlur(Rect const& rect, float radius, Color tint, CornerRadius const& corners) override {
+    (void)radius;
+    if (!frameActive_ || rect.width <= 0.f || rect.height <= 0.f || tint.a <= 0.001f) {
+      return;
+    }
+    pushRectInstance(rect, corners, FillStyle::solid(tint), StrokeStyle::none(), opacity_);
+  }
 
   void* gpuDevice() const override { return context_.device(); }
 
