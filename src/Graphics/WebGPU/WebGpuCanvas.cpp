@@ -2250,5 +2250,16 @@ std::shared_ptr<Image> Image::fromPixels(std::uint32_t width,
   return image;
 }
 
+std::shared_ptr<Image> rasterizeToImage(Canvas& canvas,
+                                        Size logicalSize,
+                                        RasterizeDrawCallback draw,
+                                        float dpiScale) {
+  (void)canvas;
+  (void)logicalSize;
+  (void)draw;
+  (void)dpiScale;
+  return nullptr;
+}
+
 } // namespace lambdaui
 #endif
