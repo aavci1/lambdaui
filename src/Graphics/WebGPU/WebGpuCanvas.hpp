@@ -3,6 +3,7 @@
 #include <Lambda/Graphics/Canvas.hpp>
 #include <Lambda/Core/Geometry.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace lambdaui {
@@ -28,6 +29,11 @@ std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuNativeSurface nativeSurface,
                                            TextSystem& textSystem,
                                            Size initialSize,
                                            bool transparentSurface = false);
+
+std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
+                                                       Size logicalSize,
+                                                       std::uint32_t pixelWidth,
+                                                       std::uint32_t pixelHeight);
 
 } // namespace webgpu
 } // namespace lambdaui

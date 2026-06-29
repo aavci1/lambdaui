@@ -23,4 +23,8 @@ std::unique_ptr<RenderTarget> createRenderTarget(VulkanRenderTargetSpec const& s
 std::unique_ptr<RenderTarget> createRenderTarget(MetalRenderTargetSpec const& spec);
 #endif
 
+#if LAMBDAUI_WEBGPU
+std::unique_ptr<RenderTarget> createRenderTarget(WebGpuRenderTargetSpec const& spec);
+#endif
+
 } // namespace lambdaui::platform

@@ -176,6 +176,7 @@ elseif(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
     Graphics/CoreTextSystem.mm
     Graphics/WebGPU/WebGpuContext.cpp
     Graphics/WebGPU/WebGpuCanvas.cpp
+    Graphics/WebGPU/WebGpuRenderTarget.cpp
     Platform/Mac/MacApplication.mm
     Platform/Mac/MacMetalWindow.mm
     Platform/Mac/MacClipboard.mm
@@ -246,6 +247,7 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     target_sources(lambdaui PRIVATE
       Graphics/WebGPU/WebGpuContext.cpp
       Graphics/WebGPU/WebGpuCanvas.cpp
+      Graphics/WebGPU/WebGpuRenderTarget.cpp
     )
   endif()
   target_link_libraries(lambdaui PRIVATE lambda_wayland_client_protocols)

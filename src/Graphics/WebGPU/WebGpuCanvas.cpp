@@ -2836,6 +2836,13 @@ std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuNativeSurface nativeSurface,
   return std::make_unique<WebGpuCanvas>(nativeSurface, handle, textSystem, initialSize, transparentSurface);
 }
 
+std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
+                                                       Size logicalSize,
+                                                       std::uint32_t pixelWidth,
+                                                       std::uint32_t pixelHeight) {
+  return std::make_unique<WebGpuCanvas>(textSystem, logicalSize, pixelWidth, pixelHeight);
+}
+
 void unpremultiplyRgbaPixels(std::vector<std::uint8_t>& pixels) {
   for (std::size_t i = 0; i + 3u < pixels.size(); i += 4u) {
     std::uint8_t const alpha = pixels[i + 3u];

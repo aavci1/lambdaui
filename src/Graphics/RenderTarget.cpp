@@ -32,6 +32,13 @@ RenderTarget::RenderTarget(MetalRenderTargetSpec const& spec)
 }
 #endif
 
+#if LAMBDAUI_WEBGPU
+RenderTarget::RenderTarget(WebGpuRenderTargetSpec const& spec)
+    : impl_(platform::createRenderTarget(spec)) {
+  checkedTarget(impl_);
+}
+#endif
+
 RenderTarget::~RenderTarget() = default;
 RenderTarget::RenderTarget(RenderTarget&&) noexcept = default;
 RenderTarget& RenderTarget::operator=(RenderTarget&&) noexcept = default;

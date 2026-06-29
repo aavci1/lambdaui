@@ -63,6 +63,15 @@ struct MetalRenderTargetSpec {
 };
 #endif
 
+#if LAMBDAUI_WEBGPU
+struct WebGpuRenderTargetSpec {
+  Size logicalSize{};
+  std::uint32_t pixelWidth = 0;
+  std::uint32_t pixelHeight = 0;
+  float dpiScale = 1.f;
+};
+#endif
+
 namespace platform {
 class RenderTarget;
 }
@@ -74,6 +83,9 @@ public:
 #endif
 #if LAMBDAUI_METAL
   explicit RenderTarget(MetalRenderTargetSpec const& spec);
+#endif
+#if LAMBDAUI_WEBGPU
+  explicit RenderTarget(WebGpuRenderTargetSpec const& spec);
 #endif
 
   ~RenderTarget();
