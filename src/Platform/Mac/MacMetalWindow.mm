@@ -1,7 +1,9 @@
 #import <Cocoa/Cocoa.h>
 #import <CoreVideo/CoreVideo.h>
 #import <CoreGraphics/CoreGraphics.h>
+#if !LAMBDAUI_WEBGPU
 #import <Metal/Metal.h>
+#endif
 #import <QuartzCore/QuartzCore.h>
 
 #include <Lambda/UI/Application.hpp>
@@ -18,7 +20,11 @@
 #include "UI/Platform/Window.hpp"
 #include "UI/Platform/WindowEventPump.hpp"
 #include "UI/Platform/WindowFactory.hpp"
+#if LAMBDAUI_WEBGPU
+#include "Graphics/WebGPU/WebGpuCanvas.hpp"
+#else
 #include "Graphics/Metal/MetalCanvas.hpp"
+#endif
 #include "UI/DebugFlags.hpp"
 #include "UI/TransientPopoverHost.hpp"
 
@@ -88,12 +94,14 @@ void postTextInput(LambdaMetalView* view, std::string text);
 /// `+layerClass` alone is not always reliable on newer macOS for `setDevice:`.
 - (CALayer*)makeBackingLayer {
   CAMetalLayer* metalLayer = [CAMetalLayer layer];
+#if !LAMBDAUI_WEBGPU
   id<MTLDevice> device = MTLCreateSystemDefaultDevice();
   if (device) {
     metalLayer.device = device;
   }
   metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
   metalLayer.framebufferOnly = NO;
+#endif
   metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
   metalLayer.contentsGravity = kCAGravityTopLeft;
   metalLayer.opaque = NO;
@@ -778,10 +786,22 @@ bool MacPopoverSurface::show(LambdaMetalView* parentView, Rect anchor) {
   if (!layer) {
     return false;
   }
+#if LAMBDAUI_WEBGPU
+  canvas_ = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface{
+                                           .kind = webgpu::WebGpuNativeSurface::Kind::MetalLayer,
+                                           .display = nullptr,
+                                           .surface = (__bridge void*)layer,
+                                       },
+                                       owner_->handle(),
+                                       Application::instance().textSystem(),
+                                       size_,
+                                       true);
+#else
   canvas_ = createMetalCanvas(owner_->lambdaWindow(), (__bridge void*)layer, owner_->handle(),
                               Application::instance().textSystem(), [this] {
                                 render();
                               });
+#endif
   if (!canvas_) {
     return false;
   }
@@ -951,12 +971,14 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (CALayer*)makeBackingLayer {
   CAMetalLayer* metalLayer = [CAMetalLayer layer];
+#if !LAMBDAUI_WEBGPU
   id<MTLDevice> device = MTLCreateSystemDefaultDevice();
   if (device) {
     metalLayer.device = device;
   }
   metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
   metalLayer.framebufferOnly = NO;
+#endif
   metalLayer.opaque = NO;
   metalLayer.backgroundColor = [[NSColor clearColor] CGColor];
   metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
@@ -1226,7 +1248,9 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   fw->canvas().resize(static_cast<int>(std::lround(currentSize.width)),
                       static_cast<int>(std::lround(currentSize.height)));
   platform->setMetalLayerPresentsWithTransaction(true);
+#if !LAMBDAUI_WEBGPU
   lambdaui::setSyncPresentForCanvas(&fw->canvas(), true);
+#endif
   lambdaui::Application::instance().flushRedraw();
   platform->setMetalLayerPresentsWithTransaction(false);
 }
@@ -1910,9 +1934,21 @@ std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambdaui::Window& owner) 
     layer.opaque = NO;
     layer.backgroundColor = [[NSColor clearColor] CGColor];
   }
+#if LAMBDAUI_WEBGPU
+  return webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface{
+                                       .kind = webgpu::WebGpuNativeSurface::Kind::MetalLayer,
+                                       .display = nullptr,
+                                       .surface = layerPtr,
+                                   },
+                                   handle(),
+                                   Application::instance().textSystem(),
+                                   currentSize(),
+                                   false);
+#else
   return createMetalCanvas(&owner, layerPtr, handle(), Application::instance().textSystem(), [] {
     Application::instance().requestRedraw();
   });
+#endif
 }
 
 void MacMetalWindow::processEvents() {

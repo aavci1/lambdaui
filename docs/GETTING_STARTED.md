@@ -26,6 +26,10 @@ Linux Wayland requirements:
 
 Package names vary by distribution. Install development packages, not just runtime packages.
 
+WebGPU renderer requirements:
+
+- Dawn with the `dawn::webgpu_dawn` CMake target, either installed and discoverable through `CMAKE_PREFIX_PATH` or supplied as a source checkout with `LAMBDAUI_DAWN_SOURCE_DIR`.
+
 ## Build
 
 Build the framework only:
@@ -69,16 +73,29 @@ cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_WAYLAND
 
 `AUTO` selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
 
+The renderer switch is `LAMBDAUI_RENDERER`:
+
+```sh
+cmake -S . -B build -DLAMBDAUI_RENDERER=NATIVE
+cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
+cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
+```
+
+`NATIVE` is the default while the Dawn/WebGPU renderer is being ported. WebGPU builds define `LAMBDAUI_WEBGPU=1` and do not require Vulkan/libdrm/glslang on Linux.
+
 Platform defines exported to consumers:
 
-- `LAMBDAUI_METAL=1`, `LAMBDAUI_VULKAN=0` on macOS.
-- `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1` on Linux.
+- `LAMBDAUI_METAL=1`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=0` on native macOS builds.
+- `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1`, `LAMBDAUI_WEBGPU=0` on native Linux Wayland builds.
+- `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=1` on WebGPU builds.
 
 Use these defines to guard platform-specific APIs such as Vulkan image import.
 
 ## Useful Build Options
 
 - `LAMBDAUI_BUILD_DEMOS`: build standalone demos under `demos/`.
+- `LAMBDAUI_RENDERER`: select `NATIVE` or `WEBGPU`.
+- `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_BUILD_TESTS`: build `lambda-tests` and register it with CTest.
 - `LAMBDAUI_BUILD_BENCHMARKS`: build benchmarks under `bench/`.
 - `LAMBDAUI_ENABLE_ASAN`: enable AddressSanitizer for framework, apps, and tests.
@@ -123,7 +140,7 @@ cmake --build build --target lambda-tests
 ctest --test-dir build --output-on-failure
 ```
 
-Platform-specific tests are included only when their backend is enabled. For example, Metal canvas tests build on macOS, while Vulkan render-target and Wayland scroll accumulator tests build for Linux Vulkan backends.
+Platform-specific tests are included only when their backend is enabled. For example, Metal canvas tests build on native macOS, while Vulkan render-target tests build for native Linux Vulkan backends.
 
 ## Demos
 

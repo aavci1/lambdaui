@@ -120,6 +120,8 @@ Core files:
 
 Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
 
+Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=NATIVE` keeps the existing Metal or Vulkan renderer, while `LAMBDAUI_RENDERER=WEBGPU` routes window surfaces through Dawn/WebGPU.
+
 macOS rendering:
 
 - Cocoa windowing.
@@ -134,10 +136,17 @@ Linux rendering:
 - GLSL shaders compiled to SPIR-V headers at build time.
 - Wayland client presentation.
 
+WebGPU rendering:
+
+- Dawn `webgpu.h` device/surface setup.
+- CAMetalLayer surfaces on macOS and Wayland surfaces on Linux.
+- Initial rect/line/primitive-shape pipeline in WGSL.
+
 Rendering code is split across:
 
 - `src/Graphics/Metal`
 - `src/Graphics/Vulkan`
+- `src/Graphics/WebGPU`
 - `src/Graphics/Linux`
 - `src/SceneGraph/SceneRenderer.cpp`
 
@@ -168,7 +177,7 @@ Useful files:
 
 ## Platform Backends
 
-Backend selection is controlled by `LAMBDAUI_PLATFORM`.
+Platform selection is controlled by `LAMBDAUI_PLATFORM`; renderer selection is controlled by `LAMBDAUI_RENDERER`.
 
 `MACOS`:
 
@@ -182,6 +191,11 @@ Backend selection is controlled by `LAMBDAUI_PLATFORM`.
 - Uses Vulkan for rendering.
 - Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
 - Defines `LAMBDAUI_VULKAN=1`.
+
+`WEBGPU` renderer:
+
+- Uses Dawn for GPU device, queue, surface, and WebGPU command encoding.
+- Defines `LAMBDAUI_WEBGPU=1`.
 
 ## Runtime Resources
 

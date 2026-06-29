@@ -46,7 +46,7 @@ public:
 
 }
 
-enum class Backend : std::uint8_t { Metal, Vulkan };
+enum class Backend : std::uint8_t { Metal, Vulkan, WebGPU };
 
 struct RecordedOps {
   virtual ~RecordedOps() = default;
@@ -158,7 +158,8 @@ public:
     drawBackdropBlur(rect, radius, tint, corners);
   }
 
-  /// Metal: `id<MTLDevice>` as `void*` (use with `loadImage(path, canvas.gpuDevice())`). Null if unavailable.
+  /// Backend device handle for image/resource creation (for example `id<MTLDevice>` or `WGPUDevice`).
+  /// Use with `loadImage(path, canvas.gpuDevice())` when the active backend needs a device.
   virtual void* gpuDevice() const = 0;
 
   virtual bool requestNextFrameCapture() = 0;

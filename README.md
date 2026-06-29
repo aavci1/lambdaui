@@ -1,6 +1,6 @@
 # LambdaUI
 
-LambdaUI is a C++23 UI framework for building native desktop interfaces with declarative component bodies, fine-grained reactivity, and a retained scene graph. It builds as a shared CMake library and includes platform backends for macOS/Metal and Linux/Vulkan.
+LambdaUI is a C++23 UI framework for building native desktop interfaces with declarative component bodies, fine-grained reactivity, and a retained scene graph. It builds as a shared CMake library and includes native platform backends for macOS/Metal and Linux/Vulkan, with an in-progress Dawn/WebGPU renderer available behind a CMake switch.
 
 The public API lives under `include/Lambda`, implementation lives under `src`, and examples live under `demos`.
 
@@ -12,6 +12,7 @@ The public API lives under `include/Lambda`, implementation lives under `src`, a
 - Built-in views for text, stacks, grids, scroll views, buttons, text input, menus, popovers, dialogs, alerts, sliders, tables, icons, SVG, and more.
 - Metal renderer on macOS with Cocoa/CoreText integration.
 - Vulkan renderer on Linux with a Wayland backend.
+- Dawn/WebGPU renderer scaffolding for macOS CAMetalLayer and Linux Wayland surfaces.
 - CMake helpers for apps and demos, plus doctest-based unit/integration tests.
 
 ## Quick Start
@@ -22,6 +23,7 @@ Prerequisites:
 - A C++23-capable compiler.
 - macOS: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
 - Linux Wayland: development packages for Wayland, wayland-protocols, libdrm, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
+- WebGPU renderer: Dawn installed with CMake package files, or a local Dawn source checkout.
 
 Build the library, demos, and tests:
 
@@ -42,9 +44,12 @@ Choose a backend explicitly when needed:
 ```sh
 cmake -S . -B build -DLAMBDAUI_PLATFORM=MACOS
 cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_WAYLAND
+cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
+cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
 ```
 
 `LAMBDAUI_PLATFORM=AUTO` is the default. It selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
+`LAMBDAUI_RENDERER=NATIVE` is the default while the WebGPU port is in progress.
 
 ## Minimal App
 
@@ -110,6 +115,8 @@ docs/                 Project documentation
 ## Important CMake Options
 
 - `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, or `LINUX_WAYLAND`.
+- `LAMBDAUI_RENDERER`: `NATIVE` or `WEBGPU`.
+- `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_BUILD_DEMOS`: build `demos/`.
 - `LAMBDAUI_BUILD_TESTS`: build `lambda-tests` and register it with CTest.
 - `LAMBDAUI_BUILD_BENCHMARKS`: build optional benchmarks.

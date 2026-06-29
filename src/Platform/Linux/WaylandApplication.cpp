@@ -1,11 +1,14 @@
+#include "UI/Platform/Application.hpp"
+#include "Platform/Linux/WaylandNativeSurface.hpp"
+#include "Platform/Linux/WaylandOutputs.hpp"
+
+#if !LAMBDAUI_WEBGPU
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include <vulkan/vulkan.h>
 
 #include "Graphics/Vulkan/VulkanCheck.hpp"
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
-#include "UI/Platform/Application.hpp"
-#include "Platform/Linux/WaylandNativeSurface.hpp"
-#include "Platform/Linux/WaylandOutputs.hpp"
+#endif
 
 #include <cctype>
 #include <cstdlib>
@@ -48,7 +51,11 @@ std::string appDir(std::string const& base, std::string const& appName) {
   return path.string();
 }
 
-class WaylandApplication final : public platform::Application, public platform::GpuSurfaceProvider {
+class WaylandApplication final : public platform::Application
+#if !LAMBDAUI_WEBGPU
+    , public platform::GpuSurfaceProvider
+#endif
+{
 public:
   void initialize() override {}
 
@@ -98,6 +105,7 @@ public:
     return linux_platform::availableWaylandOutputs();
   }
 
+#if !LAMBDAUI_WEBGPU
   platform::GpuSurfaceProvider* gpuSurfaceProvider() override {
     return this;
   }
@@ -122,6 +130,7 @@ public:
     vkCheck(vkCreateWaylandSurfaceKHR(instance, &info, nullptr, &surface), "vkCreateWaylandSurfaceKHR");
     return surface;
   }
+#endif
 
 private:
   void collectShortcuts(MenuItem const& item) {

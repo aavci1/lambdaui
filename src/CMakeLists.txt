@@ -122,6 +122,10 @@ add_library(lambdaui SHARED
 )
 add_library(lambdaui::lambdaui ALIAS lambdaui)
 
+if(LAMBDAUI_RENDERER_WEBGPU)
+  include(${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaDawn.cmake)
+endif()
+
 set_target_properties(lambdaui PROPERTIES
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR}
@@ -134,7 +138,7 @@ add_custom_target(lambdaui_module_dependency_check
   VERBATIM
 )
 
-if(LAMBDAUI_PLATFORM_MACOS)
+if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_NATIVE)
   set(LAMBDAUI_METAL_SOURCE ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Graphics/Metal/CanvasShaders.metal)
   set(LAMBDAUI_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
   set(LAMBDAUI_METALLIB ${CMAKE_CURRENT_BINARY_DIR}/LambdaUIShaders.metallib)
@@ -166,6 +170,16 @@ if(LAMBDAUI_PLATFORM_MACOS)
     Platform/Mac/MacMetalWindow.mm
     Platform/Mac/MacClipboard.mm
   )
+elseif(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
+  target_sources(lambdaui PRIVATE
+    UI/Application.mm
+    Graphics/CoreTextSystem.mm
+    Graphics/WebGPU/WebGpuContext.cpp
+    Graphics/WebGPU/WebGpuCanvas.cpp
+    Platform/Mac/MacApplication.mm
+    Platform/Mac/MacMetalWindow.mm
+    Platform/Mac/MacClipboard.mm
+  )
 elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   include(${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaWaylandProtocols.cmake)
   find_package(PkgConfig REQUIRED)
@@ -177,15 +191,17 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   endif()
   pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
   pkg_check_modules(WAYLAND_CURSOR REQUIRED IMPORTED_TARGET wayland-cursor)
-  pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
-  pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
   pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
   pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
   pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
-  find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
+  if(LAMBDAUI_RENDERER_NATIVE)
+    pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
+    pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
+    find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
+  endif()
   lambda_setup_wayland_protocol_paths("${WAYLAND_PROTOCOLS_DIR}")
   add_library(lambda_wayland_client_protocols OBJECT
     ${LAMBDAUI_FRAMEWORK_PROTOCOL_DIR}/wayland/tablet-v2-tool-interface-stub.c)
@@ -209,24 +225,33 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   target_sources(lambdaui PRIVATE
     UI/Application.cpp
     Graphics/Linux/FreeTypeTextSystem.cpp
-    Graphics/Vulkan/VulkanAllocator.cpp
-    Graphics/Vulkan/VulkanContext.cpp
-    Graphics/Vulkan/VulkanDrawCommands.cpp
-    Graphics/Vulkan/VulkanFrameRecorder.cpp
-    Graphics/Vulkan/VulkanGlyphAtlas.cpp
-    Graphics/Vulkan/VulkanGpuCanvas.cpp
-    Graphics/Vulkan/VulkanImage.cpp
-    Graphics/Vulkan/VulkanPipelines.cpp
-    Graphics/Vulkan/VulkanRenderTarget.cpp
-    Graphics/Vulkan/VulkanSwapchain.cpp
     Platform/Linux/Common/XkbState.cpp
     Platform/Linux/WaylandApplication.cpp
     Platform/Linux/WaylandWindow.cpp
   )
+  if(LAMBDAUI_RENDERER_NATIVE)
+    target_sources(lambdaui PRIVATE
+      Graphics/Vulkan/VulkanAllocator.cpp
+      Graphics/Vulkan/VulkanContext.cpp
+      Graphics/Vulkan/VulkanDrawCommands.cpp
+      Graphics/Vulkan/VulkanFrameRecorder.cpp
+      Graphics/Vulkan/VulkanGlyphAtlas.cpp
+      Graphics/Vulkan/VulkanGpuCanvas.cpp
+      Graphics/Vulkan/VulkanImage.cpp
+      Graphics/Vulkan/VulkanPipelines.cpp
+      Graphics/Vulkan/VulkanRenderTarget.cpp
+      Graphics/Vulkan/VulkanSwapchain.cpp
+    )
+  elseif(LAMBDAUI_RENDERER_WEBGPU)
+    target_sources(lambdaui PRIVATE
+      Graphics/WebGPU/WebGpuContext.cpp
+      Graphics/WebGPU/WebGpuCanvas.cpp
+    )
+  endif()
   target_link_libraries(lambdaui PRIVATE lambda_wayland_client_protocols)
 endif()
 
-if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_NATIVE)
   set(LAMBDA_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
   file(MAKE_DIRECTORY ${LAMBDA_VULKAN_GENERATED_DIR})
   set(_lambda_vulkan_shader_headers)
@@ -296,8 +321,8 @@ if(LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
   target_compile_definitions(lambdaui PRIVATE LAMBDAUI_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
 endif()
 
-if(LAMBDAUI_PLATFORM_MACOS)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=1 LAMBDAUI_VULKAN=0 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
+if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_NATIVE)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=1 LAMBDAUI_VULKAN=0 LAMBDAUI_WEBGPU=0 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
   target_link_libraries(lambdaui PRIVATE
     "-framework Cocoa"
     "-framework QuartzCore"
@@ -306,8 +331,8 @@ if(LAMBDAUI_PLATFORM_MACOS)
     "-framework Foundation"
     "-framework CoreText"
     "-framework CoreVideo")
-elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
+elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_NATIVE)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=1 LAMBDAUI_WEBGPU=0 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
   target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
   target_link_libraries(lambdaui PRIVATE
     PkgConfig::WAYLAND_CLIENT
@@ -321,6 +346,29 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     PkgConfig::LIBRSVG
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
+elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_WEBGPU)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=0 LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
+  target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
+  target_link_libraries(lambdaui PRIVATE
+    dawn::webgpu_dawn
+    PkgConfig::WAYLAND_CLIENT
+    PkgConfig::WAYLAND_CURSOR
+    PkgConfig::XKBCOMMON
+    PkgConfig::FREETYPE
+    PkgConfig::FONTCONFIG
+    PkgConfig::HARFBUZZ
+    PkgConfig::LIBRSVG
+    PkgConfig::ZLIB
+    ${CMAKE_DL_LIBS})
+elseif(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=0 LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
+  target_link_libraries(lambdaui PRIVATE
+    dawn::webgpu_dawn
+    "-framework Cocoa"
+    "-framework QuartzCore"
+    "-framework Foundation"
+    "-framework CoreText"
+    "-framework CoreVideo")
 endif()
 
 target_link_libraries(lambdaui PRIVATE libtess2)

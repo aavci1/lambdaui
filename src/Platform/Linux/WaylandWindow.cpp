@@ -3,7 +3,6 @@
 #include "UI/Platform/WindowEventPump.hpp"
 #include "Platform/Linux/Common/LinuxInputMapping.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
-#include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 #include "Platform/Linux/WaylandScrollAccumulator.hpp"
@@ -19,7 +18,12 @@
 #include <Lambda/UI/Window.hpp>
 #include <Lambda/UI/Views/Popover.hpp>
 
+#if LAMBDAUI_WEBGPU
+#include "Graphics/WebGPU/WebGpuCanvas.hpp"
+#else
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
+#include "Platform/Linux/GpuSurfaceProvider.hpp"
+#endif
 
 #include "Detail/ResizeTrace.hpp"
 #include "UI/TransientPopoverHost.hpp"
@@ -1239,6 +1243,20 @@ public:
 
   std::unique_ptr<Canvas> createCanvas(::lambdaui::Window&) override {
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
+#if LAMBDAUI_WEBGPU
+    auto canvas = webgpu::createWebGpuCanvas(
+        {.kind = webgpu::WebGpuNativeSurface::Kind::WaylandSurface,
+         .display = display_,
+         .surface = surface_},
+        handle_,
+        Application::instance().textSystem(),
+        size_,
+        wantsTransparentSurface());
+    canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
+    canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
+    canvas_ = canvas.get();
+    return canvas;
+#else
     auto* provider = Application::instance().platformApp().gpuSurfaceProvider();
     if (!provider) {
       throw std::runtime_error("Wayland platform application does not provide Vulkan surfaces");
@@ -1255,6 +1273,7 @@ public:
     canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
     canvas_ = canvas.get();
     return canvas;
+#endif
   }
 
   void resize(Size const& newSize) override {
@@ -1982,6 +2001,17 @@ private:
       return false;
     }
     try {
+#if LAMBDAUI_WEBGPU
+      state.nativeSurface = WaylandNativeSurface{state.shared->display, state.surface};
+      state.canvas = webgpu::createWebGpuCanvas(
+          {.kind = webgpu::WebGpuNativeSurface::Kind::WaylandSurface,
+           .display = state.shared->display,
+           .surface = state.surface},
+          handle_,
+          Application::instance().textSystem(),
+          Size{static_cast<float>(state.width), static_cast<float>(state.height)},
+          true);
+#else
       auto* provider = Application::instance().platformApp().gpuSurfaceProvider();
       if (!provider) {
         throw std::runtime_error("Wayland platform application does not provide Vulkan surfaces");
@@ -1994,6 +2024,7 @@ private:
                                         handle_,
                                         Application::instance().textSystem(),
                                         {.transparentSurface = true});
+#endif
       state.canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
       state.canvas->resize(state.width, state.height);
       return true;
