@@ -17,6 +17,9 @@
 #if LAMBDAUI_VULKAN
 #include <vulkan/vulkan.h>
 #endif
+#if LAMBDAUI_WEBGPU
+#include <webgpu/webgpu.h>
+#endif
 
 namespace lambdaui {
 
@@ -106,6 +109,15 @@ public:
   /// Create an image reference backed by a caller-owned id<MTLTexture>.
   /// The texture must outlive all rendering that references the returned Image.
   static std::shared_ptr<Image> fromExternalMetal(void* texture, std::uint32_t width, std::uint32_t height);
+#endif
+
+#if LAMBDAUI_WEBGPU
+  /// Create an image reference backed by a WebGPU texture view.
+  /// The texture view must be a sampleable 2D color view. Lambda retains the view.
+  static std::shared_ptr<Image> fromExternalWebGpu(WGPUTextureView textureView,
+                                                   std::uint32_t width,
+                                                   std::uint32_t height,
+                                                   bool premultipliedAlpha = false);
 #endif
 
 protected:

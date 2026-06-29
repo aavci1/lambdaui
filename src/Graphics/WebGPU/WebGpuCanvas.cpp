@@ -49,6 +49,18 @@ public:
         pixelFormat_(format),
         premultiplied_(premultiplied) {}
 
+  WebGpuImage(std::uint32_t width, std::uint32_t height, WGPUTextureView textureView, bool premultiplied)
+      : size_{static_cast<float>(width), static_cast<float>(height)},
+        width_(width),
+        height_(height),
+        premultiplied_(premultiplied),
+        externalTextureView_(true),
+        textureView_(textureView) {
+    if (textureView_) {
+      wgpuTextureViewAddRef(textureView_);
+    }
+  }
+
   ~WebGpuImage() override {
     releaseGpuObjects();
   }
@@ -61,6 +73,9 @@ public:
   }
 
   bool updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, void* gpuDevice) override {
+    if (externalTextureView_) {
+      return false;
+    }
     std::size_t const expectedSize = static_cast<std::size_t>(width_) * height_ * 4u;
     if (width_ == 0 || height_ == 0 || pixels.size() != expectedSize) {
       return false;
@@ -90,6 +105,9 @@ public:
                           std::uint32_t height,
                           void* gpuDevice = nullptr,
                           std::uint32_t sourceBytesPerRow = 0) override {
+    if (externalTextureView_) {
+      return false;
+    }
     if (format != pixelFormat_ || x + width > width_ || y + height > height_ || width == 0 || height == 0) {
       return false;
     }
@@ -125,6 +143,12 @@ public:
 
 private:
   void ensureTexture(WGPUDevice device, WGPUQueue queue) const {
+    if (externalTextureView_) {
+      if (!textureView_) {
+        throw std::runtime_error("Lambda WebGPU: external image texture view is unavailable");
+      }
+      return;
+    }
     if (!device || !queue || pixels_.empty()) {
       throw std::runtime_error("Lambda WebGPU: image upload requires a device, queue, and pixels");
     }
@@ -196,6 +220,7 @@ private:
   std::vector<std::uint8_t> pixels_;
   PixelFormat pixelFormat_ = PixelFormat::Rgba8888;
   bool premultiplied_ = false;
+  bool externalTextureView_ = false;
 
   mutable WGPUDevice device_ = nullptr;
   mutable WGPUTexture texture_ = nullptr;
@@ -3080,6 +3105,16 @@ std::shared_ptr<Image> Image::fromPixels(std::uint32_t width,
     }
   }
   return image;
+}
+
+std::shared_ptr<Image> Image::fromExternalWebGpu(WGPUTextureView textureView,
+                                                 std::uint32_t width,
+                                                 std::uint32_t height,
+                                                 bool premultipliedAlpha) {
+  if (!textureView || width == 0 || height == 0) {
+    return nullptr;
+  }
+  return std::make_shared<webgpu::WebGpuImage>(width, height, textureView, premultipliedAlpha);
 }
 
 std::shared_ptr<Image> rasterizeToImage(Canvas& canvas,
