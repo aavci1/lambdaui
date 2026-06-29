@@ -207,6 +207,7 @@ namespace {
 
 inline constexpr std::size_t kRoundedClipMaskCapacity = 4;
 inline constexpr std::size_t kRoundedClipEntryCount = kRoundedClipMaskCapacity * 2;
+inline constexpr std::size_t kWebGpuBlendModePipelineCount = static_cast<std::size_t>(BlendMode::Xor) + 1u;
 inline constexpr std::uint32_t kWebGpuCopyBytesPerRowAlignment = 256;
 
 struct WebGpuRectInstance {
@@ -672,6 +673,123 @@ bool containsPresentMode(WGPUSurfaceCapabilities const& capabilities, WGPUPresen
   return false;
 }
 
+BlendMode webGpuFixedFunctionBlendMode(BlendMode mode) noexcept {
+  switch (mode) {
+    case BlendMode::Normal:
+    case BlendMode::SrcOver:
+      return BlendMode::Normal;
+    case BlendMode::Multiply:
+    case BlendMode::Screen:
+    case BlendMode::Darken:
+    case BlendMode::Lighten:
+    case BlendMode::Clear:
+    case BlendMode::Src:
+    case BlendMode::Dst:
+    case BlendMode::DstOver:
+    case BlendMode::SrcIn:
+    case BlendMode::DstIn:
+    case BlendMode::SrcOut:
+    case BlendMode::DstOut:
+      return mode;
+    default:
+      return BlendMode::Normal;
+  }
+}
+
+std::size_t webGpuBlendModeIndex(BlendMode mode) noexcept {
+  std::size_t const index = static_cast<std::size_t>(webGpuFixedFunctionBlendMode(mode));
+  return index < kWebGpuBlendModePipelineCount ? index : 0u;
+}
+
+void setSrcOverBlend(WGPUBlendState& blend) noexcept {
+  blend.color.operation = WGPUBlendOperation_Add;
+  blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
+  blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+  blend.alpha.operation = WGPUBlendOperation_Add;
+  blend.alpha.srcFactor = WGPUBlendFactor_One;
+  blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+}
+
+void applyBlendModeToAttachment(WGPUBlendState& blend, BlendMode mode) noexcept {
+  setSrcOverBlend(blend);
+  switch (webGpuFixedFunctionBlendMode(mode)) {
+    case BlendMode::Normal:
+      return;
+    case BlendMode::Multiply:
+      blend.color.srcFactor = WGPUBlendFactor_Dst;
+      blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+      blend.alpha.srcFactor = WGPUBlendFactor_DstAlpha;
+      blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+      return;
+    case BlendMode::Screen:
+      blend.color.srcFactor = WGPUBlendFactor_OneMinusDst;
+      blend.color.dstFactor = WGPUBlendFactor_One;
+      blend.alpha.srcFactor = WGPUBlendFactor_One;
+      blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+      return;
+    case BlendMode::Darken:
+      blend.color.operation = WGPUBlendOperation_Min;
+      blend.color.srcFactor = WGPUBlendFactor_One;
+      blend.color.dstFactor = WGPUBlendFactor_One;
+      return;
+    case BlendMode::Lighten:
+      blend.color.operation = WGPUBlendOperation_Max;
+      blend.color.srcFactor = WGPUBlendFactor_One;
+      blend.color.dstFactor = WGPUBlendFactor_One;
+      return;
+    case BlendMode::Clear:
+      blend.color.srcFactor = WGPUBlendFactor_Zero;
+      blend.color.dstFactor = WGPUBlendFactor_Zero;
+      blend.alpha.srcFactor = WGPUBlendFactor_Zero;
+      blend.alpha.dstFactor = WGPUBlendFactor_Zero;
+      return;
+    case BlendMode::Src:
+      blend.color.srcFactor = WGPUBlendFactor_One;
+      blend.color.dstFactor = WGPUBlendFactor_Zero;
+      blend.alpha.srcFactor = WGPUBlendFactor_One;
+      blend.alpha.dstFactor = WGPUBlendFactor_Zero;
+      return;
+    case BlendMode::Dst:
+      blend.color.srcFactor = WGPUBlendFactor_Zero;
+      blend.color.dstFactor = WGPUBlendFactor_One;
+      blend.alpha.srcFactor = WGPUBlendFactor_Zero;
+      blend.alpha.dstFactor = WGPUBlendFactor_One;
+      return;
+    case BlendMode::DstOver:
+      blend.color.srcFactor = WGPUBlendFactor_OneMinusDstAlpha;
+      blend.color.dstFactor = WGPUBlendFactor_One;
+      blend.alpha.srcFactor = WGPUBlendFactor_OneMinusDstAlpha;
+      blend.alpha.dstFactor = WGPUBlendFactor_One;
+      return;
+    case BlendMode::SrcIn:
+      blend.color.srcFactor = WGPUBlendFactor_DstAlpha;
+      blend.color.dstFactor = WGPUBlendFactor_Zero;
+      blend.alpha.srcFactor = WGPUBlendFactor_DstAlpha;
+      blend.alpha.dstFactor = WGPUBlendFactor_Zero;
+      return;
+    case BlendMode::DstIn:
+      blend.color.srcFactor = WGPUBlendFactor_Zero;
+      blend.color.dstFactor = WGPUBlendFactor_SrcAlpha;
+      blend.alpha.srcFactor = WGPUBlendFactor_Zero;
+      blend.alpha.dstFactor = WGPUBlendFactor_SrcAlpha;
+      return;
+    case BlendMode::SrcOut:
+      blend.color.srcFactor = WGPUBlendFactor_OneMinusDstAlpha;
+      blend.color.dstFactor = WGPUBlendFactor_Zero;
+      blend.alpha.srcFactor = WGPUBlendFactor_OneMinusDstAlpha;
+      blend.alpha.dstFactor = WGPUBlendFactor_Zero;
+      return;
+    case BlendMode::DstOut:
+      blend.color.srcFactor = WGPUBlendFactor_Zero;
+      blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+      blend.alpha.srcFactor = WGPUBlendFactor_Zero;
+      blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+      return;
+    default:
+      return;
+  }
+}
+
 std::uint32_t alignTo(std::uint32_t value, std::uint32_t alignment) noexcept {
   return (value + alignment - 1u) / alignment * alignment;
 }
@@ -833,6 +951,7 @@ class WebGpuCanvas final : public Canvas {
     Kind kind = Kind::Rect;
     std::uint32_t first = 0;
     std::uint32_t count = 0;
+    BlendMode blendMode = BlendMode::Normal;
     WebGpuImage const* image = nullptr;
     std::shared_ptr<Image const> imageRef;
   };
@@ -1150,6 +1269,7 @@ public:
         .kind = WebGpuDrawOp::Kind::Rect,
         .first = first,
         .count = 1,
+        .blendMode = blendMode_,
     });
   }
 
@@ -1768,11 +1888,10 @@ private:
             if (!rectBindGroup_) {
               break;
             }
-            ensureRectPipeline();
-            if (activePipeline != rectPipeline_) {
-              wgpuRenderPassEncoderSetPipeline(pass, rectPipeline_);
+            if (WGPURenderPipeline pipeline = ensureRectPipeline(op.blendMode); activePipeline != pipeline) {
+              wgpuRenderPassEncoderSetPipeline(pass, pipeline);
               wgpuRenderPassEncoderSetBindGroup(pass, 0, rectBindGroup_, 0, nullptr);
-              activePipeline = rectPipeline_;
+              activePipeline = pipeline;
             }
             wgpuRenderPassEncoderDraw(pass, 6, op.count, 0, op.first);
             break;
@@ -1780,11 +1899,10 @@ private:
             if (!imageFrameBindGroup_ || !op.image) {
               break;
             }
-            ensureImagePipeline();
-            if (activePipeline != imagePipeline_) {
-              wgpuRenderPassEncoderSetPipeline(pass, imagePipeline_);
+            if (WGPURenderPipeline pipeline = ensureImagePipeline(op.blendMode); activePipeline != pipeline) {
+              wgpuRenderPassEncoderSetPipeline(pass, pipeline);
               wgpuRenderPassEncoderSetBindGroup(pass, 0, imageFrameBindGroup_, 0, nullptr);
-              activePipeline = imagePipeline_;
+              activePipeline = pipeline;
             }
             try {
               WGPUTextureView const view = op.image->textureView(context_.device(), context_.queue());
@@ -1803,10 +1921,9 @@ private:
             if (!pathBuffer_) {
               break;
             }
-            ensurePathPipeline();
-            if (activePipeline != pathPipeline_) {
-              wgpuRenderPassEncoderSetPipeline(pass, pathPipeline_);
-              activePipeline = pathPipeline_;
+            if (WGPURenderPipeline pipeline = ensurePathPipeline(op.blendMode); activePipeline != pipeline) {
+              wgpuRenderPassEncoderSetPipeline(pass, pipeline);
+              activePipeline = pipeline;
             }
             wgpuRenderPassEncoderSetVertexBuffer(pass, 0, pathBuffer_, 0, pathBufferCapacity_);
             wgpuRenderPassEncoderDraw(pass, op.count, 1, op.first, 0);
@@ -2009,6 +2126,7 @@ private:
         .kind = WebGpuDrawOp::Kind::Rect,
         .first = first,
         .count = 1,
+        .blendMode = blendMode_,
     });
   }
 
@@ -2056,6 +2174,7 @@ private:
         .kind = WebGpuDrawOp::Kind::Image,
         .first = first,
         .count = 1,
+        .blendMode = blendMode_,
         .image = &image,
     };
     try {
@@ -2141,6 +2260,7 @@ private:
           .kind = WebGpuDrawOp::Kind::Path,
           .first = firstVertex,
           .count = vertexCount,
+          .blendMode = blendMode_,
       });
     }
   }
@@ -2285,7 +2405,7 @@ private:
     if (rectBindGroup_) {
       return;
     }
-    ensureRectPipeline();
+    (void)ensureRectPipeline(BlendMode::Normal);
     WGPUBindGroupEntry entries[2] = {
         WGPU_BIND_GROUP_ENTRY_INIT,
         WGPU_BIND_GROUP_ENTRY_INIT,
@@ -2308,40 +2428,47 @@ private:
     }
   }
 
-  void ensureRectPipeline() {
-    if (rectPipeline_ && pipelineFormat_ == surfaceFormat_) {
-      return;
+  WGPURenderPipeline ensureRectPipeline(BlendMode blendMode) {
+    if (pipelineFormat_ != WGPUTextureFormat_Undefined && pipelineFormat_ != surfaceFormat_) {
+      releaseRectPipeline();
     }
-    releaseRectPipeline();
+    std::size_t const pipelineIndex = webGpuBlendModeIndex(blendMode);
+    if (rectPipelines_[pipelineIndex]) {
+      return rectPipelines_[pipelineIndex];
+    }
 
-    WGPUBindGroupLayoutEntry entries[2] = {
-        WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
-        WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
-    };
-    entries[0].binding = 0;
-    entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
-    entries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
-    entries[1].binding = 1;
-    entries[1].visibility = WGPUShaderStage_Vertex;
-    entries[1].buffer.type = WGPUBufferBindingType_Uniform;
-    entries[1].buffer.minBindingSize = sizeof(WebGpuFrameUniforms);
-
-    WGPUBindGroupLayoutDescriptor bindGroupLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-    bindGroupLayoutDescriptor.label = stringView("LambdaUI WebGPU Rect Bind Group Layout");
-    bindGroupLayoutDescriptor.entryCount = 2;
-    bindGroupLayoutDescriptor.entries = entries;
-    rectBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(context_.device(), &bindGroupLayoutDescriptor);
     if (!rectBindGroupLayout_) {
-      throw std::runtime_error("Lambda WebGPU: failed to create rect bind group layout");
+      WGPUBindGroupLayoutEntry entries[2] = {
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+      };
+      entries[0].binding = 0;
+      entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+      entries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+      entries[1].binding = 1;
+      entries[1].visibility = WGPUShaderStage_Vertex;
+      entries[1].buffer.type = WGPUBufferBindingType_Uniform;
+      entries[1].buffer.minBindingSize = sizeof(WebGpuFrameUniforms);
+
+      WGPUBindGroupLayoutDescriptor bindGroupLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+      bindGroupLayoutDescriptor.label = stringView("LambdaUI WebGPU Rect Bind Group Layout");
+      bindGroupLayoutDescriptor.entryCount = 2;
+      bindGroupLayoutDescriptor.entries = entries;
+      rectBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(context_.device(), &bindGroupLayoutDescriptor);
+      if (!rectBindGroupLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create rect bind group layout");
+      }
     }
 
-    WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
-    pipelineLayoutDescriptor.label = stringView("LambdaUI WebGPU Rect Pipeline Layout");
-    pipelineLayoutDescriptor.bindGroupLayoutCount = 1;
-    pipelineLayoutDescriptor.bindGroupLayouts = &rectBindGroupLayout_;
-    rectPipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &pipelineLayoutDescriptor);
     if (!rectPipelineLayout_) {
-      throw std::runtime_error("Lambda WebGPU: failed to create rect pipeline layout");
+      WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+      pipelineLayoutDescriptor.label = stringView("LambdaUI WebGPU Rect Pipeline Layout");
+      pipelineLayoutDescriptor.bindGroupLayoutCount = 1;
+      pipelineLayoutDescriptor.bindGroupLayouts = &rectBindGroupLayout_;
+      rectPipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &pipelineLayoutDescriptor);
+      if (!rectPipelineLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create rect pipeline layout");
+      }
     }
 
     WGPUShaderSourceWGSL shaderSource = WGPU_SHADER_SOURCE_WGSL_INIT;
@@ -2355,12 +2482,7 @@ private:
     }
 
     WGPUBlendState blend = WGPU_BLEND_STATE_INIT;
-    blend.color.operation = WGPUBlendOperation_Add;
-    blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
-    blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
-    blend.alpha.operation = WGPUBlendOperation_Add;
-    blend.alpha.srcFactor = WGPUBlendFactor_One;
-    blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    applyBlendModeToAttachment(blend, blendMode);
 
     WGPUColorTargetState colorTarget = WGPU_COLOR_TARGET_STATE_INIT;
     colorTarget.format = surfaceFormat_;
@@ -2381,19 +2503,20 @@ private:
     pipelineDescriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
     pipelineDescriptor.fragment = &fragment;
 
-    rectPipeline_ = wgpuDeviceCreateRenderPipeline(context_.device(), &pipelineDescriptor);
+    rectPipelines_[pipelineIndex] = wgpuDeviceCreateRenderPipeline(context_.device(), &pipelineDescriptor);
     wgpuShaderModuleRelease(shader);
-    if (!rectPipeline_) {
+    if (!rectPipelines_[pipelineIndex]) {
       throw std::runtime_error("Lambda WebGPU: failed to create rect pipeline");
     }
     pipelineFormat_ = surfaceFormat_;
+    return rectPipelines_[pipelineIndex];
   }
 
   void ensureImageFrameBindGroup() {
     if (imageFrameBindGroup_) {
       return;
     }
-    ensureImagePipeline();
+    (void)ensureImagePipeline(BlendMode::Normal);
     WGPUBindGroupEntry entries[2] = {
         WGPU_BIND_GROUP_ENTRY_INIT,
         WGPU_BIND_GROUP_ENTRY_INIT,
@@ -2435,7 +2558,7 @@ private:
   }
 
   WGPUBindGroup createImageTextureBindGroup(WGPUTextureView textureView) {
-    ensureImagePipeline();
+    (void)ensureImagePipeline(BlendMode::Normal);
     ensureImageSampler();
     WGPUBindGroupEntry entries[2] = {
         WGPU_BIND_GROUP_ENTRY_INIT,
@@ -2458,65 +2581,74 @@ private:
     return bindGroup;
   }
 
-  void ensureImagePipeline() {
-    if (imagePipeline_ && imagePipelineFormat_ == surfaceFormat_) {
-      return;
+  WGPURenderPipeline ensureImagePipeline(BlendMode blendMode) {
+    if (imagePipelineFormat_ != WGPUTextureFormat_Undefined && imagePipelineFormat_ != surfaceFormat_) {
+      releaseImagePipeline();
     }
-    releaseImagePipeline();
+    std::size_t const pipelineIndex = webGpuBlendModeIndex(blendMode);
+    if (imagePipelines_[pipelineIndex]) {
+      return imagePipelines_[pipelineIndex];
+    }
 
-    WGPUBindGroupLayoutEntry frameEntries[2] = {
-        WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
-        WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
-    };
-    frameEntries[0].binding = 0;
-    frameEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
-    frameEntries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
-    frameEntries[1].binding = 1;
-    frameEntries[1].visibility = WGPUShaderStage_Vertex;
-    frameEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
-    frameEntries[1].buffer.minBindingSize = sizeof(WebGpuFrameUniforms);
-
-    WGPUBindGroupLayoutDescriptor frameLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-    frameLayoutDescriptor.label = stringView("LambdaUI WebGPU Image Frame Bind Group Layout");
-    frameLayoutDescriptor.entryCount = 2;
-    frameLayoutDescriptor.entries = frameEntries;
-    imageFrameBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(context_.device(), &frameLayoutDescriptor);
     if (!imageFrameBindGroupLayout_) {
-      throw std::runtime_error("Lambda WebGPU: failed to create image frame bind group layout");
+      WGPUBindGroupLayoutEntry frameEntries[2] = {
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+      };
+      frameEntries[0].binding = 0;
+      frameEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+      frameEntries[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+      frameEntries[1].binding = 1;
+      frameEntries[1].visibility = WGPUShaderStage_Vertex;
+      frameEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
+      frameEntries[1].buffer.minBindingSize = sizeof(WebGpuFrameUniforms);
+
+      WGPUBindGroupLayoutDescriptor frameLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+      frameLayoutDescriptor.label = stringView("LambdaUI WebGPU Image Frame Bind Group Layout");
+      frameLayoutDescriptor.entryCount = 2;
+      frameLayoutDescriptor.entries = frameEntries;
+      imageFrameBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(context_.device(), &frameLayoutDescriptor);
+      if (!imageFrameBindGroupLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create image frame bind group layout");
+      }
     }
 
-    WGPUBindGroupLayoutEntry textureEntries[2] = {
-        WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
-        WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
-    };
-    textureEntries[0].binding = 0;
-    textureEntries[0].visibility = WGPUShaderStage_Fragment;
-    textureEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
-    textureEntries[1].binding = 1;
-    textureEntries[1].visibility = WGPUShaderStage_Fragment;
-    textureEntries[1].texture.sampleType = WGPUTextureSampleType_Float;
-    textureEntries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
-
-    WGPUBindGroupLayoutDescriptor textureLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-    textureLayoutDescriptor.label = stringView("LambdaUI WebGPU Image Texture Bind Group Layout");
-    textureLayoutDescriptor.entryCount = 2;
-    textureLayoutDescriptor.entries = textureEntries;
-    imageTextureBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(context_.device(), &textureLayoutDescriptor);
     if (!imageTextureBindGroupLayout_) {
-      throw std::runtime_error("Lambda WebGPU: failed to create image texture bind group layout");
+      WGPUBindGroupLayoutEntry textureEntries[2] = {
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+      };
+      textureEntries[0].binding = 0;
+      textureEntries[0].visibility = WGPUShaderStage_Fragment;
+      textureEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
+      textureEntries[1].binding = 1;
+      textureEntries[1].visibility = WGPUShaderStage_Fragment;
+      textureEntries[1].texture.sampleType = WGPUTextureSampleType_Float;
+      textureEntries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+      WGPUBindGroupLayoutDescriptor textureLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+      textureLayoutDescriptor.label = stringView("LambdaUI WebGPU Image Texture Bind Group Layout");
+      textureLayoutDescriptor.entryCount = 2;
+      textureLayoutDescriptor.entries = textureEntries;
+      imageTextureBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(context_.device(), &textureLayoutDescriptor);
+      if (!imageTextureBindGroupLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create image texture bind group layout");
+      }
     }
 
-    WGPUBindGroupLayout layouts[2] = {
-        imageFrameBindGroupLayout_,
-        imageTextureBindGroupLayout_,
-    };
-    WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
-    pipelineLayoutDescriptor.label = stringView("LambdaUI WebGPU Image Pipeline Layout");
-    pipelineLayoutDescriptor.bindGroupLayoutCount = 2;
-    pipelineLayoutDescriptor.bindGroupLayouts = layouts;
-    imagePipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &pipelineLayoutDescriptor);
     if (!imagePipelineLayout_) {
-      throw std::runtime_error("Lambda WebGPU: failed to create image pipeline layout");
+      WGPUBindGroupLayout layouts[2] = {
+          imageFrameBindGroupLayout_,
+          imageTextureBindGroupLayout_,
+      };
+      WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+      pipelineLayoutDescriptor.label = stringView("LambdaUI WebGPU Image Pipeline Layout");
+      pipelineLayoutDescriptor.bindGroupLayoutCount = 2;
+      pipelineLayoutDescriptor.bindGroupLayouts = layouts;
+      imagePipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &pipelineLayoutDescriptor);
+      if (!imagePipelineLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create image pipeline layout");
+      }
     }
 
     WGPUShaderSourceWGSL shaderSource = WGPU_SHADER_SOURCE_WGSL_INIT;
@@ -2530,12 +2662,7 @@ private:
     }
 
     WGPUBlendState blend = WGPU_BLEND_STATE_INIT;
-    blend.color.operation = WGPUBlendOperation_Add;
-    blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
-    blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
-    blend.alpha.operation = WGPUBlendOperation_Add;
-    blend.alpha.srcFactor = WGPUBlendFactor_One;
-    blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    applyBlendModeToAttachment(blend, blendMode);
 
     WGPUColorTargetState colorTarget = WGPU_COLOR_TARGET_STATE_INIT;
     colorTarget.format = surfaceFormat_;
@@ -2556,26 +2683,32 @@ private:
     pipelineDescriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
     pipelineDescriptor.fragment = &fragment;
 
-    imagePipeline_ = wgpuDeviceCreateRenderPipeline(context_.device(), &pipelineDescriptor);
+    imagePipelines_[pipelineIndex] = wgpuDeviceCreateRenderPipeline(context_.device(), &pipelineDescriptor);
     wgpuShaderModuleRelease(shader);
-    if (!imagePipeline_) {
+    if (!imagePipelines_[pipelineIndex]) {
       throw std::runtime_error("Lambda WebGPU: failed to create image pipeline");
     }
     imagePipelineFormat_ = surfaceFormat_;
     ensureImageSampler();
+    return imagePipelines_[pipelineIndex];
   }
 
-  void ensurePathPipeline() {
-    if (pathPipeline_ && pathPipelineFormat_ == surfaceFormat_) {
-      return;
+  WGPURenderPipeline ensurePathPipeline(BlendMode blendMode) {
+    if (pathPipelineFormat_ != WGPUTextureFormat_Undefined && pathPipelineFormat_ != surfaceFormat_) {
+      releasePathPipeline();
     }
-    releasePathPipeline();
+    std::size_t const pipelineIndex = webGpuBlendModeIndex(blendMode);
+    if (pathPipelines_[pipelineIndex]) {
+      return pathPipelines_[pipelineIndex];
+    }
 
-    WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
-    pipelineLayoutDescriptor.label = stringView("LambdaUI WebGPU Path Pipeline Layout");
-    pathPipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &pipelineLayoutDescriptor);
     if (!pathPipelineLayout_) {
-      throw std::runtime_error("Lambda WebGPU: failed to create path pipeline layout");
+      WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+      pipelineLayoutDescriptor.label = stringView("LambdaUI WebGPU Path Pipeline Layout");
+      pathPipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &pipelineLayoutDescriptor);
+      if (!pathPipelineLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create path pipeline layout");
+      }
     }
 
     WGPUShaderSourceWGSL shaderSource = WGPU_SHADER_SOURCE_WGSL_INIT;
@@ -2618,12 +2751,7 @@ private:
     vertexBufferLayout.attributes = attributes;
 
     WGPUBlendState blend = WGPU_BLEND_STATE_INIT;
-    blend.color.operation = WGPUBlendOperation_Add;
-    blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
-    blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
-    blend.alpha.operation = WGPUBlendOperation_Add;
-    blend.alpha.srcFactor = WGPUBlendFactor_One;
-    blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    applyBlendModeToAttachment(blend, blendMode);
 
     WGPUColorTargetState colorTarget = WGPU_COLOR_TARGET_STATE_INIT;
     colorTarget.format = surfaceFormat_;
@@ -2646,12 +2774,13 @@ private:
     pipelineDescriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
     pipelineDescriptor.fragment = &fragment;
 
-    pathPipeline_ = wgpuDeviceCreateRenderPipeline(context_.device(), &pipelineDescriptor);
+    pathPipelines_[pipelineIndex] = wgpuDeviceCreateRenderPipeline(context_.device(), &pipelineDescriptor);
     wgpuShaderModuleRelease(shader);
-    if (!pathPipeline_) {
+    if (!pathPipelines_[pipelineIndex]) {
       throw std::runtime_error("Lambda WebGPU: failed to create path pipeline");
     }
     pathPipelineFormat_ = surfaceFormat_;
+    return pathPipelines_[pipelineIndex];
   }
 
   void releaseRectPipeline() noexcept {
@@ -2659,9 +2788,11 @@ private:
       wgpuBindGroupRelease(rectBindGroup_);
       rectBindGroup_ = nullptr;
     }
-    if (rectPipeline_) {
-      wgpuRenderPipelineRelease(rectPipeline_);
-      rectPipeline_ = nullptr;
+    for (WGPURenderPipeline& pipeline : rectPipelines_) {
+      if (pipeline) {
+        wgpuRenderPipelineRelease(pipeline);
+        pipeline = nullptr;
+      }
     }
     if (rectPipelineLayout_) {
       wgpuPipelineLayoutRelease(rectPipelineLayout_);
@@ -2679,9 +2810,11 @@ private:
       wgpuBindGroupRelease(imageFrameBindGroup_);
       imageFrameBindGroup_ = nullptr;
     }
-    if (imagePipeline_) {
-      wgpuRenderPipelineRelease(imagePipeline_);
-      imagePipeline_ = nullptr;
+    for (WGPURenderPipeline& pipeline : imagePipelines_) {
+      if (pipeline) {
+        wgpuRenderPipelineRelease(pipeline);
+        pipeline = nullptr;
+      }
     }
     if (imagePipelineLayout_) {
       wgpuPipelineLayoutRelease(imagePipelineLayout_);
@@ -2699,9 +2832,11 @@ private:
   }
 
   void releasePathPipeline() noexcept {
-    if (pathPipeline_) {
-      wgpuRenderPipelineRelease(pathPipeline_);
-      pathPipeline_ = nullptr;
+    for (WGPURenderPipeline& pipeline : pathPipelines_) {
+      if (pipeline) {
+        wgpuRenderPipelineRelease(pipeline);
+        pipeline = nullptr;
+      }
     }
     if (pathPipelineLayout_) {
       wgpuPipelineLayoutRelease(pathPipelineLayout_);
@@ -2787,7 +2922,7 @@ private:
 
   WGPUBindGroupLayout rectBindGroupLayout_ = nullptr;
   WGPUPipelineLayout rectPipelineLayout_ = nullptr;
-  WGPURenderPipeline rectPipeline_ = nullptr;
+  std::array<WGPURenderPipeline, kWebGpuBlendModePipelineCount> rectPipelines_{};
   WGPUTextureFormat pipelineFormat_ = WGPUTextureFormat_Undefined;
   WGPUBuffer rectBuffer_ = nullptr;
   std::uint64_t rectBufferCapacity_ = 0;
@@ -2798,7 +2933,7 @@ private:
   WGPUBindGroupLayout imageFrameBindGroupLayout_ = nullptr;
   WGPUBindGroupLayout imageTextureBindGroupLayout_ = nullptr;
   WGPUPipelineLayout imagePipelineLayout_ = nullptr;
-  WGPURenderPipeline imagePipeline_ = nullptr;
+  std::array<WGPURenderPipeline, kWebGpuBlendModePipelineCount> imagePipelines_{};
   WGPUTextureFormat imagePipelineFormat_ = WGPUTextureFormat_Undefined;
   WGPUBuffer quadBuffer_ = nullptr;
   std::uint64_t quadBufferCapacity_ = 0;
@@ -2808,7 +2943,7 @@ private:
   WGPUSampler imageSampler_ = nullptr;
 
   WGPUPipelineLayout pathPipelineLayout_ = nullptr;
-  WGPURenderPipeline pathPipeline_ = nullptr;
+  std::array<WGPURenderPipeline, kWebGpuBlendModePipelineCount> pathPipelines_{};
   WGPUTextureFormat pathPipelineFormat_ = WGPUTextureFormat_Undefined;
   WGPUBuffer pathBuffer_ = nullptr;
   std::uint64_t pathBufferCapacity_ = 0;
