@@ -36,6 +36,118 @@ VkShaderModule shaderModule(VkDevice device, unsigned char const* bytes, unsigne
   return module;
 }
 
+void setSrcOverBlend(VkPipelineColorBlendAttachmentState& blend) {
+  blend.blendEnable = VK_TRUE;
+  blend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  blend.colorBlendOp = VK_BLEND_OP_ADD;
+  blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  blend.alphaBlendOp = VK_BLEND_OP_ADD;
+}
+
+void applyBlendModeToAttachment(VkPipelineColorBlendAttachmentState& blend, BlendMode mode) {
+  setSrcOverBlend(blend);
+  switch (mode) {
+  case BlendMode::Normal:
+  case BlendMode::SrcOver:
+    return;
+  case BlendMode::Multiply:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    return;
+  case BlendMode::Screen:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    return;
+  case BlendMode::Darken:
+    blend.colorBlendOp = VK_BLEND_OP_MIN;
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    return;
+  case BlendMode::Lighten:
+    blend.colorBlendOp = VK_BLEND_OP_MAX;
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    return;
+  case BlendMode::Clear:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    return;
+  case BlendMode::Src:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    return;
+  case BlendMode::Dst:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    return;
+  case BlendMode::DstOver:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    return;
+  case BlendMode::SrcIn:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    return;
+  case BlendMode::DstIn:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    return;
+  case BlendMode::SrcOut:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    return;
+  case BlendMode::DstOut:
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    return;
+  default:
+    return;
+  }
+}
+
+bool shouldCreateBlendPipeline(BlendMode mode) {
+  switch (mode) {
+  case BlendMode::Normal:
+  case BlendMode::Multiply:
+  case BlendMode::Screen:
+  case BlendMode::Darken:
+  case BlendMode::Lighten:
+  case BlendMode::Clear:
+  case BlendMode::Src:
+  case BlendMode::Dst:
+  case BlendMode::DstOver:
+  case BlendMode::SrcIn:
+  case BlendMode::DstIn:
+  case BlendMode::SrcOut:
+  case BlendMode::DstOut:
+    return true;
+  default:
+    return false;
+  }
+}
+
 } // namespace
 
 void VulkanPipelines::createCommandObjects(VulkanCommandObjectsContext& context) const {
@@ -169,38 +281,48 @@ void VulkanPipelines::createPipelines(VkDevice device, SharedVulkanCore::Resourc
   resources.backdropPipelineLayout =
       createPipelineLayout(device, {resources.quadDescriptorLayout, resources.textureDescriptorLayout}, true);
   resources.pathPipelineLayout = createPipelineLayout(device, {}, true);
-  resources.rectPipeline = createPipeline(device,
-                                          resources,
-                                          resources.rectPipelineLayout,
-                                          lambda_rect_vert_spv,
-                                          lambda_rect_vert_spv_len,
-                                          lambda_rect_frag_spv,
-                                          lambda_rect_frag_spv_len,
-                                          {});
-  resources.calloutPipeline = createPipeline(device,
-                                             resources,
-                                             resources.calloutPipelineLayout,
-                                             lambda_callout_vert_spv,
-                                             lambda_callout_vert_spv_len,
-                                             lambda_callout_frag_spv,
-                                             lambda_callout_frag_spv_len,
-                                             {});
-  resources.imagePipeline = createPipeline(device,
-                                           resources,
-                                           resources.imagePipelineLayout,
-                                           lambda_image_vert_spv,
-                                           lambda_image_vert_spv_len,
-                                           lambda_image_frag_spv,
-                                           lambda_image_frag_spv_len,
-                                           {});
-  resources.imageUnpremultiplyPipeline = createPipeline(device,
-                                                        resources,
-                                                        resources.imagePipelineLayout,
-                                                        lambda_image_vert_spv,
-                                                        lambda_image_vert_spv_len,
-                                                        lambda_image_unpremultiply_frag_spv,
-                                                        lambda_image_unpremultiply_frag_spv_len,
-                                                        {});
+  for (std::size_t i = 0; i < kVulkanBlendModePipelineCount; ++i) {
+    BlendMode const mode = static_cast<BlendMode>(i);
+    if (!shouldCreateBlendPipeline(mode)) {
+      continue;
+    }
+    resources.rectPipelines[i] = createPipeline(device,
+                                                resources,
+                                                resources.rectPipelineLayout,
+                                                lambda_rect_vert_spv,
+                                                lambda_rect_vert_spv_len,
+                                                lambda_rect_frag_spv,
+                                                lambda_rect_frag_spv_len,
+                                                {},
+                                                mode);
+    resources.calloutPipelines[i] = createPipeline(device,
+                                                   resources,
+                                                   resources.calloutPipelineLayout,
+                                                   lambda_callout_vert_spv,
+                                                   lambda_callout_vert_spv_len,
+                                                   lambda_callout_frag_spv,
+                                                   lambda_callout_frag_spv_len,
+                                                   {},
+                                                   mode);
+    resources.imagePipelines[i] = createPipeline(device,
+                                                 resources,
+                                                 resources.imagePipelineLayout,
+                                                 lambda_image_vert_spv,
+                                                 lambda_image_vert_spv_len,
+                                                 lambda_image_frag_spv,
+                                                 lambda_image_frag_spv_len,
+                                                 {},
+                                                 mode);
+    resources.imageUnpremultiplyPipelines[i] = createPipeline(device,
+                                                              resources,
+                                                              resources.imagePipelineLayout,
+                                                              lambda_image_vert_spv,
+                                                              lambda_image_vert_spv_len,
+                                                              lambda_image_unpremultiply_frag_spv,
+                                                              lambda_image_unpremultiply_frag_spv_len,
+                                                              {},
+                                                              mode);
+  }
   resources.backdropPipeline = createPipeline(device,
                                               resources,
                                               resources.backdropPipelineLayout,
@@ -217,6 +339,7 @@ void VulkanPipelines::createPipelines(VkDevice device, SharedVulkanCore::Resourc
                                                   lambda_backdrop_blur_frag_spv,
                                                   lambda_backdrop_blur_frag_spv_len,
                                                   {},
+                                                  BlendMode::SrcOver,
                                                   resources.backdropRenderFormat);
   std::array<VkVertexInputBindingDescription, 1> binding{};
   binding[0].binding = 0;
@@ -242,14 +365,21 @@ void VulkanPipelines::createPipelines(VkDevice device, SharedVulkanCore::Resourc
                      static_cast<std::uint32_t>(offsetof(VulkanPathVertex, clipEntries) +
                                                 i * sizeof(float) * 4u)};
   }
-  resources.pathPipeline = createPipeline(device,
-                                          resources,
-                                          resources.pathPipelineLayout,
-                                          lambda_path_vert_spv,
-                                          lambda_path_vert_spv_len,
-                                          lambda_path_frag_spv,
-                                          lambda_path_frag_spv_len,
-                                          {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())});
+  for (std::size_t i = 0; i < kVulkanBlendModePipelineCount; ++i) {
+    if (!shouldCreateBlendPipeline(static_cast<BlendMode>(i))) {
+      continue;
+    }
+    resources.pathPipelines[i] =
+        createPipeline(device,
+                       resources,
+                       resources.pathPipelineLayout,
+                       lambda_path_vert_spv,
+                       lambda_path_vert_spv_len,
+                       lambda_path_frag_spv,
+                       lambda_path_frag_spv_len,
+                       {binding.data(), 1, attrs.data(), static_cast<std::uint32_t>(attrs.size())},
+                       static_cast<BlendMode>(i));
+  }
 }
 
 VkPipelineLayout VulkanPipelines::createPipelineLayout(VkDevice device,
@@ -280,6 +410,7 @@ VkPipeline VulkanPipelines::createPipeline(VkDevice device,
                                            unsigned char const* fragBytes,
                                            unsigned int fragLen,
                                            VertexInput input,
+                                           BlendMode blendMode,
                                            VkFormat colorFormatOverride) const {
   VkShaderModule vert = shaderModule(device, vertBytes, vertLen);
   VkShaderModule frag = shaderModule(device, fragBytes, fragLen);
@@ -315,15 +446,9 @@ VkPipeline VulkanPipelines::createPipeline(VkDevice device,
       VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO);
   ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
   VkPipelineColorBlendAttachmentState blend{};
-  blend.blendEnable = VK_TRUE;
-  blend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-  blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  blend.colorBlendOp = VK_BLEND_OP_ADD;
-  blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-  blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  blend.alphaBlendOp = VK_BLEND_OP_ADD;
   blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                          VK_COLOR_COMPONENT_A_BIT;
+  applyBlendModeToAttachment(blend, blendMode);
   auto cb = vkStructure<VkPipelineColorBlendStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO);
   cb.attachmentCount = 1;
   cb.pAttachments = &blend;

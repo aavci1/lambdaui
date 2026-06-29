@@ -6,6 +6,12 @@ namespace lambdaui {
 
 namespace {
 
+VkPipeline pipelineForBlend(std::array<VkPipeline, kVulkanBlendModePipelineCount> const& pipelines,
+                            BlendMode blendMode) {
+  VkPipeline const pipeline = pipelines[vulkanBlendModeIndex(blendMode)];
+  return pipeline ? pipeline : pipelines[vulkanBlendModeIndex(BlendMode::Normal)];
+}
+
 VulkanDrawPushConstants drawPushConstants(VulkanDrawCommandContext const& context,
                                           float translationX = 0.f,
                                           float translationY = 0.f) {
@@ -89,7 +95,8 @@ void drawVulkanRectRange(VkCommandBuffer commandBuffer,
                          std::uint32_t count,
                          VkDescriptorSet descriptor,
                          float translationX,
-                         float translationY) {
+                         float translationY,
+                         BlendMode blendMode) {
   if (count == 0 || !context.resources || !context.geometry) {
     return;
   }
@@ -99,7 +106,7 @@ void drawVulkanRectRange(VkCommandBuffer commandBuffer,
   if (!storageDescriptor) {
     return;
   }
-  bindPipeline(commandBuffer, state, res.rectPipeline, res.rectPipelineLayout);
+  bindPipeline(commandBuffer, state, pipelineForBlend(res.rectPipelines, blendMode), res.rectPipelineLayout);
   bindDescriptorSet(commandBuffer, state, res.rectPipelineLayout, 0, storageDescriptor);
   pushDrawConstants(commandBuffer, state, context, res.rectPipelineLayout, translationX, translationY);
   vkCmdDraw(commandBuffer, 6, count, 0, first);
@@ -111,7 +118,8 @@ void drawVulkanCalloutRange(VkCommandBuffer commandBuffer,
                             std::uint32_t first,
                             std::uint32_t count,
                             float translationX,
-                            float translationY) {
+                            float translationY,
+                            BlendMode blendMode) {
   if (count == 0 || !context.resources || !context.geometry) {
     return;
   }
@@ -120,7 +128,7 @@ void drawVulkanCalloutRange(VkCommandBuffer commandBuffer,
   if (!geometry.calloutDescriptorSet) {
     return;
   }
-  bindPipeline(commandBuffer, state, res.calloutPipeline, res.calloutPipelineLayout);
+  bindPipeline(commandBuffer, state, pipelineForBlend(res.calloutPipelines, blendMode), res.calloutPipelineLayout);
   bindDescriptorSet(commandBuffer, state, res.calloutPipelineLayout, 0, geometry.calloutDescriptorSet);
   pushDrawConstants(commandBuffer, state, context, res.calloutPipelineLayout, translationX, translationY);
   vkCmdDraw(commandBuffer, 6, count, 0, first);
@@ -133,7 +141,8 @@ void drawVulkanPathRange(VkCommandBuffer commandBuffer,
                          std::uint32_t count,
                          VkBuffer vertexBuffer,
                          float translationX,
-                         float translationY) {
+                         float translationY,
+                         BlendMode blendMode) {
   if (count == 0 || !context.resources || !context.geometry) {
     return;
   }
@@ -143,7 +152,7 @@ void drawVulkanPathRange(VkCommandBuffer commandBuffer,
     return;
   }
   SharedVulkanCore::Resources const& res = *context.resources;
-  bindPipeline(commandBuffer, state, res.pathPipeline, res.pathPipelineLayout);
+  bindPipeline(commandBuffer, state, pipelineForBlend(res.pathPipelines, blendMode), res.pathPipelineLayout);
   pushDrawConstants(commandBuffer, state, context, res.pathPipelineLayout, translationX, translationY);
   bindVertexBuffer(commandBuffer, state, buffer);
   vkCmdDraw(commandBuffer, count, 1, first, 0);
@@ -158,7 +167,8 @@ void drawVulkanImageRange(VkCommandBuffer commandBuffer,
                           VkDescriptorSet descriptor,
                           float translationX,
                           float translationY,
-                          bool premultipliedAlpha) {
+                          bool premultipliedAlpha,
+                          BlendMode blendMode) {
   if (!texture || !texture->descriptor || count == 0 || !context.resources || !context.geometry) {
     return;
   }
@@ -168,10 +178,8 @@ void drawVulkanImageRange(VkCommandBuffer commandBuffer,
   if (!storageDescriptor) {
     return;
   }
-  bindPipeline(commandBuffer,
-               state,
-               premultipliedAlpha ? res.imageUnpremultiplyPipeline : res.imagePipeline,
-               res.imagePipelineLayout);
+  auto const& pipelines = premultipliedAlpha ? res.imageUnpremultiplyPipelines : res.imagePipelines;
+  bindPipeline(commandBuffer, state, pipelineForBlend(pipelines, blendMode), res.imagePipelineLayout);
   bindDescriptorSet(commandBuffer, state, res.imagePipelineLayout, 0, storageDescriptor);
   pushDrawConstants(commandBuffer, state, context, res.imagePipelineLayout, translationX, translationY);
   bindDescriptorSet(commandBuffer, state, res.imagePipelineLayout, 1, texture->descriptor);

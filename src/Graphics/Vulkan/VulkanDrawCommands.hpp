@@ -33,7 +33,8 @@ void drawVulkanRectRange(VkCommandBuffer commandBuffer,
                          std::uint32_t count,
                          VkDescriptorSet descriptor = VK_NULL_HANDLE,
                          float translationX = 0.f,
-                         float translationY = 0.f);
+                         float translationY = 0.f,
+                         BlendMode blendMode = BlendMode::Normal);
 
 void drawVulkanCalloutRange(VkCommandBuffer commandBuffer,
                             VulkanCommandState& state,
@@ -41,7 +42,8 @@ void drawVulkanCalloutRange(VkCommandBuffer commandBuffer,
                             std::uint32_t first,
                             std::uint32_t count,
                             float translationX = 0.f,
-                            float translationY = 0.f);
+                            float translationY = 0.f,
+                            BlendMode blendMode = BlendMode::Normal);
 
 void drawVulkanPathRange(VkCommandBuffer commandBuffer,
                          VulkanCommandState& state,
@@ -50,7 +52,8 @@ void drawVulkanPathRange(VkCommandBuffer commandBuffer,
                          std::uint32_t count,
                          VkBuffer vertexBuffer = VK_NULL_HANDLE,
                          float translationX = 0.f,
-                         float translationY = 0.f);
+                         float translationY = 0.f,
+                         BlendMode blendMode = BlendMode::Normal);
 
 void drawVulkanImageRange(VkCommandBuffer commandBuffer,
                           VulkanCommandState& state,
@@ -61,7 +64,8 @@ void drawVulkanImageRange(VkCommandBuffer commandBuffer,
                           VkDescriptorSet descriptor = VK_NULL_HANDLE,
                           float translationX = 0.f,
                           float translationY = 0.f,
-                          bool premultipliedAlpha = false);
+                          bool premultipliedAlpha = false,
+                          BlendMode blendMode = BlendMode::Normal);
 
 void drawVulkanBackdropRange(VkCommandBuffer commandBuffer,
                              VulkanCommandState& state,

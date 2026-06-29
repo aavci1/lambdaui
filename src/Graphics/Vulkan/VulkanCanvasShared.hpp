@@ -22,6 +22,12 @@ using VmaAllocator = VmaAllocator_T*;
 namespace lambdaui {
 
 inline constexpr std::size_t kVulkanMaxFramesInFlight = 3;
+inline constexpr std::size_t kVulkanBlendModePipelineCount = static_cast<std::size_t>(BlendMode::Xor) + 1u;
+
+inline std::size_t vulkanBlendModeIndex(BlendMode mode) noexcept {
+  std::size_t const index = static_cast<std::size_t>(mode);
+  return index < kVulkanBlendModePipelineCount ? index : 0u;
+}
 
 struct Rgba {
   std::uint8_t r = 0;
@@ -91,13 +97,13 @@ struct SharedVulkanCore {
     VkPipelineLayout imagePipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout backdropPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
-    VkPipeline rectPipeline = VK_NULL_HANDLE;
-    VkPipeline calloutPipeline = VK_NULL_HANDLE;
-    VkPipeline imagePipeline = VK_NULL_HANDLE;
-    VkPipeline imageUnpremultiplyPipeline = VK_NULL_HANDLE;
+    std::array<VkPipeline, kVulkanBlendModePipelineCount> rectPipelines{};
+    std::array<VkPipeline, kVulkanBlendModePipelineCount> calloutPipelines{};
+    std::array<VkPipeline, kVulkanBlendModePipelineCount> imagePipelines{};
+    std::array<VkPipeline, kVulkanBlendModePipelineCount> imageUnpremultiplyPipelines{};
     VkPipeline backdropPipeline = VK_NULL_HANDLE;
     VkPipeline backdropBlurPipeline = VK_NULL_HANDLE;
-    VkPipeline pathPipeline = VK_NULL_HANDLE;
+    std::array<VkPipeline, kVulkanBlendModePipelineCount> pathPipelines{};
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     std::filesystem::path pipelineCacheFile;
     Texture atlas;

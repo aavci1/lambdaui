@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Lambda/Core/Geometry.hpp>
+#include <Lambda/Graphics/Styles.hpp>
 
 #include <vulkan/vulkan.h>
 
@@ -94,6 +95,7 @@ struct DrawOp {
   VkBuffer externalVertexBuffer = VK_NULL_HANDLE;
   float externalTranslationX = 0.f;
   float externalTranslationY = 0.f;
+  BlendMode blendMode = BlendMode::Normal;
   bool premultipliedAlpha = false;
   std::uint64_t geometrySignature = 0;
 };

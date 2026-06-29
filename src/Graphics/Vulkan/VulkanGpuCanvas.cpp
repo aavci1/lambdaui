@@ -601,16 +601,19 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
   if (!device)
     return;
   destroySharedTexture(device, core.allocator, res.descriptorPool, res.atlas);
-  if (res.pathPipeline)
-    vkDestroyPipeline(device, res.pathPipeline, nullptr);
-  if (res.rectPipeline)
-    vkDestroyPipeline(device, res.rectPipeline, nullptr);
-  if (res.calloutPipeline)
-    vkDestroyPipeline(device, res.calloutPipeline, nullptr);
-  if (res.imagePipeline)
-    vkDestroyPipeline(device, res.imagePipeline, nullptr);
-  if (res.imageUnpremultiplyPipeline)
-    vkDestroyPipeline(device, res.imageUnpremultiplyPipeline, nullptr);
+  auto destroyPipelines = [device](auto& pipelines) {
+    for (VkPipeline& pipeline : pipelines) {
+      if (pipeline) {
+        vkDestroyPipeline(device, pipeline, nullptr);
+        pipeline = VK_NULL_HANDLE;
+      }
+    }
+  };
+  destroyPipelines(res.pathPipelines);
+  destroyPipelines(res.rectPipelines);
+  destroyPipelines(res.calloutPipelines);
+  destroyPipelines(res.imagePipelines);
+  destroyPipelines(res.imageUnpremultiplyPipelines);
   if (res.backdropPipeline)
     vkDestroyPipeline(device, res.backdropPipeline, nullptr);
   if (res.backdropBlurPipeline)
@@ -2423,6 +2426,7 @@ private:
     op.first = first;
     op.count = count;
     op.clip = state_.clip;
+    op.blendMode = state_.blendMode;
     return op;
   }
 
@@ -2441,6 +2445,7 @@ private:
            a.sourceImage == b.sourceImage &&
            a.externalStorageDescriptor == b.externalStorageDescriptor &&
            a.externalVertexBuffer == b.externalVertexBuffer &&
+           a.blendMode == b.blendMode &&
            a.premultipliedAlpha == b.premultipliedAlpha &&
            sameBatchTranslation(BatchTranslation{.x = a.externalTranslationX, .y = a.externalTranslationY},
                                 BatchTranslation{.x = b.externalTranslationX, .y = b.externalTranslationY},
@@ -2476,7 +2481,7 @@ private:
   }
 
   Rect localReplayClip(VulkanFrameRecorder const& recorded, Rect opClip, float dx, float dy) const {
-    if (sameRect(opClip, recorded.rootClip)) {
+    if (sameBatchRect(opClip, recorded.rootClip)) {
       return state_.clip;
     }
     return intersectRects(translatedRect(opClip, dx, dy), state_.clip);
@@ -3770,6 +3775,7 @@ private:
     hashValue(h, op.blurRadius);
     hashValue(h, op.blurCacheClip);
     hashValue(h, op.hasBlurCacheClip);
+    hashValue(h, op.blendMode);
     hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalStorageDescriptor));
     hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalVertexBuffer));
     hashValue(h, op.externalTranslationX);
@@ -4190,7 +4196,7 @@ private:
       if (op.clip.width <= 0.f || op.clip.height <= 0.f) {
         continue;
       }
-      if (!hasScissor || !sameRect(currentScissor, op.clip)) {
+      if (!hasScissor || !sameBatchRect(currentScissor, op.clip)) {
         setViewportScissor(commandBuffer, op.clip, renderExtent);
         currentScissor = op.clip;
         hasScissor = true;
@@ -4201,21 +4207,21 @@ private:
       case DrawOp::Kind::Rect:
         drawVulkanRectRange(commandBuffer, commandState, drawContext, op.first, op.count,
                             op.externalStorageDescriptor, op.externalTranslationX,
-                            op.externalTranslationY);
+                            op.externalTranslationY, op.blendMode);
         break;
       case DrawOp::Kind::Callout:
         drawVulkanCalloutRange(commandBuffer, commandState, drawContext, op.first, op.count,
-                               op.externalTranslationX, op.externalTranslationY);
+                               op.externalTranslationX, op.externalTranslationY, op.blendMode);
         break;
       case DrawOp::Kind::Path:
         drawVulkanPathRange(commandBuffer, commandState, drawContext, op.first, op.count,
                             op.externalVertexBuffer, op.externalTranslationX,
-                            op.externalTranslationY);
+                            op.externalTranslationY, op.blendMode);
         break;
       case DrawOp::Kind::Image:
         drawVulkanImageRange(commandBuffer, commandState, drawContext, op.texture, op.first,
                              op.count, op.externalStorageDescriptor, op.externalTranslationX,
-                             op.externalTranslationY, op.premultipliedAlpha);
+                             op.externalTranslationY, op.premultipliedAlpha, op.blendMode);
         break;
       case DrawOp::Kind::BackdropBlur:
         drawVulkanBackdropRange(commandBuffer, commandState, drawContext, backdropSource,

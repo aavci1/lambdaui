@@ -58,6 +58,7 @@ private:
                             unsigned char const* fragBytes,
                             unsigned int fragLen,
                             VertexInput input,
+                            BlendMode blendMode = BlendMode::SrcOver,
                             VkFormat colorFormatOverride = VK_FORMAT_UNDEFINED) const;
 };
 
