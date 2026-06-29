@@ -2,6 +2,8 @@
 
 #include "WebGpuContext.hpp"
 #include "Graphics/CanvasGeometry.hpp"
+#include "Graphics/PathFlattener.hpp"
+#include "Graphics/PathGradient.hpp"
 
 #include <Lambda/Graphics/Image.hpp>
 #include <Lambda/Graphics/TextSystem.hpp>
@@ -9,9 +11,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -524,6 +528,34 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 }
 )wgsl";
 
+char const kPathShaderWgsl[] = R"wgsl(
+struct VertexOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) color: vec4<f32>,
+};
+
+@vertex
+fn vs_main(@location(0) position: vec2<f32>,
+           @location(1) color: vec4<f32>,
+           @location(2) viewport: vec2<f32>) -> VertexOut {
+  let safeViewport = max(viewport, vec2<f32>(1.0, 1.0));
+  let ndc = vec2<f32>(position.x / safeViewport.x * 2.0 - 1.0,
+                      1.0 - position.y / safeViewport.y * 2.0);
+  var out: VertexOut;
+  out.position = vec4<f32>(ndc, 0.0, 1.0);
+  out.color = color;
+  return out;
+}
+
+@fragment
+fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+  if (in.color.a <= 0.001) {
+    discard;
+  }
+  return in.color;
+}
+)wgsl";
+
 WGPUColor toWebGpuColor(Color color) noexcept {
   return WGPUColor{
       .r = static_cast<double>(color.r),
@@ -561,6 +593,47 @@ void putColor(float out[4], Color color, float opacity = 1.f) noexcept {
 CornerRadius clampedRadii(CornerRadius radii, float width, float height) {
   clampRoundRectCornerRadii(width, height, radii);
   return radii;
+}
+
+bool representativeFillColor(FillStyle const& fill, Color* out) {
+  if (fill.solidColor(out)) {
+    return true;
+  }
+  LinearGradient linear{};
+  if (fill.linearGradient(&linear) && linear.stopCount > 0) {
+    *out = linear.stops[0].color;
+    return true;
+  }
+  RadialGradient radial{};
+  if (fill.radialGradient(&radial) && radial.stopCount > 0) {
+    *out = radial.stops[0].color;
+    return true;
+  }
+  ConicalGradient conical{};
+  if (fill.conicalGradient(&conical) && conical.stopCount > 0) {
+    *out = conical.stops[0].color;
+    return true;
+  }
+  return false;
+}
+
+Rect boundsOfSubpaths(std::vector<std::vector<Point>> const& subpaths) {
+  float minX = std::numeric_limits<float>::infinity();
+  float minY = std::numeric_limits<float>::infinity();
+  float maxX = -std::numeric_limits<float>::infinity();
+  float maxY = -std::numeric_limits<float>::infinity();
+  for (std::vector<Point> const& subpath : subpaths) {
+    for (Point const& point : subpath) {
+      minX = std::min(minX, point.x);
+      minY = std::min(minY, point.y);
+      maxX = std::max(maxX, point.x);
+      maxY = std::max(maxY, point.y);
+    }
+  }
+  if (!std::isfinite(minX) || maxX <= minX || maxY <= minY) {
+    return Rect::sharp(0.f, 0.f, 1.f, 1.f);
+  }
+  return Rect::sharp(minX, minY, maxX - minX, maxY - minY);
 }
 
 void encodeFill(FillStyle const& fill, WebGpuRectInstance& instance) {
@@ -700,6 +773,7 @@ public:
     releaseFrameObjects();
     rects_.clear();
     quads_.clear();
+    pathVertices_.clear();
     drawOps_.clear();
     frameActive_ = true;
   }
@@ -847,27 +921,40 @@ public:
                 FillStyle const& fill,
                 StrokeStyle const& stroke,
                 ShadowStyle const& shadow) override {
-    if (!frameActive_ || path.isEmpty() || path.commandCount() != 1) {
+    if (!frameActive_ || path.isEmpty()) {
       return;
     }
-    Path::CommandView const command = path.command(0);
-    if (command.type == Path::CommandType::Rect && command.dataCount >= 8) {
-      Rect const rect{command.data[0], command.data[1], command.data[2], command.data[3]};
-      CornerRadius const radii{command.data[4], command.data[5], command.data[6], command.data[7]};
-      drawRect(rect, radii, fill, stroke, shadow);
-      return;
+    if (path.commandCount() == 1) {
+      Path::CommandView const command = path.command(0);
+      if (command.type == Path::CommandType::Rect && command.dataCount >= 8) {
+        Rect const rect{command.data[0], command.data[1], command.data[2], command.data[3]};
+        CornerRadius const radii{command.data[4], command.data[5], command.data[6], command.data[7]};
+        drawRect(rect, radii, fill, stroke, shadow);
+        return;
+      }
+      if (command.type == Path::CommandType::Circle && command.dataCount >= 3) {
+        float const radius = command.data[2];
+        Rect const rect{command.data[0] - radius, command.data[1] - radius, radius * 2.f, radius * 2.f};
+        drawRect(rect, CornerRadius::pill(rect), fill, stroke, shadow);
+        return;
+      }
+      if (command.type == Path::CommandType::Ellipse && command.dataCount >= 4) {
+        Rect const rect{command.data[0] - command.data[2],
+                        command.data[1] - command.data[3],
+                        command.data[2] * 2.f,
+                        command.data[3] * 2.f};
+        drawRect(rect, CornerRadius::pill(rect), fill, stroke, shadow);
+        return;
+      }
     }
-    if (command.type == Path::CommandType::Circle && command.dataCount >= 3) {
-      drawCircle(Point{command.data[0], command.data[1]}, command.data[2], fill, stroke);
-      return;
+
+    if (!shadow.isNone()) {
+      save();
+      translate(shadow.offset);
+      appendPath(path, FillStyle::solid(shadow.color), StrokeStyle::none());
+      restore();
     }
-    if (command.type == Path::CommandType::Ellipse && command.dataCount >= 4) {
-      Rect const rect{command.data[0] - command.data[2],
-                      command.data[1] - command.data[3],
-                      command.data[2] * 2.f,
-                      command.data[3] * 2.f};
-      drawRect(rect, CornerRadius::pill(rect), fill, stroke, shadow);
-    }
+    appendPath(path, fill, stroke);
   }
 
   void drawCircle(Point center, float radius, FillStyle const& fill, StrokeStyle const& stroke) override {
@@ -976,6 +1063,7 @@ private:
     enum class Kind {
       Rect,
       Image,
+      Path,
     };
 
     Kind kind = Kind::Rect;
@@ -1071,6 +1159,9 @@ private:
     if (imagePipelineFormat_ != WGPUTextureFormat_Undefined && imagePipelineFormat_ != surfaceFormat_) {
       releaseImagePipeline();
     }
+    if (pathPipelineFormat_ != WGPUTextureFormat_Undefined && pathPipelineFormat_ != surfaceFormat_) {
+      releasePathPipeline();
+    }
   }
 
   void ensureFrameObjects() {
@@ -1105,6 +1196,7 @@ private:
     ensureFrameObjects();
     uploadRectResources();
     uploadImageResources();
+    uploadPathResources();
 
     WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
     colorAttachment.view = currentView_;
@@ -1156,6 +1248,18 @@ private:
             } catch (std::exception const& e) {
               std::fprintf(stderr, "Lambda WebGPU: image upload failed: %s\n", e.what());
             }
+            break;
+          case WebGpuDrawOp::Kind::Path:
+            if (!pathBuffer_) {
+              break;
+            }
+            ensurePathPipeline();
+            if (activePipeline != pathPipeline_) {
+              wgpuRenderPassEncoderSetPipeline(pass, pathPipeline_);
+              activePipeline = pathPipeline_;
+            }
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, pathBuffer_, 0, pathBufferCapacity_);
+            wgpuRenderPassEncoderDraw(pass, op.count, 1, op.first, 0);
             break;
         }
       }
@@ -1270,6 +1374,79 @@ private:
     drawOps_.push_back(std::move(op));
   }
 
+  void appendPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) {
+    if (path.isEmpty() || size_.width < 1.f || size_.height < 1.f) {
+      return;
+    }
+
+    auto subpaths = PathFlattener::flattenSubpaths(path);
+    if (subpaths.empty()) {
+      return;
+    }
+    for (std::vector<Point>& subpath : subpaths) {
+      for (Point& point : subpath) {
+        point = transform_.apply(point);
+      }
+    }
+
+    std::uint32_t const firstVertex = static_cast<std::uint32_t>(pathVertices_.size());
+    float const viewportW = std::max(1.f, size_.width);
+    float const viewportH = std::max(1.f, size_.height);
+    Rect const fillBounds = boundsOfSubpaths(subpaths);
+
+    auto appendVertices = [this](TessellatedPath&& tessellated) {
+      if (tessellated.vertices.empty()) {
+        return;
+      }
+      pathVertices_.insert(pathVertices_.end(), tessellated.vertices.begin(), tessellated.vertices.end());
+    };
+
+    if (!fill.isNone()) {
+      Color fillColor{};
+      if (representativeFillColor(fill, &fillColor)) {
+        fillColor.a *= opacity_;
+        std::vector<std::vector<Point>> contours;
+        contours.reserve(subpaths.size());
+        for (std::vector<Point> const& subpath : subpaths) {
+          if (subpath.size() >= 3) {
+            contours.push_back(subpath);
+          }
+        }
+        if (!contours.empty()) {
+          TessellatedPath tessellated = PathFlattener::tessellateFillContours(
+              contours, fillColor, viewportW, viewportH, PathFlattener::tessWindingFromFillRule(fill.fillRule));
+          (void)applyPathGradientFill(tessellated, fill, fillBounds, opacity_);
+          appendVertices(std::move(tessellated));
+        }
+      }
+    }
+
+    if (!stroke.isNone()) {
+      Color strokeColor{};
+      if (stroke.solidColor(&strokeColor) && stroke.width > 0.f) {
+        strokeColor.a *= opacity_;
+        float const scaleX = std::hypot(transform_.m[0], transform_.m[1]);
+        float const scaleY = std::hypot(transform_.m[3], transform_.m[4]);
+        float const strokeScale = (scaleX > 0.f || scaleY > 0.f) ? (scaleX + scaleY) * 0.5f : 1.f;
+        for (std::vector<Point> const& subpath : subpaths) {
+          if (subpath.size() >= 2) {
+            appendVertices(PathFlattener::tessellateStroke(
+                subpath, stroke.width * strokeScale, strokeColor, viewportW, viewportH, stroke.join, stroke.cap));
+          }
+        }
+      }
+    }
+
+    std::uint32_t const vertexCount = static_cast<std::uint32_t>(pathVertices_.size()) - firstVertex;
+    if (vertexCount > 0) {
+      drawOps_.push_back(WebGpuDrawOp{
+          .kind = WebGpuDrawOp::Kind::Path,
+          .first = firstVertex,
+          .count = vertexCount,
+      });
+    }
+  }
+
   GlyphImage const* glyphImage(std::uint32_t fontId, std::uint32_t glyphId, float fontSize) {
     std::uint16_t const pixelSize =
         static_cast<std::uint16_t>(std::clamp(std::round(fontSize * dpiScale_), 1.f, 512.f));
@@ -1311,22 +1488,14 @@ private:
     return &inserted->second;
   }
 
-  void ensureBuffer(WGPUBuffer& buffer,
+  bool ensureBuffer(WGPUBuffer& buffer,
                     std::uint64_t& capacity,
                     std::uint64_t requiredSize,
                     WGPUBufferUsage usage,
                     char const* label) {
     requiredSize = std::max<std::uint64_t>(requiredSize, 16);
     if (buffer && capacity >= requiredSize) {
-      return;
-    }
-    if (rectBindGroup_) {
-      wgpuBindGroupRelease(rectBindGroup_);
-      rectBindGroup_ = nullptr;
-    }
-    if (imageFrameBindGroup_) {
-      wgpuBindGroupRelease(imageFrameBindGroup_);
-      imageFrameBindGroup_ = nullptr;
+      return false;
     }
     if (buffer) {
       wgpuBufferRelease(buffer);
@@ -1341,22 +1510,28 @@ private:
       throw std::runtime_error(std::string("Lambda WebGPU: failed to create buffer: ") + label);
     }
     capacity = requiredSize;
+    return true;
   }
 
   void uploadRectResources() {
     if (rects_.empty()) {
       return;
     }
-    ensureBuffer(rectBuffer_,
-                 rectBufferCapacity_,
-                 static_cast<std::uint64_t>(rects_.size() * sizeof(WebGpuRectInstance)),
-                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
-                 "LambdaUI WebGPU Rect Instances");
-    ensureBuffer(frameUniformBuffer_,
-                 frameUniformBufferCapacity_,
-                 sizeof(WebGpuFrameUniforms),
-                 WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
-                 "LambdaUI WebGPU Frame Uniforms");
+    bool resized = ensureBuffer(rectBuffer_,
+                                rectBufferCapacity_,
+                                static_cast<std::uint64_t>(rects_.size() * sizeof(WebGpuRectInstance)),
+                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                "LambdaUI WebGPU Rect Instances");
+    resized = ensureBuffer(frameUniformBuffer_,
+                           frameUniformBufferCapacity_,
+                           sizeof(WebGpuFrameUniforms),
+                           WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
+                           "LambdaUI WebGPU Frame Uniforms") ||
+              resized;
+    if (resized && rectBindGroup_) {
+      wgpuBindGroupRelease(rectBindGroup_);
+      rectBindGroup_ = nullptr;
+    }
     WebGpuFrameUniforms uniforms{};
     uniforms.viewport[0] = std::max(1.f, size_.width);
     uniforms.viewport[1] = std::max(1.f, size_.height);
@@ -1369,22 +1544,43 @@ private:
     if (quads_.empty()) {
       return;
     }
-    ensureBuffer(quadBuffer_,
-                 quadBufferCapacity_,
-                 static_cast<std::uint64_t>(quads_.size() * sizeof(WebGpuQuadInstance)),
-                 WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
-                 "LambdaUI WebGPU Image Quads");
-    ensureBuffer(imageFrameUniformBuffer_,
-                 imageFrameUniformBufferCapacity_,
-                 sizeof(WebGpuFrameUniforms),
-                 WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
-                 "LambdaUI WebGPU Image Frame Uniforms");
+    bool resized = ensureBuffer(quadBuffer_,
+                                quadBufferCapacity_,
+                                static_cast<std::uint64_t>(quads_.size() * sizeof(WebGpuQuadInstance)),
+                                WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+                                "LambdaUI WebGPU Image Quads");
+    resized = ensureBuffer(imageFrameUniformBuffer_,
+                           imageFrameUniformBufferCapacity_,
+                           sizeof(WebGpuFrameUniforms),
+                           WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
+                           "LambdaUI WebGPU Image Frame Uniforms") ||
+              resized;
+    if (resized && imageFrameBindGroup_) {
+      wgpuBindGroupRelease(imageFrameBindGroup_);
+      imageFrameBindGroup_ = nullptr;
+    }
     WebGpuFrameUniforms uniforms{};
     uniforms.viewport[0] = std::max(1.f, size_.width);
     uniforms.viewport[1] = std::max(1.f, size_.height);
     wgpuQueueWriteBuffer(context_.queue(), quadBuffer_, 0, quads_.data(), quads_.size() * sizeof(WebGpuQuadInstance));
     wgpuQueueWriteBuffer(context_.queue(), imageFrameUniformBuffer_, 0, &uniforms, sizeof(uniforms));
     ensureImageFrameBindGroup();
+  }
+
+  void uploadPathResources() {
+    if (pathVertices_.empty()) {
+      return;
+    }
+    ensureBuffer(pathBuffer_,
+                 pathBufferCapacity_,
+                 static_cast<std::uint64_t>(pathVertices_.size() * sizeof(PathVertex)),
+                 WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst,
+                 "LambdaUI WebGPU Path Vertices");
+    wgpuQueueWriteBuffer(context_.queue(),
+                         pathBuffer_,
+                         0,
+                         pathVertices_.data(),
+                         pathVertices_.size() * sizeof(PathVertex));
   }
 
   void ensureRectBindGroup() {
@@ -1671,6 +1867,87 @@ private:
     ensureImageSampler();
   }
 
+  void ensurePathPipeline() {
+    if (pathPipeline_ && pathPipelineFormat_ == surfaceFormat_) {
+      return;
+    }
+    releasePathPipeline();
+
+    WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+    pipelineLayoutDescriptor.label = stringView("LambdaUI WebGPU Path Pipeline Layout");
+    pathPipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &pipelineLayoutDescriptor);
+    if (!pathPipelineLayout_) {
+      throw std::runtime_error("Lambda WebGPU: failed to create path pipeline layout");
+    }
+
+    WGPUShaderSourceWGSL shaderSource = WGPU_SHADER_SOURCE_WGSL_INIT;
+    shaderSource.code = stringView(kPathShaderWgsl);
+    WGPUShaderModuleDescriptor shaderDescriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
+    shaderDescriptor.label = stringView("LambdaUI WebGPU Path Shader");
+    shaderDescriptor.nextInChain = &shaderSource.chain;
+    WGPUShaderModule shader = wgpuDeviceCreateShaderModule(context_.device(), &shaderDescriptor);
+    if (!shader) {
+      throw std::runtime_error("Lambda WebGPU: failed to create path shader module");
+    }
+
+    WGPUVertexAttribute attributes[3] = {
+        WGPU_VERTEX_ATTRIBUTE_INIT,
+        WGPU_VERTEX_ATTRIBUTE_INIT,
+        WGPU_VERTEX_ATTRIBUTE_INIT,
+    };
+    attributes[0].format = WGPUVertexFormat_Float32x2;
+    attributes[0].offset = offsetof(PathVertex, x);
+    attributes[0].shaderLocation = 0;
+    attributes[1].format = WGPUVertexFormat_Float32x4;
+    attributes[1].offset = offsetof(PathVertex, color);
+    attributes[1].shaderLocation = 1;
+    attributes[2].format = WGPUVertexFormat_Float32x2;
+    attributes[2].offset = offsetof(PathVertex, viewport);
+    attributes[2].shaderLocation = 2;
+
+    WGPUVertexBufferLayout vertexBufferLayout = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
+    vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+    vertexBufferLayout.arrayStride = sizeof(PathVertex);
+    vertexBufferLayout.attributeCount = 3;
+    vertexBufferLayout.attributes = attributes;
+
+    WGPUBlendState blend = WGPU_BLEND_STATE_INIT;
+    blend.color.operation = WGPUBlendOperation_Add;
+    blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
+    blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+    blend.alpha.operation = WGPUBlendOperation_Add;
+    blend.alpha.srcFactor = WGPUBlendFactor_One;
+    blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+
+    WGPUColorTargetState colorTarget = WGPU_COLOR_TARGET_STATE_INIT;
+    colorTarget.format = surfaceFormat_;
+    colorTarget.blend = &blend;
+    colorTarget.writeMask = WGPUColorWriteMask_All;
+
+    WGPUFragmentState fragment = WGPU_FRAGMENT_STATE_INIT;
+    fragment.module = shader;
+    fragment.entryPoint = stringView("fs_main");
+    fragment.targetCount = 1;
+    fragment.targets = &colorTarget;
+
+    WGPURenderPipelineDescriptor pipelineDescriptor = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
+    pipelineDescriptor.label = stringView("LambdaUI WebGPU Path Pipeline");
+    pipelineDescriptor.layout = pathPipelineLayout_;
+    pipelineDescriptor.vertex.module = shader;
+    pipelineDescriptor.vertex.entryPoint = stringView("vs_main");
+    pipelineDescriptor.vertex.bufferCount = 1;
+    pipelineDescriptor.vertex.buffers = &vertexBufferLayout;
+    pipelineDescriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    pipelineDescriptor.fragment = &fragment;
+
+    pathPipeline_ = wgpuDeviceCreateRenderPipeline(context_.device(), &pipelineDescriptor);
+    wgpuShaderModuleRelease(shader);
+    if (!pathPipeline_) {
+      throw std::runtime_error("Lambda WebGPU: failed to create path pipeline");
+    }
+    pathPipelineFormat_ = surfaceFormat_;
+  }
+
   void releaseRectPipeline() noexcept {
     if (rectBindGroup_) {
       wgpuBindGroupRelease(rectBindGroup_);
@@ -1715,9 +1992,22 @@ private:
     imagePipelineFormat_ = WGPUTextureFormat_Undefined;
   }
 
+  void releasePathPipeline() noexcept {
+    if (pathPipeline_) {
+      wgpuRenderPipelineRelease(pathPipeline_);
+      pathPipeline_ = nullptr;
+    }
+    if (pathPipelineLayout_) {
+      wgpuPipelineLayoutRelease(pathPipelineLayout_);
+      pathPipelineLayout_ = nullptr;
+    }
+    pathPipelineFormat_ = WGPUTextureFormat_Undefined;
+  }
+
   void releaseDrawResources() noexcept {
     releaseRectPipeline();
     releaseImagePipeline();
+    releasePathPipeline();
     if (rectBuffer_) {
       wgpuBufferRelease(rectBuffer_);
       rectBuffer_ = nullptr;
@@ -1734,6 +2024,10 @@ private:
       wgpuBufferRelease(imageFrameUniformBuffer_);
       imageFrameUniformBuffer_ = nullptr;
     }
+    if (pathBuffer_) {
+      wgpuBufferRelease(pathBuffer_);
+      pathBuffer_ = nullptr;
+    }
     if (imageSampler_) {
       wgpuSamplerRelease(imageSampler_);
       imageSampler_ = nullptr;
@@ -1742,6 +2036,7 @@ private:
     quadBufferCapacity_ = 0;
     frameUniformBufferCapacity_ = 0;
     imageFrameUniformBufferCapacity_ = 0;
+    pathBufferCapacity_ = 0;
   }
 
   WebGpuNativeSurface nativeSurface_{};
@@ -1766,6 +2061,7 @@ private:
   std::vector<State> stateStack_;
   std::vector<WebGpuRectInstance> rects_;
   std::vector<WebGpuQuadInstance> quads_;
+  std::vector<PathVertex> pathVertices_;
   std::vector<WebGpuDrawOp> drawOps_;
   std::unordered_map<GlyphKey, GlyphImage, GlyphKeyHash> glyphs_;
 
@@ -1790,6 +2086,12 @@ private:
   std::uint64_t imageFrameUniformBufferCapacity_ = 0;
   WGPUBindGroup imageFrameBindGroup_ = nullptr;
   WGPUSampler imageSampler_ = nullptr;
+
+  WGPUPipelineLayout pathPipelineLayout_ = nullptr;
+  WGPURenderPipeline pathPipeline_ = nullptr;
+  WGPUTextureFormat pathPipelineFormat_ = WGPUTextureFormat_Undefined;
+  WGPUBuffer pathBuffer_ = nullptr;
+  std::uint64_t pathBufferCapacity_ = 0;
 };
 
 } // namespace
