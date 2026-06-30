@@ -12,6 +12,7 @@ The public API lives under `include/Lambda`, implementation lives under `src`, a
 - Built-in views for text, stacks, grids, scroll views, buttons, text input, menus, popovers, dialogs, alerts, sliders, tables, icons, SVG, and more.
 - Metal renderer on macOS with Cocoa/CoreText integration.
 - Vulkan renderer on Linux with a Wayland backend.
+- Experimental Dawn/WebGPU renderer scaffold for desktop surfaces.
 - CMake helpers for apps and demos, plus doctest-based unit/integration tests.
 
 ## Quick Start
@@ -20,8 +21,9 @@ Prerequisites:
 
 - CMake 3.25 or newer.
 - A C++23-capable compiler.
-- macOS: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
+- macOS native renderer: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
 - Linux Wayland: development packages for Wayland, wayland-protocols, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
+- Experimental WebGPU renderer: Dawn with the `dawn::webgpu_dawn` CMake target available via `CMAKE_PREFIX_PATH`, `LAMBDAUI_DAWN_SOURCE_DIR`, or `LAMBDAUI_DAWN_FETCH=ON`.
 
 Build the library, demos, and tests:
 
@@ -110,6 +112,7 @@ docs/                 Project documentation
 ## Important CMake Options
 
 - `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, or `LINUX_WAYLAND`.
+- `LAMBDAUI_RENDER_BACKEND`: `NATIVE` (Metal on macOS, Vulkan on Wayland) or `WEBGPU` (Dawn scaffold).
 - `LAMBDAUI_BUILD_DEMOS`: build `demos/`.
 - `LAMBDAUI_BUILD_TESTS`: build `lambda-tests` and register it with CTest.
 - `LAMBDAUI_BUILD_BENCHMARKS`: build optional benchmarks.

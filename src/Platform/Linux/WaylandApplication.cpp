@@ -1,7 +1,15 @@
+#ifndef LAMBDAUI_WEBGPU
+#define LAMBDAUI_WEBGPU 0
+#endif
+
+#if LAMBDAUI_WEBGPU
+#include "Graphics/WebGPU/WebGpuContext.hpp"
+#else
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #include <vulkan/vulkan.h>
-
 #include "Graphics/Vulkan/VulkanCheck.hpp"
+#endif
+
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "UI/Platform/Application.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
@@ -97,6 +105,28 @@ public:
     return this;
   }
 
+#if LAMBDAUI_WEBGPU
+  WGPUSurface createSurface(WGPUInstance instance, void* nativeHandle) override {
+    auto* native = static_cast<WaylandNativeSurface*>(nativeHandle);
+    if (!native || !native->display || !native->surface) {
+      throw std::runtime_error("Invalid Wayland WebGPU surface handle");
+    }
+
+    WGPUSurfaceSourceWaylandSurface wayland = WGPU_SURFACE_SOURCE_WAYLAND_SURFACE_INIT;
+    wayland.display = native->display;
+    wayland.surface = native->surface;
+
+    WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
+    descriptor.label = webgpu::stringView("LambdaUI Wayland WebGPU Surface");
+    descriptor.nextInChain = &wayland.chain;
+
+    WGPUSurface surface = wgpuInstanceCreateSurface(instance, &descriptor);
+    if (!surface) {
+      throw std::runtime_error("Failed to create Wayland WebGPU surface");
+    }
+    return surface;
+  }
+#else
   std::span<char const* const> requiredInstanceExtensions() const override {
     static constexpr char const* exts[] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -117,6 +147,7 @@ public:
     vkCheck(vkCreateWaylandSurfaceKHR(instance, &info, nullptr, &surface), "vkCreateWaylandSurfaceKHR");
     return surface;
   }
+#endif
 
 private:
   void collectShortcuts(MenuItem const& item) {

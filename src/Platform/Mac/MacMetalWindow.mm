@@ -1,7 +1,13 @@
+#ifndef LAMBDAUI_WEBGPU
+#define LAMBDAUI_WEBGPU 0
+#endif
+
 #import <Cocoa/Cocoa.h>
 #import <CoreVideo/CoreVideo.h>
 #import <CoreGraphics/CoreGraphics.h>
+#if !LAMBDAUI_WEBGPU
 #import <Metal/Metal.h>
+#endif
 #import <QuartzCore/QuartzCore.h>
 
 #include <Lambda/UI/Application.hpp>
@@ -18,7 +24,11 @@
 #include "UI/Platform/Window.hpp"
 #include "UI/Platform/WindowEventPump.hpp"
 #include "UI/Platform/WindowFactory.hpp"
+#if LAMBDAUI_WEBGPU
+#include "Graphics/WebGPU/WebGpuCanvas.hpp"
+#else
 #include "Graphics/Metal/MetalCanvas.hpp"
+#endif
 #include "UI/DebugFlags.hpp"
 #include "UI/TransientPopoverHost.hpp"
 
@@ -30,6 +40,7 @@
 #include <dispatch/dispatch.h>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -80,6 +91,31 @@ namespace detail {
 void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {});
 void postTextInput(LambdaMetalView* view, std::string text);
 } // namespace detail
+
+#if LAMBDAUI_WEBGPU
+namespace {
+
+WGPUSurface createMacWebGpuSurface(webgpu::WebGpuContext& context, CAMetalLayer* layer) {
+  if (!layer) {
+    throw std::runtime_error("Lambda WebGPU: missing CAMetalLayer surface");
+  }
+
+  WGPUSurfaceSourceMetalLayer metalLayer = WGPU_SURFACE_SOURCE_METAL_LAYER_INIT;
+  metalLayer.layer = (__bridge void*)layer;
+
+  WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
+  descriptor.label = webgpu::stringView("LambdaUI macOS WebGPU Surface");
+  descriptor.nextInChain = &metalLayer.chain;
+
+  WGPUSurface surface = wgpuInstanceCreateSurface(context.instance(), &descriptor);
+  if (!surface) {
+    throw std::runtime_error("Lambda WebGPU: failed to create macOS surface");
+  }
+  return surface;
+}
+
+} // namespace
+#endif
 } // namespace lambdaui
 
 @implementation LambdaMetalView
@@ -88,12 +124,14 @@ void postTextInput(LambdaMetalView* view, std::string text);
 /// `+layerClass` alone is not always reliable on newer macOS for `setDevice:`.
 - (CALayer*)makeBackingLayer {
   CAMetalLayer* metalLayer = [CAMetalLayer layer];
+#if !LAMBDAUI_WEBGPU
   id<MTLDevice> device = MTLCreateSystemDefaultDevice();
   if (device) {
     metalLayer.device = device;
   }
   metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
   metalLayer.framebufferOnly = NO;
+#endif
   metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
   metalLayer.contentsGravity = kCAGravityTopLeft;
   metalLayer.opaque = NO;
@@ -778,10 +816,20 @@ bool MacPopoverSurface::show(LambdaMetalView* parentView, Rect anchor) {
   if (!layer) {
     return false;
   }
+#if LAMBDAUI_WEBGPU
+  webgpu::WebGpuContext context;
+  WGPUSurface surface = createMacWebGpuSurface(context, layer);
+  canvas_ = webgpu::createWebGpuCanvas(std::move(context),
+                                       surface,
+                                       owner_->handle(),
+                                       Application::instance().textSystem(),
+                                       {.transparentSurface = true});
+#else
   canvas_ = createMetalCanvas(owner_->lambdaWindow(), (__bridge void*)layer, owner_->handle(),
                               Application::instance().textSystem(), [this] {
                                 render();
                               });
+#endif
   if (!canvas_) {
     return false;
   }
@@ -951,12 +999,14 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (CALayer*)makeBackingLayer {
   CAMetalLayer* metalLayer = [CAMetalLayer layer];
+#if !LAMBDAUI_WEBGPU
   id<MTLDevice> device = MTLCreateSystemDefaultDevice();
   if (device) {
     metalLayer.device = device;
   }
   metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
   metalLayer.framebufferOnly = NO;
+#endif
   metalLayer.opaque = NO;
   metalLayer.backgroundColor = [[NSColor clearColor] CGColor];
   metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
@@ -1910,9 +1960,20 @@ std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambdaui::Window& owner) 
     layer.opaque = NO;
     layer.backgroundColor = [[NSColor clearColor] CGColor];
   }
+#if LAMBDAUI_WEBGPU
+  auto* layer = (__bridge CAMetalLayer*)layerPtr;
+  webgpu::WebGpuContext context;
+  WGPUSurface surface = createMacWebGpuSurface(context, layer);
+  return webgpu::createWebGpuCanvas(std::move(context),
+                                    surface,
+                                    handle(),
+                                    Application::instance().textSystem(),
+                                    {.transparentSurface = true});
+#else
   return createMetalCanvas(&owner, layerPtr, handle(), Application::instance().textSystem(), [] {
     Application::instance().requestRedraw();
   });
+#endif
 }
 
 void MacMetalWindow::processEvents() {

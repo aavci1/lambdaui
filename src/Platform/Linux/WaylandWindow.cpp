@@ -7,6 +7,10 @@
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandScrollAccumulator.hpp"
 
+#ifndef LAMBDAUI_WEBGPU
+#define LAMBDAUI_WEBGPU 0
+#endif
+
 #include <Lambda/Debug/DebugFlags.hpp>
 #include <Lambda/Graphics/TextLayoutOptions.hpp>
 #include <Lambda/Graphics/TextSystem.hpp>
@@ -18,7 +22,11 @@
 #include <Lambda/UI/Window.hpp>
 #include <Lambda/UI/Views/Popover.hpp>
 
+#if LAMBDAUI_WEBGPU
+#include "Graphics/WebGPU/WebGpuCanvas.hpp"
+#else
 #include "Graphics/Vulkan/VulkanCanvas.hpp"
+#endif
 
 #include "Detail/ResizeTrace.hpp"
 #include "UI/TransientPopoverHost.hpp"
@@ -1159,8 +1167,18 @@ public:
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
     auto* provider = Application::instance().platformApp().gpuSurfaceProvider();
     if (!provider) {
-      throw std::runtime_error("Wayland platform application does not provide Vulkan surfaces");
+      throw std::runtime_error("Wayland platform application does not provide GPU surfaces");
     }
+#if LAMBDAUI_WEBGPU
+    webgpu::WebGpuContext context;
+    WGPUSurface surface = provider->createSurface(context.instance(), &nativeSurface_);
+    auto canvas = webgpu::createWebGpuCanvas(std::move(context),
+                                             surface,
+                                             handle_,
+                                             Application::instance().textSystem(),
+                                             {.transparentSurface = wantsTransparentSurface()});
+    webgpu::setWebGpuCanvasResizeBoundsHint(canvas.get(), configureBoundsWidth_, configureBoundsHeight_);
+#else
     configureVulkanCanvasRuntime(provider->requiredInstanceExtensions(), Application::instance().cacheDir());
     VkInstance instance = ensureSharedVulkanInstance();
     VkSurfaceKHR surface = provider->createSurface(instance, &nativeSurface_);
@@ -1169,6 +1187,7 @@ public:
                                      Application::instance().textSystem(),
                                      {.transparentSurface = wantsTransparentSurface()});
     setVulkanCanvasResizeBoundsHint(canvas.get(), configureBoundsWidth_, configureBoundsHeight_);
+#endif
     canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
     canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
     canvas_ = canvas.get();
@@ -1270,7 +1289,11 @@ public:
   void setBackground(WindowBackground const& background) override {
     background_ = background;
     if (canvas_) {
+#if LAMBDAUI_WEBGPU
+      webgpu::setWebGpuCanvasTransparentSurface(canvas_, wantsTransparentSurface());
+#else
       setVulkanCanvasTransparentSurface(canvas_, wantsTransparentSurface());
+#endif
     }
     updateBackgroundEffectRegion();
     updateOpaqueRegion();
@@ -1510,7 +1533,12 @@ public:
     framePending_ = true;
     if (detail::resizeTraceEnabled()) {
       LAMBDA_RESIZE_TRACE("wayland-window", "request-frame window=%u mode=%s size=%dx%d\n",
-                   handle_, vulkanCanvasUsesMailboxPresentMode(canvas_) ? "mailbox" : "fifo",
+                   handle_,
+#if LAMBDAUI_WEBGPU
+                   webgpu::webGpuCanvasUsesMailboxPresentMode(canvas_) ? "mailbox" : "fifo",
+#else
+                   vulkanCanvasUsesMailboxPresentMode(canvas_) ? "mailbox" : "fifo",
+#endif
                    static_cast<int>(std::lround(size_.width)),
                    static_cast<int>(std::lround(size_.height)));
     }
@@ -1846,16 +1874,26 @@ private:
     try {
       auto* provider = Application::instance().platformApp().gpuSurfaceProvider();
       if (!provider) {
-        throw std::runtime_error("Wayland platform application does not provide Vulkan surfaces");
+        throw std::runtime_error("Wayland platform application does not provide GPU surfaces");
       }
-      configureVulkanCanvasRuntime(provider->requiredInstanceExtensions(), Application::instance().cacheDir());
       state.nativeSurface = WaylandNativeSurface{state.shared->display, state.surface};
+#if LAMBDAUI_WEBGPU
+      webgpu::WebGpuContext context;
+      WGPUSurface surface = provider->createSurface(context.instance(), &state.nativeSurface);
+      state.canvas = webgpu::createWebGpuCanvas(std::move(context),
+                                                surface,
+                                                handle_,
+                                                Application::instance().textSystem(),
+                                                {.transparentSurface = true});
+#else
+      configureVulkanCanvasRuntime(provider->requiredInstanceExtensions(), Application::instance().cacheDir());
       VkInstance instance = ensureSharedVulkanInstance();
       VkSurfaceKHR vkSurface = provider->createSurface(instance, &state.nativeSurface);
       state.canvas = createVulkanCanvas(vkSurface,
                                         handle_,
                                         Application::instance().textSystem(),
                                         {.transparentSurface = true});
+#endif
       state.canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
       state.canvas->resize(state.width, state.height);
       return true;
@@ -2232,7 +2270,11 @@ private:
     auto* self = static_cast<WaylandWindow*>(data);
     self->configureBoundsWidth_ = std::max(0, width);
     self->configureBoundsHeight_ = std::max(0, height);
+#if LAMBDAUI_WEBGPU
+    webgpu::setWebGpuCanvasResizeBoundsHint(self->canvas_, self->configureBoundsWidth_, self->configureBoundsHeight_);
+#else
     setVulkanCanvasResizeBoundsHint(self->canvas_, self->configureBoundsWidth_, self->configureBoundsHeight_);
+#endif
     if (detail::resizeTraceEnabled()) {
       LAMBDA_RESIZE_TRACE("wayland-window", "configure-bounds window=%u size=%dx%d\n",
                           self->handle_, self->configureBoundsWidth_, self->configureBoundsHeight_);

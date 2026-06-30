@@ -27,6 +27,15 @@ set(LAMBDAUI_PLATFORM "AUTO" CACHE STRING
     "LambdaUI backend: AUTO, MACOS, LINUX_WAYLAND.")
 set_property(CACHE LAMBDAUI_PLATFORM PROPERTY STRINGS AUTO MACOS LINUX_WAYLAND)
 
+set(LAMBDAUI_RENDER_BACKEND "NATIVE" CACHE STRING
+    "LambdaUI renderer: NATIVE (Metal on macOS, Vulkan on Wayland) or WEBGPU (Dawn).")
+set_property(CACHE LAMBDAUI_RENDER_BACKEND PROPERTY STRINGS NATIVE WEBGPU)
+if(NOT LAMBDAUI_RENDER_BACKEND STREQUAL "NATIVE" AND
+   NOT LAMBDAUI_RENDER_BACKEND STREQUAL "WEBGPU")
+  message(FATAL_ERROR
+    "LambdaUI: LAMBDAUI_RENDER_BACKEND=${LAMBDAUI_RENDER_BACKEND} is not implemented yet.")
+endif()
+
 if(LAMBDAUI_PLATFORM STREQUAL "AUTO")
   if(APPLE)
     set(LAMBDAUI_PLATFORM_MACOS ON)
@@ -57,6 +66,7 @@ if(LAMBDAUI_PLATFORM_MACOS)
   enable_language(OBJC)
   enable_language(OBJCXX)
 
+  if(NOT LAMBDAUI_RENDER_BACKEND STREQUAL "WEBGPU")
   find_program(LAMBDAUI_XCRUN_EXECUTABLE xcrun)
   if(NOT LAMBDAUI_XCRUN_EXECUTABLE)
     message(FATAL_ERROR
@@ -121,6 +131,7 @@ if(LAMBDAUI_PLATFORM_MACOS)
     message(FATAL_ERROR
       "LambdaUI macOS builds require xxd to embed the compiled Metal shader library. "
       "Install Xcode or Vim/xxd and make sure xxd is on PATH.")
+  endif()
   endif()
 endif()
 

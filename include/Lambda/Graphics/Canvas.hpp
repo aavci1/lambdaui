@@ -46,7 +46,7 @@ public:
 
 }
 
-enum class Backend : std::uint8_t { Metal, Vulkan };
+enum class Backend : std::uint8_t { Metal, Vulkan, WebGPU };
 
 struct RecordedOps {
   virtual ~RecordedOps() = default;
@@ -141,7 +141,8 @@ public:
   void drawImage(Image const& image, Rect const& dst, ImageFillMode fillMode = ImageFillMode::Cover,
                  CornerRadius const& corners = {}, float opacity = 1.f);
 
-  /// Metal: `id<MTLDevice>` as `void*` (use with `loadImage(path, canvas.gpuDevice())`). Null if unavailable.
+  /// Backend-native device handle as `void*` (Metal: `id<MTLDevice>`, WebGPU: `WGPUDevice`).
+  /// Use with `loadImage(path, canvas.gpuDevice())` when the active backend supports GPU uploads.
   virtual void* gpuDevice() const = 0;
 
   virtual bool requestNextFrameCapture() = 0;
