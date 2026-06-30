@@ -253,6 +253,13 @@ private:
 
       WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
       viewDescriptor.label = stringView("LambdaUI WebGPU Image View");
+      viewDescriptor.format = textureFormatForPixelFormat(pixelFormat_);
+      viewDescriptor.dimension = WGPUTextureViewDimension_2D;
+      viewDescriptor.baseMipLevel = 0;
+      viewDescriptor.mipLevelCount = 1;
+      viewDescriptor.baseArrayLayer = 0;
+      viewDescriptor.arrayLayerCount = 1;
+      viewDescriptor.aspect = WGPUTextureAspect_All;
       textureView_ = wgpuTextureCreateView(texture_, &viewDescriptor);
       if (!textureView_) {
         throw std::runtime_error("Lambda WebGPU: failed to create image texture view");
@@ -1144,6 +1151,13 @@ class WebGpuCanvas final : public Canvas {
     WebGpuFrameRecorder recorded_;
   };
 
+  class CanvasUnreplayablePreparedRenderOps final : public scenegraph::PreparedRenderOps {
+  public:
+    bool replay(Canvas&) const override {
+      return false;
+    }
+  };
+
 public:
   WebGpuCanvas(WebGpuContext context,
                WGPUSurface surface,
@@ -1223,7 +1237,18 @@ public:
   }
 
   void updateDpiScale(float scaleX, float scaleY) override {
-    dpiScale_ = std::max(scaleX, scaleY);
+    float const nextScale = std::max(0.01f, std::max(scaleX, scaleY));
+    if (std::abs(dpiScale_ - nextScale) <= 1e-6f) {
+      return;
+    }
+    dpiScale_ = nextScale;
+    if (surface_) {
+      configureSurface();
+    } else {
+      offscreenPixelWidth_ = std::max(1u, static_cast<std::uint32_t>(std::ceil(size_.width * dpiScale_)));
+      offscreenPixelHeight_ = std::max(1u, static_cast<std::uint32_t>(std::ceil(size_.height * dpiScale_)));
+      releaseOffscreenTarget();
+    }
   }
 
   float dpiScale() const noexcept override { return dpiScale_; }
@@ -1670,8 +1695,11 @@ public:
 
   std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(std::unique_ptr<RecordedOps> recorded) override {
     WebGpuFrameRecorder* webgpuRecorded = asWebGpuRecordedOps(recorded.get());
-    if (!webgpuRecorded || recordedOpsContainClipState(*webgpuRecorded)) {
+    if (!webgpuRecorded) {
       return nullptr;
+    }
+    if (recordedOpsContainClipState(*webgpuRecorded)) {
+      return std::make_unique<CanvasUnreplayablePreparedRenderOps>();
     }
     return std::make_unique<WebGpuCanvasPreparedRenderOps>(std::move(*webgpuRecorded));
   }
@@ -1743,6 +1771,34 @@ private:
 
   Rect viewportBounds() const noexcept {
     return Rect::sharp(0.f, 0.f, std::max(1.f, size_.width), std::max(1.f, size_.height));
+  }
+
+  float surfaceLogicalWidth() const noexcept {
+    if (size_.width > 1.f) {
+      return size_.width;
+    }
+    if (resizeBoundsWidth_ > 0) {
+      return static_cast<float>(resizeBoundsWidth_);
+    }
+    return std::max(1.f, size_.width);
+  }
+
+  float surfaceLogicalHeight() const noexcept {
+    if (size_.height > 1.f) {
+      return size_.height;
+    }
+    if (resizeBoundsHeight_ > 0) {
+      return static_cast<float>(resizeBoundsHeight_);
+    }
+    return std::max(1.f, size_.height);
+  }
+
+  std::uint32_t surfacePixelWidth() const noexcept {
+    return std::max(1u, static_cast<std::uint32_t>(std::ceil(surfaceLogicalWidth() * std::max(0.01f, dpiScale_))));
+  }
+
+  std::uint32_t surfacePixelHeight() const noexcept {
+    return std::max(1u, static_cast<std::uint32_t>(std::ceil(surfaceLogicalHeight() * std::max(0.01f, dpiScale_))));
   }
 
   Rect transformedBounds(Rect rect) const {
@@ -1960,14 +2016,8 @@ private:
       swapChain_ = nullptr;
     }
 
-    std::uint32_t const width = std::max(
-        1u,
-        static_cast<std::uint32_t>(
-            std::lround(size_.width > 1.f ? size_.width : static_cast<float>(resizeBoundsWidth_))));
-    std::uint32_t const height = std::max(
-        1u,
-        static_cast<std::uint32_t>(
-            std::lround(size_.height > 1.f ? size_.height : static_cast<float>(resizeBoundsHeight_))));
+    std::uint32_t const width = surfacePixelWidth();
+    std::uint32_t const height = surfacePixelHeight();
 
     WGPUSwapChainDescriptor config{};
     config.label = stringView("LambdaUI WebGPU SwapChain");
@@ -2022,8 +2072,8 @@ private:
     if (surfaceCopySrcSupported_) {
       config.usage |= WGPUTextureUsage_CopySrc;
     }
-    config.width = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width)));
-    config.height = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height)));
+    config.width = surfacePixelWidth();
+    config.height = surfacePixelHeight();
     config.presentMode = presentMode_;
     config.alphaMode = alphaMode;
     wgpuSurfaceConfigure(surface_, &config);
@@ -2101,6 +2151,13 @@ private:
 #if !LAMBDAUI_DAWN_LEGACY_NATIVE
     WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
     viewDescriptor.label = stringView(surface_ ? "LambdaUI WebGPU Surface View" : "LambdaUI WebGPU Offscreen View");
+    viewDescriptor.format = surfaceFormat_;
+    viewDescriptor.dimension = WGPUTextureViewDimension_2D;
+    viewDescriptor.baseMipLevel = 0;
+    viewDescriptor.mipLevelCount = 1;
+    viewDescriptor.baseArrayLayer = 0;
+    viewDescriptor.arrayLayerCount = 1;
+    viewDescriptor.aspect = WGPUTextureAspect_All;
     currentView_ = wgpuTextureCreateView(currentTexture_, &viewDescriptor);
     if (!currentView_) {
       throw std::runtime_error("Lambda WebGPU: failed to create frame texture view");
@@ -2109,6 +2166,13 @@ private:
     if (!surface_) {
       WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
       viewDescriptor.label = stringView("LambdaUI WebGPU Offscreen View");
+      viewDescriptor.format = surfaceFormat_;
+      viewDescriptor.dimension = WGPUTextureViewDimension_2D;
+      viewDescriptor.baseMipLevel = 0;
+      viewDescriptor.mipLevelCount = 1;
+      viewDescriptor.baseArrayLayer = 0;
+      viewDescriptor.arrayLayerCount = 1;
+      viewDescriptor.aspect = WGPUTextureAspect_All;
       currentView_ = wgpuTextureCreateView(currentTexture_, &viewDescriptor);
       if (!currentView_) {
         throw std::runtime_error("Lambda WebGPU: failed to create frame texture view");
@@ -2252,10 +2316,8 @@ private:
       return false;
     }
 
-    pendingFrameCaptureWidth_ =
-        surface_ ? std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width))) : offscreenPixelWidth_;
-    pendingFrameCaptureHeight_ =
-        surface_ ? std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height))) : offscreenPixelHeight_;
+    pendingFrameCaptureWidth_ = surface_ ? surfacePixelWidth() : offscreenPixelWidth_;
+    pendingFrameCaptureHeight_ = surface_ ? surfacePixelHeight() : offscreenPixelHeight_;
     pendingFrameCaptureBytesPerRow_ =
         alignTo(pendingFrameCaptureWidth_ * 4u, kWebGpuCopyBytesPerRowAlignment);
     pendingFrameCaptureBufferSize_ =
@@ -2880,6 +2942,7 @@ private:
     descriptor.magFilter = WGPUFilterMode_Linear;
     descriptor.minFilter = WGPUFilterMode_Linear;
     descriptor.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+    descriptor.maxAnisotropy = 1;
     imageSampler_ = wgpuDeviceCreateSampler(context_.device(), &descriptor);
     if (!imageSampler_) {
       throw std::runtime_error("Lambda WebGPU: failed to create image sampler");

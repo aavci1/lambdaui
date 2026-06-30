@@ -1973,11 +1973,17 @@ std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambdaui::Window& owner) 
   auto* layer = (__bridge CAMetalLayer*)layerPtr;
   webgpu::WebGpuContext context;
   WGPUSurface surface = createMacWebGpuSurface(context, layer);
-  return webgpu::createWebGpuCanvas(std::move(context),
-                                    surface,
-                                    handle(),
-                                    Application::instance().textSystem(),
-                                    {.transparentSurface = true});
+  auto canvas = webgpu::createWebGpuCanvas(std::move(context),
+                                           surface,
+                                           handle(),
+                                           Application::instance().textSystem(),
+                                           {.transparentSurface = true});
+  CGFloat const scale = d->window_ ? d->window_.backingScaleFactor : [NSScreen mainScreen].backingScaleFactor;
+  Size const size = currentSize();
+  canvas->updateDpiScale(static_cast<float>(scale), static_cast<float>(scale));
+  canvas->resize(static_cast<int>(std::lround(std::max(1.f, size.width))),
+                 static_cast<int>(std::lround(std::max(1.f, size.height))));
+  return canvas;
 #else
   return createMetalCanvas(&owner, layerPtr, handle(), Application::instance().textSystem(), [] {
     Application::instance().requestRedraw();
