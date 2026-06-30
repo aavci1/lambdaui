@@ -136,6 +136,13 @@ add_custom_target(lambdaui_module_dependency_check
   VERBATIM
 )
 
+add_custom_target(lambdaui_webgpu_backend_check
+  COMMAND ${LAMBDAUI_FRAMEWORK_DIR}/scripts/check_webgpu_backend_only.sh
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  COMMENT "Check LambdaUI WebGPU-only backend state"
+  VERBATIM
+)
+
 if(LAMBDAUI_PLATFORM_MACOS)
   target_sources(lambdaui PRIVATE
     UI/Application.mm
