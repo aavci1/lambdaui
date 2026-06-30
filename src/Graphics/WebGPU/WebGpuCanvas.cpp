@@ -134,6 +134,16 @@ WGPUTextureFormat textureFormatForPixelFormat(Image::PixelFormat format) noexcep
   return WGPUTextureFormat_RGBA8Unorm;
 }
 
+Image::PixelFormat pixelFormatForTextureFormat(WGPUTextureFormat format) noexcept {
+  switch (format) {
+    case WGPUTextureFormat_BGRA8Unorm:
+      return Image::PixelFormat::Bgra8888;
+    case WGPUTextureFormat_RGBA8Unorm:
+    default:
+      return Image::PixelFormat::Rgba8888;
+  }
+}
+
 class WebGpuImage final : public Image {
 public:
   WebGpuImage(std::uint32_t width,
@@ -146,7 +156,28 @@ public:
         height_(height),
         pixels_(std::move(pixels)),
         pixelFormat_(format),
+        textureFormat_(textureFormatForPixelFormat(format)),
         premultiplied_(premultiplied) {}
+
+  WebGpuImage(std::uint32_t width,
+              std::uint32_t height,
+              WGPUDevice device,
+              WGPUTexture texture,
+              WGPUTextureFormat format,
+              bool premultiplied)
+      : size_{static_cast<float>(width), static_cast<float>(height)},
+        width_(width),
+        height_(height),
+        pixelFormat_(pixelFormatForTextureFormat(format)),
+        textureFormat_(format),
+        premultiplied_(premultiplied),
+        device_(device),
+        texture_(texture),
+        textureDirty_(false) {
+    if (device_) {
+      wgpuDeviceAddRef(device_);
+    }
+  }
 
   ~WebGpuImage() override {
     releaseGpuObjects();
@@ -167,6 +198,8 @@ public:
     if (format != pixelFormat_) {
       releaseGpuObjects();
       pixelFormat_ = format;
+    } else if (pixels_.empty() && texture_) {
+      releaseGpuObjects();
     }
     pixels_.assign(pixels.begin(), pixels.end());
     textureDirty_ = true;
@@ -190,6 +223,9 @@ public:
                           void* gpuDevice = nullptr,
                           std::uint32_t sourceBytesPerRow = 0) override {
     if (format != pixelFormat_ || x + width > width_ || y + height > height_ || width == 0 || height == 0) {
+      return false;
+    }
+    if (pixels_.empty()) {
       return false;
     }
     if (sourceBytesPerRow == 0) {
@@ -224,8 +260,15 @@ public:
 
 private:
   void ensureTexture(WGPUDevice device, WGPUQueue queue) const {
-    if (!device || !queue || pixels_.empty()) {
-      throw std::runtime_error("Lambda WebGPU: image upload requires a device, queue, and pixels");
+    if (!device || !queue) {
+      throw std::runtime_error("Lambda WebGPU: image upload requires a device and queue");
+    }
+    if (texture_ && device_ == device && !textureDirty_) {
+      ensureTextureView();
+      return;
+    }
+    if (pixels_.empty()) {
+      throw std::runtime_error("Lambda WebGPU: image upload requires pixels for this device");
     }
     if (device_ != device) {
       releaseGpuObjects();
@@ -243,29 +286,17 @@ private:
           .height = height_,
           .depthOrArrayLayers = 1,
       };
-      descriptor.format = textureFormatForPixelFormat(pixelFormat_);
+      textureFormat_ = textureFormatForPixelFormat(pixelFormat_);
+      descriptor.format = textureFormat_;
       descriptor.mipLevelCount = 1;
       descriptor.sampleCount = 1;
       texture_ = wgpuDeviceCreateTexture(device_, &descriptor);
       if (!texture_) {
         throw std::runtime_error("Lambda WebGPU: failed to create image texture");
       }
-
-      WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
-      viewDescriptor.label = stringView("LambdaUI WebGPU Image View");
-      viewDescriptor.format = textureFormatForPixelFormat(pixelFormat_);
-      viewDescriptor.dimension = WGPUTextureViewDimension_2D;
-      viewDescriptor.baseMipLevel = 0;
-      viewDescriptor.mipLevelCount = 1;
-      viewDescriptor.baseArrayLayer = 0;
-      viewDescriptor.arrayLayerCount = 1;
-      viewDescriptor.aspect = WGPUTextureAspect_All;
-      textureView_ = wgpuTextureCreateView(texture_, &viewDescriptor);
-      if (!textureView_) {
-        throw std::runtime_error("Lambda WebGPU: failed to create image texture view");
-      }
       textureDirty_ = true;
     }
+    ensureTextureView();
     if (textureDirty_) {
       WGPUTexelCopyTextureInfo destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
       destination.texture = texture_;
@@ -278,6 +309,28 @@ private:
       extent.depthOrArrayLayers = 1;
       wgpuQueueWriteTexture(queue, &destination, pixels_.data(), pixels_.size(), &layout, &extent);
       textureDirty_ = false;
+    }
+  }
+
+  void ensureTextureView() const {
+    if (textureView_) {
+      return;
+    }
+    if (!texture_) {
+      throw std::runtime_error("Lambda WebGPU: image texture view requires a texture");
+    }
+    WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
+    viewDescriptor.label = stringView("LambdaUI WebGPU Image View");
+    viewDescriptor.format = textureFormat_;
+    viewDescriptor.dimension = WGPUTextureViewDimension_2D;
+    viewDescriptor.baseMipLevel = 0;
+    viewDescriptor.mipLevelCount = 1;
+    viewDescriptor.baseArrayLayer = 0;
+    viewDescriptor.arrayLayerCount = 1;
+    viewDescriptor.aspect = WGPUTextureAspect_All;
+    textureView_ = wgpuTextureCreateView(texture_, &viewDescriptor);
+    if (!textureView_) {
+      throw std::runtime_error("Lambda WebGPU: failed to create image texture view");
     }
   }
 
@@ -301,6 +354,7 @@ private:
   std::uint32_t height_ = 0;
   std::vector<std::uint8_t> pixels_;
   PixelFormat pixelFormat_ = PixelFormat::Rgba8888;
+  mutable WGPUTextureFormat textureFormat_ = WGPUTextureFormat_RGBA8Unorm;
   bool premultiplied_ = false;
 
   mutable WGPUDevice device_ = nullptr;
@@ -347,6 +401,7 @@ struct WebGpuQuadInstance {
   float uv[4]{};
   float color[4]{};
   float radii[4]{};
+  float params[4]{};
   float clipHeader[4]{};
   float clipEntries[kRoundedClipEntryCount][4]{};
 };
@@ -545,6 +600,7 @@ struct QuadInstance {
   uv: vec4<f32>,
   color: vec4<f32>,
   radii: vec4<f32>,
+  params: vec4<f32>,
   clipHeader: vec4<f32>,
   clipEntries: array<vec4<f32>, 8>,
 };
@@ -642,7 +698,11 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
   if (coverage <= 0.001) {
     discard;
   }
-  var sampled = textureSample(imageTexture, imageSampler, in.uv) * in.color;
+  var sampled = textureSample(imageTexture, imageSampler, in.uv);
+  if (q.params.x > 0.5 && sampled.a > 0.000001) {
+    sampled = vec4<f32>(sampled.rgb / sampled.a, sampled.a);
+  }
+  sampled = sampled * in.color;
   sampled.a = sampled.a * coverage;
   if (sampled.a <= 0.001) {
     discard;
@@ -1318,7 +1378,9 @@ public:
     }
     releaseFrameObjects();
     frameActive_ = false;
-    debug::perf::recordPresentedFrame();
+    if (surface_) {
+      debug::perf::recordPresentedFrame();
+    }
   }
 
   void save() override { stateStack_.push_back(state()); }
@@ -1620,6 +1682,26 @@ public:
 
   WGPUDevice webGpuDevice() const noexcept { return context_.device(); }
   WGPUQueue webGpuQueue() const noexcept { return context_.queue(); }
+
+  std::shared_ptr<Image> takeOffscreenImage(bool premultiplied) {
+    if (surface_ || !offscreenTexture_) {
+      return nullptr;
+    }
+    WGPUTexture texture = std::exchange(offscreenTexture_, nullptr);
+    try {
+      return std::make_shared<WebGpuImage>(offscreenPixelWidth_,
+                                           offscreenPixelHeight_,
+                                           context_.device(),
+                                           texture,
+                                           surfaceFormat_,
+                                           premultiplied);
+    } catch (...) {
+      if (texture) {
+        wgpuTextureRelease(texture);
+      }
+      throw;
+    }
+  }
 
   TextSystem& textSystem() noexcept { return textSystem_; }
 
@@ -2579,6 +2661,7 @@ private:
     instance.radii[1] = radii.topRight;
     instance.radii[2] = radii.bottomRight;
     instance.radii[3] = radii.bottomLeft;
+    instance.params[0] = image.premultipliedAlpha() ? 1.f : 0.f;
     applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
     quads_.push_back(instance);
@@ -3416,24 +3499,6 @@ std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
   return std::make_unique<WebGpuCanvas>(textSystem, logicalSize, pixelWidth, pixelHeight);
 }
 
-void unpremultiplyRgbaPixels(std::vector<std::uint8_t>& pixels) {
-  for (std::size_t i = 0; i + 3u < pixels.size(); i += 4u) {
-    std::uint8_t const alpha = pixels[i + 3u];
-    if (alpha == 0) {
-      pixels[i + 0u] = 0;
-      pixels[i + 1u] = 0;
-      pixels[i + 2u] = 0;
-      continue;
-    }
-    if (alpha == 255) {
-      continue;
-    }
-    pixels[i + 0u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 0u] * 255u / alpha));
-    pixels[i + 1u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 1u] * 255u / alpha));
-    pixels[i + 2u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 2u] * 255u / alpha));
-  }
-}
-
 std::shared_ptr<Image> rasterizeToWebGpuImage(Canvas& canvas,
                                               Size logicalSize,
                                               RasterizeDrawCallback const& draw,
@@ -3457,26 +3522,8 @@ std::shared_ptr<Image> rasterizeToWebGpuImage(Canvas& canvas,
   target.beginFrame();
   target.clear(Colors::transparent);
   draw(target, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
-  if (!target.requestNextFrameCapture()) {
-    return nullptr;
-  }
   target.present();
-
-  std::vector<std::uint8_t> pixels;
-  std::uint32_t capturedWidth = 0;
-  std::uint32_t capturedHeight = 0;
-  if (!target.takeCapturedFrame(pixels, capturedWidth, capturedHeight) ||
-      capturedWidth != pixelWidth ||
-      capturedHeight != pixelHeight) {
-    return nullptr;
-  }
-
-  unpremultiplyRgbaPixels(pixels);
-  return std::make_shared<WebGpuImage>(capturedWidth,
-                                       capturedHeight,
-                                       std::move(pixels),
-                                       Image::PixelFormat::Rgba8888,
-                                       false);
+  return target.takeOffscreenImage(true);
 }
 
 } // namespace lambdaui::webgpu
