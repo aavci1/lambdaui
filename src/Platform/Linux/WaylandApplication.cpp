@@ -1,5 +1,4 @@
 #include "UI/Platform/Application.hpp"
-#include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 
 #include <cctype>

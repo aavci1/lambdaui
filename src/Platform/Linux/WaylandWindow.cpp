@@ -3,7 +3,6 @@
 #include "UI/Platform/WindowEventPump.hpp"
 #include "Platform/Linux/Common/LinuxInputMapping.hpp"
 #include "Platform/Linux/Common/XkbState.hpp"
-#include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 #include "Platform/Linux/WaylandScrollAccumulator.hpp"
 
@@ -102,7 +101,6 @@ struct WaylandPopoverSurfaceState {
   xdg_surface* xdgSurface = nullptr;
   xdg_popup* popup = nullptr;
   wl_callback* frameCallback = nullptr;
-  WaylandNativeSurface nativeSurface{};
   std::unique_ptr<Canvas> canvas;
   std::unique_ptr<TransientPopoverHost> host;
   WaylandWindow* owner = nullptr;
@@ -1237,7 +1235,6 @@ public:
   }
 
   std::unique_ptr<Canvas> createCanvas(::lambdaui::Window&) override {
-    nativeSurface_ = WaylandNativeSurface{display_, surface_};
     auto canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::wayland(display_, surface_),
                                              handle_,
                                              Application::instance().textSystem(),
@@ -1598,7 +1595,6 @@ public:
   Size currentSize() const override { return size_; }
   bool isFullscreen() const override { return fullscreen_; }
   unsigned int handle() const override { return handle_; }
-  void* nativeGraphicsSurface() const override { return const_cast<WaylandNativeSurface*>(&nativeSurface_); }
   platform::WindowEventPump* eventPump() override { return this; }
   platform::WindowEventPump const* eventPump() const override { return this; }
 
@@ -1971,7 +1967,6 @@ private:
       return false;
     }
     try {
-      state.nativeSurface = WaylandNativeSurface{state.shared->display, state.surface};
       state.canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::wayland(state.shared->display,
                                                                                      state.surface),
                                                 handle_,
@@ -3013,7 +3008,6 @@ private:
   wl_display* display_ = nullptr;
   std::vector<wl_output*> enteredOutputs_;
   wl_surface* surface_ = nullptr;
-  WaylandNativeSurface nativeSurface_{};
 	  wl_callback* frameCallback_ = nullptr;
 	  xdg_surface* xdgSurface_ = nullptr;
 	  xdg_toplevel* toplevel_ = nullptr;

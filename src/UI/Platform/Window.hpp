@@ -65,8 +65,6 @@ public:
   virtual bool isFullscreen() const = 0;
   virtual unsigned int handle() const = 0;
 
-  virtual void* nativeGraphicsSurface() const = 0;
-
   virtual WindowEventPump* eventPump() { return nullptr; }
   virtual WindowEventPump const* eventPump() const { return nullptr; }
 

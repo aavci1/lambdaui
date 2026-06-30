@@ -426,7 +426,6 @@ public:
   void setFrame(Rect frame) override;
   bool isFullscreen() const override;
   unsigned int handle() const override;
-  void* nativeGraphicsSurface() const override;
   platform::WindowEventPump* eventPump() override { return this; }
   platform::WindowEventPump const* eventPump() const override { return this; }
 
@@ -1869,13 +1868,6 @@ unsigned int MacWebGpuWindow::handle() const {
   return d->handle_;
 }
 
-void* MacWebGpuWindow::nativeGraphicsSurface() const {
-  if (!d->webGpuView_) {
-    return nullptr;
-  }
-  return (__bridge void*)d->webGpuView_.layer;
-}
-
 void MacWebGpuWindow::setRenderLayerPresentsWithTransaction(bool enable) {
   if (!d->webGpuView_) {
     return;
@@ -1888,15 +1880,16 @@ void MacWebGpuWindow::setRenderLayerPresentsWithTransaction(bool enable) {
 
 std::unique_ptr<Canvas> MacWebGpuWindow::createCanvas(::lambdaui::Window& owner) {
   (void)owner;
-  void* layerPtr = nativeGraphicsSurface();
-  if (!layerPtr) {
+  if (!d->webGpuView_) {
     return nullptr;
   }
-  if (CAMetalLayer* layer = (__bridge CAMetalLayer*)layerPtr) {
-    layer.opaque = NO;
-    layer.backgroundColor = [[NSColor clearColor] CGColor];
+  CAMetalLayer* layer = [d->webGpuView_ lambdaWebGpuLayer];
+  if (!layer) {
+    return nullptr;
   }
-  return webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::metalLayer(layerPtr),
+  layer.opaque = NO;
+  layer.backgroundColor = [[NSColor clearColor] CGColor];
+  return webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::metalLayer((__bridge void*)layer),
                                    handle(),
                                    Application::instance().textSystem(),
                                    currentSize(),
