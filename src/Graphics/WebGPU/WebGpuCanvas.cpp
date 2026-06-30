@@ -1070,12 +1070,10 @@ class WebGpuCanvas final : public Canvas {
 
 public:
   WebGpuCanvas(WebGpuSurfaceSource surfaceSource,
-               unsigned int handle,
                TextSystem& textSystem,
                Size initialSize,
                bool transparentSurface)
       : surfaceSource_(surfaceSource),
-        handle_(handle),
         textSystem_(textSystem),
         size_(initialSize),
         transparentSurface_(transparentSurface),
@@ -1141,7 +1139,6 @@ public:
     }
   }
 
-  unsigned int windowHandle() const override { return handle_; }
   WGPUDevice deviceHandle() const noexcept { return context_.device(); }
   WGPUQueue queueHandle() const noexcept { return context_.queue(); }
   WGPUTextureFormat renderTargetFormat() const noexcept { return surfaceFormat_; }
@@ -3438,7 +3435,6 @@ private:
   }
 
   WebGpuSurfaceSource surfaceSource_{};
-  unsigned int handle_ = 0;
   TextSystem& textSystem_;
   Size size_{};
   bool transparentSurface_ = false;
@@ -3539,11 +3535,10 @@ private:
 } // namespace
 
 std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuSurfaceSource surfaceSource,
-                                           unsigned int handle,
                                            TextSystem& textSystem,
                                            Size initialSize,
                                            bool transparentSurface) {
-  return std::make_unique<WebGpuCanvas>(surfaceSource, handle, textSystem, initialSize, transparentSurface);
+  return std::make_unique<WebGpuCanvas>(surfaceSource, textSystem, initialSize, transparentSurface);
 }
 
 std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,

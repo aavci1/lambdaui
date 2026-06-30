@@ -46,7 +46,6 @@ struct WebGpuSurfaceSource {
 };
 
 std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuSurfaceSource surfaceSource,
-                                           unsigned int handle,
                                            TextSystem& textSystem,
                                            Size initialSize,
                                            bool transparentSurface = false);

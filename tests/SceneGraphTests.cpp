@@ -302,7 +302,6 @@ class CountingBoundsNode final : public SceneNode {
 
 class DpiOnlyCanvas final : public Canvas {
   public:
-    unsigned int windowHandle() const override { return 0; }
     void resize(int, int) override {}
     void updateDpiScale(float scaleX, float scaleY) override { dpiScale_ = std::max(scaleX, scaleY); }
     float dpiScale() const noexcept override { return dpiScale_; }

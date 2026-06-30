@@ -1236,7 +1236,6 @@ public:
 
   std::unique_ptr<Canvas> createCanvas(::lambdaui::Window&) override {
     auto canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuSurfaceSource::wayland(display_, surface_),
-                                             handle_,
                                              Application::instance().textSystem(),
                                              size_,
                                              wantsTransparentSurface());
@@ -1969,7 +1968,6 @@ private:
     try {
       state.canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuSurfaceSource::wayland(state.shared->display,
                                                                                      state.surface),
-                                                handle_,
                                                 Application::instance().textSystem(),
                                                 Size{static_cast<float>(state.width), static_cast<float>(state.height)},
                                                 true);

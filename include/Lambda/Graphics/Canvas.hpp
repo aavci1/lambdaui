@@ -61,8 +61,6 @@ public:
   Canvas(Canvas&&) = delete;
   Canvas& operator=(Canvas&&) = delete;
 
-  virtual unsigned int windowHandle() const = 0;
-
   virtual void resize(int width, int height) = 0;
   virtual void updateDpiScale(float scaleX, float scaleY) = 0;
   virtual float dpiScale() const noexcept = 0;
