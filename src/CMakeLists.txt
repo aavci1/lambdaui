@@ -142,7 +142,6 @@ if(LAMBDAUI_PLATFORM_MACOS)
     Graphics/CoreTextSystem.mm
     Graphics/WebGPU/WebGpuContext.cpp
     Graphics/WebGPU/WebGpuCanvas.cpp
-    Graphics/WebGPU/WebGpuRenderTarget.cpp
     Platform/Mac/MacApplication.mm
     Platform/Mac/MacWebGpuWindow.mm
     Platform/Mac/MacClipboard.mm
@@ -189,7 +188,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     Graphics/Linux/FreeTypeTextSystem.cpp
     Graphics/WebGPU/WebGpuContext.cpp
     Graphics/WebGPU/WebGpuCanvas.cpp
-    Graphics/WebGPU/WebGpuRenderTarget.cpp
     Platform/Linux/Common/XkbState.cpp
     Platform/Linux/WaylandApplication.cpp
     Platform/Linux/WaylandWindow.cpp

@@ -32,10 +32,6 @@ struct WebGpuRenderTargetSpec {
   WGPUTextureFormat format = WGPUTextureFormat_RGBA8Unorm;
 };
 
-namespace platform {
-class RenderTarget;
-}
-
 class RenderTarget {
 public:
   explicit RenderTarget(WebGpuRenderTargetSpec const& spec);
@@ -55,7 +51,7 @@ public:
   void renderScene(scenegraph::SceneGraph const& scene);
 
 private:
-  std::unique_ptr<platform::RenderTarget> impl_;
+  std::unique_ptr<Canvas> canvas_;
 };
 
 } // namespace lambdaui
