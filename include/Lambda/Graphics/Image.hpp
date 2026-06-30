@@ -5,7 +5,6 @@
 /// Part of the Lambda public API.
 
 
-#include <Lambda/Config.hpp>
 #include <Lambda/Core/Geometry.hpp>
 
 #include <cstdint>
@@ -15,9 +14,7 @@
 #include <string_view>
 #include <vector>
 
-#if LAMBDAUI_WEBGPU
 #include <webgpu/webgpu.h>
-#endif
 
 namespace lambdaui {
 
@@ -38,11 +35,11 @@ public:
   virtual bool premultipliedAlpha() const noexcept { return false; }
 
   /// Replace this image with same-size tightly packed 8-bit RGBA pixels.
-  /// Returns false when the backend image is immutable or the size does not match.
+  /// Returns false when the GPU image is immutable or the size does not match.
   virtual bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void* gpuDevice = nullptr);
 
   /// Replace this image with same-size tightly packed 8-bit pixels in `format`.
-  /// Returns false when the backend image is immutable, the format is incompatible,
+  /// Returns false when the GPU image is immutable, the format is incompatible,
   /// or the size does not match.
   virtual bool updatePixels(std::span<std::uint8_t const> pixels,
                             PixelFormat format,
@@ -51,7 +48,7 @@ public:
   /// Replace a same-format sub-rectangle with 8-bit pixels.
   /// `pixels` must contain either tightly packed rows or enough bytes for
   /// `sourceBytesPerRow * (height - 1) + width * 4`. Returns false
-  /// when the backend cannot update regions, the format is incompatible, or
+  /// when the GPU image cannot update regions, the format is incompatible, or
   /// the rectangle is outside the image bounds.
   virtual bool updatePixelsRegion(std::span<std::uint8_t const> pixels,
                                   PixelFormat format,
@@ -64,7 +61,7 @@ public:
 
   /// Create an image from tightly packed 8-bit RGBA pixels.
   /// `rgbaPixels` must contain exactly width * height * 4 bytes.
-  /// WebGPU uses `gpuDevice` as an optional WGPUDevice; other callers may pass null.
+  /// `gpuDevice` is an optional WGPUDevice.
   static std::shared_ptr<Image> fromRgbaPixels(std::uint32_t width, std::uint32_t height,
                                                std::span<std::uint8_t const> rgbaPixels,
                                                void* gpuDevice = nullptr);
@@ -77,14 +74,12 @@ public:
                                            PixelFormat format,
                                            void* gpuDevice = nullptr);
 
-#if LAMBDAUI_WEBGPU
   /// Create an image reference backed by a WebGPU texture view.
   /// The texture view must be a sampleable 2D color view. Lambda retains the view.
   static std::shared_ptr<Image> fromExternalWebGpu(WGPUTextureView textureView,
                                                    std::uint32_t width,
                                                    std::uint32_t height,
                                                    bool premultipliedAlpha = false);
-#endif
 
 protected:
   Image() = default;
@@ -110,8 +105,8 @@ struct DecodedImageRgba {
 [[nodiscard]] std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded,
                                                           void* gpuDevice = nullptr);
 
-/// Loads an image from disk into a backend image.
-/// `gpuDevice` must match the target canvas device when the backend requires it.
+/// Loads an image from disk into a GPU image.
+/// `gpuDevice` must match the target canvas device when eager upload is required.
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice = nullptr);
 std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice, std::uint32_t maxLongEdge);
 

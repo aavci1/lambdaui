@@ -3643,7 +3643,6 @@ std::shared_ptr<Image> rasterizeToWebGpuImage(Canvas& canvas,
 
 } // namespace lambdaui::webgpu
 
-#if LAMBDAUI_WEBGPU
 namespace lambdaui {
 
 WebGpuCanvasHandles webGpuCanvasHandles(Canvas const& canvas) noexcept {
@@ -3715,4 +3714,3 @@ std::shared_ptr<Image> rasterizeToImage(Canvas& canvas,
 }
 
 } // namespace lambdaui
-#endif

@@ -236,7 +236,7 @@ if(LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
 endif()
 
 if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
+  target_compile_definitions(lambdaui PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
   target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
   target_link_libraries(lambdaui PUBLIC dawn::webgpu_dawn PRIVATE
     PkgConfig::WAYLAND_CLIENT
@@ -249,7 +249,7 @@ if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 elseif(LAMBDAUI_PLATFORM_MACOS)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
+  target_compile_definitions(lambdaui PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
   target_link_libraries(lambdaui PUBLIC dawn::webgpu_dawn PRIVATE
     "-framework Cocoa"
     "-framework QuartzCore"

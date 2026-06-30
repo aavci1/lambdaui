@@ -183,14 +183,12 @@ Platform selection is controlled by `LAMBDAUI_PLATFORM`. Rendering always uses D
 
 - Uses Objective-C++ sources in `src/Platform/Mac`.
 - Uses Cocoa, CAMetalLayer, QuartzCore, Foundation, CoreText, CoreVideo, and Dawn/WebGPU.
-- Defines `LAMBDAUI_WEBGPU=1`.
 
 `LINUX_WAYLAND`:
 
 - Uses Wayland client protocols and `src/Platform/Linux/Wayland*`.
 - Uses Dawn/WebGPU for rendering.
 - Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
-- Defines `LAMBDAUI_WEBGPU=1`.
 
 ## Runtime Resources
 

@@ -125,7 +125,6 @@ docs/                 Project documentation
 - `LAMBDAUI_PROFILE_REACTIVE`: compile reactive profiling counters.
 - `LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING`: log built-in application event handlers.
 
-The CMake target exports `LAMBDAUI_WEBGPU=1`.
 `webGpuCanvasHandles(canvas)` returns borrowed Dawn handles, and `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
 
 The build uses CMake `FetchContent` for `libtess2`, and for `doctest` when tests are enabled.

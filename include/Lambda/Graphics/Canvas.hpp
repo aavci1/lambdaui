@@ -175,7 +175,7 @@ using RasterizeDrawCallback = std::function<void(Canvas&, Rect)>;
 ///
 /// `logicalSize` is in logical canvas units. `dpiScale` is the target pixels-per-logical-unit scale.
 /// The callback receives a temporary target-local canvas with bounds `{0, 0, logicalSize}`.
-/// Returns null when the active backend cannot rasterize or the requested size is empty.
+/// Returns null when the canvas cannot rasterize or the requested size is empty.
 std::shared_ptr<Image> rasterizeToImage(Canvas& canvas, Size logicalSize,
                                         RasterizeDrawCallback draw, float dpiScale);
 

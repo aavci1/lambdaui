@@ -4,15 +4,12 @@
 ///
 /// Public render destination abstraction for window-backed, offscreen, and externally-owned GPU targets.
 
-#include <Lambda/Config.hpp>
 #include <Lambda/Graphics/Canvas.hpp>
 
 #include <cstdint>
 #include <memory>
 
-#if LAMBDAUI_WEBGPU
 #include <webgpu/webgpu.h>
-#endif
 
 namespace lambdaui {
 
@@ -20,7 +17,6 @@ namespace scenegraph {
 class SceneGraph;
 }
 
-#if LAMBDAUI_WEBGPU
 struct WebGpuRenderTargetSpec {
   Size logicalSize{};
   std::uint32_t pixelWidth = 0;
@@ -35,7 +31,6 @@ struct WebGpuRenderTargetSpec {
   WGPUTextureView textureView = nullptr;
   WGPUTextureFormat format = WGPUTextureFormat_RGBA8Unorm;
 };
-#endif
 
 namespace platform {
 class RenderTarget;
@@ -43,9 +38,7 @@ class RenderTarget;
 
 class RenderTarget {
 public:
-#if LAMBDAUI_WEBGPU
   explicit RenderTarget(WebGpuRenderTargetSpec const& spec);
-#endif
 
   ~RenderTarget();
 

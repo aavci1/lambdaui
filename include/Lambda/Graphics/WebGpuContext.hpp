@@ -4,10 +4,6 @@
 ///
 /// Public accessors for Dawn/WebGPU handles owned by a LambdaUI WebGPU canvas.
 
-#include <Lambda/Config.hpp>
-
-#if LAMBDAUI_WEBGPU
-
 #include <webgpu/webgpu.h>
 
 namespace lambdaui {
@@ -31,5 +27,3 @@ struct WebGpuCanvasHandles {
 [[nodiscard]] WGPUTextureFormat webGpuRenderTargetFormat(Canvas const& canvas) noexcept;
 
 } // namespace lambdaui
-
-#endif // LAMBDAUI_WEBGPU

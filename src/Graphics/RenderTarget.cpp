@@ -18,12 +18,10 @@ platform::RenderTarget& checkedTarget(std::unique_ptr<platform::RenderTarget> co
 
 } // namespace
 
-#if LAMBDAUI_WEBGPU
 RenderTarget::RenderTarget(WebGpuRenderTargetSpec const& spec)
     : impl_(platform::createRenderTarget(spec)) {
   checkedTarget(impl_);
 }
-#endif
 
 RenderTarget::~RenderTarget() = default;
 RenderTarget::RenderTarget(RenderTarget&&) noexcept = default;

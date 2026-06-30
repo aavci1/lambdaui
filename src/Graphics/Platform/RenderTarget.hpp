@@ -15,8 +15,6 @@ public:
   virtual void endFrame() = 0;
 };
 
-#if LAMBDAUI_WEBGPU
 std::unique_ptr<RenderTarget> createRenderTarget(WebGpuRenderTargetSpec const& spec);
-#endif
 
 } // namespace lambdaui::platform

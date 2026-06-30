@@ -79,13 +79,9 @@ cmake -S . -B build-webgpu -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
 cmake -S . -B build-webgpu -DLAMBDAUI_DAWN_FETCH=ON
 ```
 
-Dawn can be discovered through `CMAKE_PREFIX_PATH`, supplied through `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched with `LAMBDAUI_DAWN_FETCH=ON`. If Dawn is not available, configure fails with Dawn setup guidance. Builds define `LAMBDAUI_WEBGPU=1`.
+Dawn can be discovered through `CMAKE_PREFIX_PATH`, supplied through `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched with `LAMBDAUI_DAWN_FETCH=ON`. If Dawn is not available, configure fails with Dawn setup guidance.
 
-Renderer defines exported to consumers:
-
-- `LAMBDAUI_WEBGPU=1` on all LambdaUI builds.
-
-Use this define to guard WebGPU-specific APIs. WebGPU builds expose borrowed Dawn handles through `webGpuCanvasHandles(canvas)` for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
+WebGPU APIs are always available. `webGpuCanvasHandles(canvas)` exposes borrowed Dawn handles for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
 
 ## Useful Build Options
 
