@@ -1029,6 +1029,24 @@ WGPUSurface createSurface(WGPUInstance instance, WebGpuSurfaceSource source) {
   return surface;
 }
 
+void unpremultiplyRgbaPixels(std::vector<std::uint8_t>& pixels) {
+  for (std::size_t i = 0; i + 3u < pixels.size(); i += 4u) {
+    std::uint8_t const alpha = pixels[i + 3u];
+    if (alpha == 0) {
+      pixels[i + 0u] = 0;
+      pixels[i + 1u] = 0;
+      pixels[i + 2u] = 0;
+      continue;
+    }
+    if (alpha == 255) {
+      continue;
+    }
+    pixels[i + 0u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 0u] * 255u / alpha));
+    pixels[i + 1u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 1u] * 255u / alpha));
+    pixels[i + 2u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 2u] * 255u / alpha));
+  }
+}
+
 class WebGpuCanvas final : public Canvas {
   struct WebGpuDrawOp {
     enum class Kind {
@@ -1605,6 +1623,44 @@ public:
   bool replayRecordedLocalOps(RecordedOps const& recorded) override {
     WebGpuFrameRecorder const* webgpuRecorded = asWebGpuRecordedOps(recorded);
     return webgpuRecorded && appendRecordedOps(*webgpuRecorded, true);
+  }
+
+  std::shared_ptr<Image> rasterizeToImage(Size logicalSize,
+                                          RasterizeDrawCallback const& draw,
+                                          float dpiScale) override {
+    if (!draw || logicalSize.width <= 0.f || logicalSize.height <= 0.f) {
+      return nullptr;
+    }
+
+    float const scale = dpiScale > 0.f ? dpiScale : std::max(dpiScale_, 1.f);
+    std::uint32_t const pixelWidth = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.width * scale)));
+    std::uint32_t const pixelHeight = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.height * scale)));
+
+    WebGpuCanvas target(textSystem_, logicalSize, pixelWidth, pixelHeight);
+    target.updateDpiScale(scale, scale);
+    target.beginFrame();
+    target.clear(Colors::transparent);
+    draw(target, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
+    if (!target.requestNextFrameCapture()) {
+      return nullptr;
+    }
+    target.present();
+
+    std::vector<std::uint8_t> pixels;
+    std::uint32_t capturedWidth = 0;
+    std::uint32_t capturedHeight = 0;
+    if (!target.takeCapturedFrame(pixels, capturedWidth, capturedHeight) ||
+        capturedWidth != pixelWidth ||
+        capturedHeight != pixelHeight) {
+      return nullptr;
+    }
+
+    unpremultiplyRgbaPixels(pixels);
+    return std::make_shared<WebGpuImage>(capturedWidth,
+                                         capturedHeight,
+                                         std::move(pixels),
+                                         Image::PixelFormat::Rgba8888,
+                                         false);
   }
 
   void clear(Color color) override {
@@ -3572,64 +3628,6 @@ WebGpuCanvasHandles canvasHandles(Canvas const& canvas) noexcept {
   };
 }
 
-void unpremultiplyRgbaPixels(std::vector<std::uint8_t>& pixels) {
-  for (std::size_t i = 0; i + 3u < pixels.size(); i += 4u) {
-    std::uint8_t const alpha = pixels[i + 3u];
-    if (alpha == 0) {
-      pixels[i + 0u] = 0;
-      pixels[i + 1u] = 0;
-      pixels[i + 2u] = 0;
-      continue;
-    }
-    if (alpha == 255) {
-      continue;
-    }
-    pixels[i + 0u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 0u] * 255u / alpha));
-    pixels[i + 1u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 1u] * 255u / alpha));
-    pixels[i + 2u] = static_cast<std::uint8_t>(std::min<unsigned>(255u, pixels[i + 2u] * 255u / alpha));
-  }
-}
-
-std::shared_ptr<Image> rasterizeToWebGpuImage(Canvas& canvas,
-                                              Size logicalSize,
-                                              RasterizeDrawCallback const& draw,
-                                              float dpiScale) {
-  auto* webgpuCanvas = dynamic_cast<WebGpuCanvas*>(&canvas);
-  if (!webgpuCanvas || !draw || logicalSize.width <= 0.f || logicalSize.height <= 0.f) {
-    return nullptr;
-  }
-
-  float const scale = dpiScale > 0.f ? dpiScale : std::max(webgpuCanvas->dpiScale(), 1.f);
-  std::uint32_t const pixelWidth = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.width * scale)));
-  std::uint32_t const pixelHeight = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.height * scale)));
-
-  WebGpuCanvas target(webgpuCanvas->textSystem(), logicalSize, pixelWidth, pixelHeight);
-  target.updateDpiScale(scale, scale);
-  target.beginFrame();
-  target.clear(Colors::transparent);
-  draw(target, Rect::sharp(0.f, 0.f, logicalSize.width, logicalSize.height));
-  if (!target.requestNextFrameCapture()) {
-    return nullptr;
-  }
-  target.present();
-
-  std::vector<std::uint8_t> pixels;
-  std::uint32_t capturedWidth = 0;
-  std::uint32_t capturedHeight = 0;
-  if (!target.takeCapturedFrame(pixels, capturedWidth, capturedHeight) ||
-      capturedWidth != pixelWidth ||
-      capturedHeight != pixelHeight) {
-    return nullptr;
-  }
-
-  unpremultiplyRgbaPixels(pixels);
-  return std::make_shared<WebGpuImage>(capturedWidth,
-                                       capturedHeight,
-                                       std::move(pixels),
-                                       Image::PixelFormat::Rgba8888,
-                                       false);
-}
-
 } // namespace lambdaui::webgpu
 
 namespace lambdaui {
@@ -3699,7 +3697,7 @@ std::shared_ptr<Image> rasterizeToImage(Canvas& canvas,
                                         Size logicalSize,
                                         RasterizeDrawCallback draw,
                                         float dpiScale) {
-  return webgpu::rasterizeToWebGpuImage(canvas, logicalSize, draw, dpiScale);
+  return canvas.rasterizeToImage(logicalSize, draw, dpiScale);
 }
 
 } // namespace lambdaui

@@ -344,6 +344,7 @@ class DpiOnlyCanvas final : public Canvas {
         std::unique_ptr<RecordedOps>) override { return nullptr; }
     bool replayRecordedOps(RecordedOps const&) override { return false; }
     bool replayRecordedLocalOps(RecordedOps const&) override { return false; }
+    std::shared_ptr<Image> rasterizeToImage(Size, RasterizeDrawCallback const&, float) override { return nullptr; }
     void clear(Color) override {}
 
   private:

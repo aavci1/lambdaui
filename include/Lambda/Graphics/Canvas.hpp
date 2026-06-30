@@ -27,6 +27,8 @@ class Image;
 class Window;
 class Canvas;
 
+using RasterizeDrawCallback = std::function<void(Canvas&, Rect)>;
+
 namespace scenegraph {
 class Renderer;
 
@@ -166,14 +168,15 @@ public:
       std::unique_ptr<RecordedOps> recorded) = 0;
   virtual bool replayRecordedOps(RecordedOps const& recorded) = 0;
   virtual bool replayRecordedLocalOps(RecordedOps const& recorded) = 0;
+  virtual std::shared_ptr<Image> rasterizeToImage(Size logicalSize,
+                                                  RasterizeDrawCallback const& draw,
+                                                  float dpiScale) = 0;
 
   virtual void clear(Color color = Colors::transparent) = 0;
 
 protected:
   Canvas() = default;
 };
-
-using RasterizeDrawCallback = std::function<void(Canvas&, Rect)>;
 
 /// Records \p draw into an offscreen texture and returns it as an Image.
 ///
