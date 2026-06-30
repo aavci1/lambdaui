@@ -49,7 +49,7 @@ set(_lambda_test_sources
   TextInputScrollTests.cpp
   ThemeReactivityTests.cpp)
 
-if(LAMBDAUI_PLATFORM_MACOS)
+if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDER_BACKEND STREQUAL "NATIVE")
   list(APPEND _lambda_test_sources
     MetalCanvasTests.mm
     RenderOpacityTests.mm)
@@ -58,8 +58,11 @@ endif()
 if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   list(APPEND _lambda_test_sources
     FreeTypeTextSystemTests.cpp
-    VulkanRenderTargetTests.cpp
     WaylandScrollAccumulatorTests.cpp)
+  if(LAMBDAUI_RENDER_BACKEND STREQUAL "NATIVE")
+    list(APPEND _lambda_test_sources
+      VulkanRenderTargetTests.cpp)
+  endif()
 endif()
 
 add_executable(lambda-tests ${_lambda_test_sources})
@@ -71,7 +74,7 @@ target_link_libraries(lambda-tests PRIVATE
   lambdaui
   doctest::doctest)
 
-if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDER_BACKEND STREQUAL "NATIVE")
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
@@ -83,7 +86,7 @@ if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   endif()
 endif()
 
-if(LAMBDAUI_PLATFORM_MACOS)
+if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDER_BACKEND STREQUAL "NATIVE")
   target_link_libraries(lambda-tests PRIVATE
     "-framework Foundation"
     "-framework Metal")

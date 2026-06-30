@@ -7,13 +7,29 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
+#ifndef WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT
+#define WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT {}
+#endif
+#ifndef WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT
+#define WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT {}
+#endif
+#ifndef WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT
+#define WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT {}
+#endif
+#ifndef WGPU_RENDER_PASS_DESCRIPTOR_INIT
+#define WGPU_RENDER_PASS_DESCRIPTOR_INIT {}
+#endif
+
 namespace lambdaui::webgpu {
 
 namespace {
+
+#if !LAMBDAUI_DAWN_LEGACY_NATIVE
 
 bool containsFormat(WGPUSurfaceCapabilities const& capabilities, WGPUTextureFormat format) noexcept {
   for (std::size_t i = 0; i < capabilities.formatCount; ++i) {
@@ -42,6 +58,8 @@ bool containsAlphaMode(WGPUSurfaceCapabilities const& capabilities, WGPUComposit
   return false;
 }
 
+#endif
+
 WGPUColor toWgpuColor(Color color) noexcept {
   return WGPUColor{
       .r = static_cast<double>(color.r),
@@ -50,6 +68,13 @@ WGPUColor toWgpuColor(Color color) noexcept {
       .a = static_cast<double>(color.a),
   };
 }
+
+constexpr WGPUPresentMode kUndefinedPresentMode =
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+    WGPUPresentMode_Force32;
+#else
+    WGPUPresentMode_Undefined;
+#endif
 
 class WebGpuCanvas final : public Canvas {
 public:
@@ -74,8 +99,16 @@ public:
 
   ~WebGpuCanvas() override {
     releaseFrameObjects();
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+    if (swapChain_) {
+      wgpuSwapChainRelease(swapChain_);
+      swapChain_ = nullptr;
+    }
+#endif
     if (surface_) {
+#if !LAMBDAUI_DAWN_LEGACY_NATIVE
       wgpuSurfaceUnconfigure(surface_);
+#endif
       wgpuSurfaceRelease(surface_);
       surface_ = nullptr;
     }
@@ -122,7 +155,11 @@ public:
     }
     wgpuQueueSubmit(context_.queue(), 1, &commandBuffer);
     wgpuCommandBufferRelease(commandBuffer);
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+    wgpuSwapChainPresent(swapChain_);
+#else
     wgpuSurfacePresent(surface_);
+#endif
     releaseFrameObjects();
     frameActive_ = false;
     debug::perf::recordPresentedFrame();
@@ -258,6 +295,27 @@ private:
       return;
     }
 
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+    surfaceFormat_ = WGPUTextureFormat_BGRA8Unorm;
+    presentMode_ = WGPUPresentMode_Fifo;
+    if (swapChain_) {
+      wgpuSwapChainRelease(swapChain_);
+      swapChain_ = nullptr;
+    }
+
+    WGPUSwapChainDescriptor config{};
+    config.label = stringView("LambdaUI WebGPU SwapChain");
+    config.usage = WGPUTextureUsage_RenderAttachment;
+    config.format = surfaceFormat_;
+    config.width = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width)));
+    config.height = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height)));
+    config.presentMode = presentMode_;
+
+    swapChain_ = wgpuDeviceCreateSwapChain(context_.device(), surface_, &config);
+    if (!swapChain_) {
+      throw std::runtime_error("Lambda WebGPU: failed to create swapchain");
+    }
+#else
     WGPUSurfaceCapabilities capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
     if (wgpuSurfaceGetCapabilities(surface_, context_.adapter(), &capabilities) != WGPUStatus_Success) {
       throw std::runtime_error("Lambda WebGPU: failed to query surface capabilities");
@@ -292,6 +350,7 @@ private:
     wgpuSurfaceConfigure(surface_, &config);
 
     wgpuSurfaceCapabilitiesFreeMembers(capabilities);
+#endif
   }
 
   void ensureFrameObjects() {
@@ -299,6 +358,15 @@ private:
       return;
     }
 
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+    if (!swapChain_) {
+      configureSurface();
+    }
+    currentView_ = wgpuSwapChainGetCurrentTextureView(swapChain_);
+    if (!currentView_) {
+      throw std::runtime_error("Lambda WebGPU: failed to acquire swapchain texture view");
+    }
+#else
     WGPUSurfaceTexture surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
     wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
     if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
@@ -316,6 +384,7 @@ private:
     if (!currentView_) {
       throw std::runtime_error("Lambda WebGPU: failed to create frame texture view");
     }
+#endif
 
     WGPUCommandEncoderDescriptor encoderDescriptor = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
     encoderDescriptor.label = stringView("LambdaUI WebGPU Command Encoder");
@@ -354,10 +423,12 @@ private:
       wgpuTextureViewRelease(currentView_);
       currentView_ = nullptr;
     }
+#if !LAMBDAUI_DAWN_LEGACY_NATIVE
     if (currentTexture_) {
       wgpuTextureRelease(currentTexture_);
       currentTexture_ = nullptr;
     }
+#endif
   }
 
   WebGpuContext context_;
@@ -374,8 +445,13 @@ private:
   std::vector<State> stack_{};
   Color clearColor_ = Colors::transparent;
   WGPUTextureFormat surfaceFormat_ = WGPUTextureFormat_Undefined;
-  WGPUPresentMode presentMode_ = WGPUPresentMode_Undefined;
+  WGPUPresentMode presentMode_ = kUndefinedPresentMode;
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+  WGPUSwapChain swapChain_ = nullptr;
+#endif
+#if !LAMBDAUI_DAWN_LEGACY_NATIVE
   WGPUTexture currentTexture_ = nullptr;
+#endif
   WGPUTextureView currentView_ = nullptr;
   WGPUCommandEncoder commandEncoder_ = nullptr;
   bool frameActive_ = false;
@@ -408,3 +484,98 @@ bool webGpuCanvasUsesMailboxPresentMode(Canvas* canvas) {
 }
 
 } // namespace lambdaui::webgpu
+
+namespace lambdaui {
+namespace {
+
+class WebGpuImage final : public Image {
+public:
+  WebGpuImage(std::uint32_t width,
+              std::uint32_t height,
+              std::vector<std::uint8_t> pixels,
+              PixelFormat format)
+      : size_{static_cast<float>(width), static_cast<float>(height)},
+        width_(width),
+        height_(height),
+        pixels_(std::move(pixels)),
+        format_(format) {}
+
+  Size size() const override { return size_; }
+
+  bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, void*) override {
+    return updatePixels(rgbaPixels, PixelFormat::Rgba8888, nullptr);
+  }
+
+  bool updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, void*) override {
+    std::size_t const expectedSize = static_cast<std::size_t>(width_) * height_ * 4u;
+    if (pixels.size() != expectedSize) {
+      return false;
+    }
+    pixels_.assign(pixels.begin(), pixels.end());
+    format_ = format;
+    return true;
+  }
+
+  bool updatePixelsRegion(std::span<std::uint8_t const> pixels,
+                          PixelFormat format,
+                          std::uint32_t x,
+                          std::uint32_t y,
+                          std::uint32_t width,
+                          std::uint32_t height,
+                          void*,
+                          std::uint32_t sourceBytesPerRow) override {
+    if (format != format_ || x + width > width_ || y + height > height_ || width == 0 || height == 0) {
+      return false;
+    }
+    if (sourceBytesPerRow == 0) {
+      sourceBytesPerRow = width * 4u;
+    }
+    std::size_t const requiredSize =
+        static_cast<std::size_t>(sourceBytesPerRow) * (height - 1u) + static_cast<std::size_t>(width) * 4u;
+    if (pixels.size() < requiredSize) {
+      return false;
+    }
+    for (std::uint32_t row = 0; row < height; ++row) {
+      std::uint8_t const* src = pixels.data() + static_cast<std::size_t>(row) * sourceBytesPerRow;
+      std::uint8_t* dst = pixels_.data() + (static_cast<std::size_t>(y + row) * width_ + x) * 4u;
+      std::memcpy(dst, src, static_cast<std::size_t>(width) * 4u);
+    }
+    return true;
+  }
+
+private:
+  Size size_{};
+  std::uint32_t width_ = 0;
+  std::uint32_t height_ = 0;
+  std::vector<std::uint8_t> pixels_;
+  PixelFormat format_ = PixelFormat::Rgba8888;
+};
+
+} // namespace
+
+std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width,
+                                             std::uint32_t height,
+                                             std::span<std::uint8_t const> rgbaPixels,
+                                             void* gpuDevice) {
+  return fromPixels(width, height, rgbaPixels, PixelFormat::Rgba8888, gpuDevice);
+}
+
+std::shared_ptr<Image> Image::fromPixels(std::uint32_t width,
+                                         std::uint32_t height,
+                                         std::span<std::uint8_t const> pixels,
+                                         PixelFormat format,
+                                         void*) {
+  std::size_t const expectedSize = static_cast<std::size_t>(width) * height * 4u;
+  if (width == 0 || height == 0 || pixels.size() != expectedSize) {
+    return nullptr;
+  }
+  std::vector<std::uint8_t> copy(expectedSize);
+  std::memcpy(copy.data(), pixels.data(), expectedSize);
+  return std::make_shared<WebGpuImage>(width, height, std::move(copy), format);
+}
+
+std::shared_ptr<Image> rasterizeToImage(Canvas&, Size, RasterizeDrawCallback, float) {
+  return nullptr;
+}
+
+} // namespace lambdaui

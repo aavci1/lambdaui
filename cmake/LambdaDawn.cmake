@@ -86,6 +86,31 @@ if(NOT TARGET dawn::webgpu_dawn AND TARGET webgpu_dawn)
 endif()
 
 if(NOT TARGET dawn::webgpu_dawn)
+  find_path(LAMBDAUI_DAWN_INCLUDE_DIR
+    NAMES webgpu/webgpu.h dawn/webgpu.h
+    HINTS /opt/homebrew /usr/local
+    PATH_SUFFIXES include)
+  find_library(LAMBDAUI_DAWN_NATIVE_LIBRARY
+    NAMES dawn_native
+    HINTS /opt/homebrew /usr/local
+    PATH_SUFFIXES lib)
+  find_library(LAMBDAUI_DAWN_PROC_LIBRARY
+    NAMES dawn_proc
+    HINTS /opt/homebrew /usr/local
+    PATH_SUFFIXES lib)
+
+  if(LAMBDAUI_DAWN_INCLUDE_DIR AND LAMBDAUI_DAWN_NATIVE_LIBRARY AND LAMBDAUI_DAWN_PROC_LIBRARY)
+    add_library(lambda_dawn_homebrew INTERFACE)
+    target_include_directories(lambda_dawn_homebrew INTERFACE "${LAMBDAUI_DAWN_INCLUDE_DIR}")
+    target_link_libraries(lambda_dawn_homebrew INTERFACE
+      "${LAMBDAUI_DAWN_NATIVE_LIBRARY}"
+      "${LAMBDAUI_DAWN_PROC_LIBRARY}")
+    target_compile_definitions(lambda_dawn_homebrew INTERFACE LAMBDAUI_DAWN_LEGACY_NATIVE=1)
+    add_library(dawn::webgpu_dawn ALIAS lambda_dawn_homebrew)
+  endif()
+endif()
+
+if(NOT TARGET dawn::webgpu_dawn)
   message(FATAL_ERROR
     "LambdaUI WebGPU builds require Dawn's CMake package target dawn::webgpu_dawn. "
     "Build and install Dawn with -DDAWN_ENABLE_INSTALL=ON and pass its install prefix via "

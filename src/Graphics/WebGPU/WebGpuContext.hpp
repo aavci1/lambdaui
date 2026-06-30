@@ -2,7 +2,14 @@
 
 #include <webgpu/webgpu.h>
 
+#include <memory>
 #include <string>
+
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+namespace dawn::native {
+class Instance;
+} // namespace dawn::native
+#endif
 
 namespace lambdaui::webgpu {
 
@@ -34,9 +41,18 @@ private:
   WGPUAdapter adapter_ = nullptr;
   WGPUDevice device_ = nullptr;
   WGPUQueue queue_ = nullptr;
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+  std::unique_ptr<dawn::native::Instance> nativeInstance_{};
+#endif
 };
 
-[[nodiscard]] WGPUStringView stringView(char const* value) noexcept;
-[[nodiscard]] std::string stringFromView(WGPUStringView value);
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+using WebGpuLabel = char const*;
+#else
+using WebGpuLabel = WGPUStringView;
+#endif
+
+[[nodiscard]] WebGpuLabel stringView(char const* value) noexcept;
+[[nodiscard]] std::string stringFromView(WebGpuLabel value);
 
 } // namespace lambdaui::webgpu

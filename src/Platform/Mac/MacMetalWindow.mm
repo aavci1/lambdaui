@@ -100,12 +100,19 @@ WGPUSurface createMacWebGpuSurface(webgpu::WebGpuContext& context, CAMetalLayer*
     throw std::runtime_error("Lambda WebGPU: missing CAMetalLayer surface");
   }
 
+  WGPUSurfaceDescriptor descriptor{};
+  descriptor.label = webgpu::stringView("LambdaUI macOS WebGPU Surface");
+
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+  WGPUSurfaceDescriptorFromMetalLayer metalLayer{};
+  metalLayer.chain.sType = WGPUSType_SurfaceDescriptorFromMetalLayer;
+  metalLayer.layer = (__bridge void*)layer;
+  descriptor.nextInChain = &metalLayer.chain;
+#else
   WGPUSurfaceSourceMetalLayer metalLayer = WGPU_SURFACE_SOURCE_METAL_LAYER_INIT;
   metalLayer.layer = (__bridge void*)layer;
-
-  WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
-  descriptor.label = webgpu::stringView("LambdaUI macOS WebGPU Surface");
   descriptor.nextInChain = &metalLayer.chain;
+#endif
 
   WGPUSurface surface = wgpuInstanceCreateSurface(context.instance(), &descriptor);
   if (!surface) {
@@ -1276,7 +1283,9 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   fw->canvas().resize(static_cast<int>(std::lround(currentSize.width)),
                       static_cast<int>(std::lround(currentSize.height)));
   platform->setMetalLayerPresentsWithTransaction(true);
+#if !LAMBDAUI_WEBGPU
   lambdaui::setSyncPresentForCanvas(&fw->canvas(), true);
+#endif
   lambdaui::Application::instance().flushRedraw();
   platform->setMetalLayerPresentsWithTransaction(false);
 }

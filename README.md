@@ -23,7 +23,7 @@ Prerequisites:
 - A C++23-capable compiler.
 - macOS native renderer: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
 - Linux Wayland: development packages for Wayland, wayland-protocols, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
-- Experimental WebGPU renderer: Dawn with the `dawn::webgpu_dawn` CMake target available via `CMAKE_PREFIX_PATH`, `LAMBDAUI_DAWN_SOURCE_DIR`, or `LAMBDAUI_DAWN_FETCH=ON`.
+- Experimental WebGPU renderer: Dawn via `dawn::webgpu_dawn`, `LAMBDAUI_DAWN_SOURCE_DIR`, `LAMBDAUI_DAWN_FETCH=ON`, or a Homebrew-style install with `libdawn_native`/`libdawn_proc`.
 
 Build the library, demos, and tests:
 

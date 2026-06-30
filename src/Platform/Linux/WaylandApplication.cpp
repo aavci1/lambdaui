@@ -112,13 +112,21 @@ public:
       throw std::runtime_error("Invalid Wayland WebGPU surface handle");
     }
 
+    WGPUSurfaceDescriptor descriptor{};
+    descriptor.label = webgpu::stringView("LambdaUI Wayland WebGPU Surface");
+
+#if LAMBDAUI_DAWN_LEGACY_NATIVE
+    WGPUSurfaceDescriptorFromWaylandSurface wayland{};
+    wayland.chain.sType = WGPUSType_SurfaceDescriptorFromWaylandSurface;
+    wayland.display = native->display;
+    wayland.surface = native->surface;
+    descriptor.nextInChain = &wayland.chain;
+#else
     WGPUSurfaceSourceWaylandSurface wayland = WGPU_SURFACE_SOURCE_WAYLAND_SURFACE_INIT;
     wayland.display = native->display;
     wayland.surface = native->surface;
-
-    WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
-    descriptor.label = webgpu::stringView("LambdaUI Wayland WebGPU Surface");
     descriptor.nextInChain = &wayland.chain;
+#endif
 
     WGPUSurface surface = wgpuInstanceCreateSurface(instance, &descriptor);
     if (!surface) {
