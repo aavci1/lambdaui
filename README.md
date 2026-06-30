@@ -21,7 +21,7 @@ Prerequisites:
 - CMake 3.25 or newer.
 - A C++23-capable compiler.
 - macOS: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
-- Linux Wayland: development packages for Wayland, wayland-protocols, libdrm, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
+- Linux Wayland: development packages for Wayland, wayland-protocols, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
 
 Build the library, demos, and tests:
 

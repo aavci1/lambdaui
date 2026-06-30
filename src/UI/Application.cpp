@@ -581,7 +581,6 @@ std::string Application::name() const {
 
 std::string Application::userDataDir() const { return d->platformApp_->userDataDir(); }
 std::string Application::cacheDir() const { return d->platformApp_->cacheDir(); }
-std::vector<std::string> Application::availableOutputs() const { return d->platformApp_->availableOutputs(); }
 
 std::optional<WindowState> Application::loadWindowState(std::string const& restoreId) const {
   if (restoreId.empty()) {

@@ -5,7 +5,6 @@
 #include "Platform/Linux/Common/XkbState.hpp"
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
-#include "Platform/Linux/WaylandOutputs.hpp"
 #include "Platform/Linux/WaylandScrollAccumulator.hpp"
 
 #include <Lambda/Debug/DebugFlags.hpp>
@@ -3526,38 +3525,6 @@ void sharedKeyboardRepeatInfo(void* data, wl_keyboard*, std::int32_t rate, std::
 }
 
 } // namespace
-
-namespace linux_platform {
-
-std::vector<std::string> availableWaylandOutputs() {
-  SharedWaylandConnection* shared = nullptr;
-  try {
-    shared = acquireWaylandConnection();
-    if (wl_display_roundtrip(shared->display) < 0) {
-      int const error = wl_display_get_error(shared->display);
-      markWaylandConnectionDead(shared, "output enumeration roundtrip", error == 0 ? errno : error);
-      releaseWaylandConnection();
-      return {};
-    }
-
-    std::vector<std::string> outputs;
-    outputs.reserve(shared->outputs.size());
-    for (auto const& output : shared->outputs) {
-      if (!output->displayName.empty()) {
-        outputs.push_back(output->displayName);
-      } else {
-        outputs.push_back(std::to_string(output->name));
-      }
-    }
-    releaseWaylandConnection();
-    return outputs;
-  } catch (...) {
-    if (shared) releaseWaylandConnection();
-    return {};
-  }
-}
-
-} // namespace linux_platform
 
 namespace platform {
 

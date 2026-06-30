@@ -77,29 +77,10 @@ public:
                                            void* gpuDevice = nullptr);
 
 #if LAMBDAUI_VULKAN
-  struct DmabufPlane {
-    int fd = -1;
-    std::uint32_t offset = 0;
-    std::uint32_t stride = 0;
-    std::uint64_t modifier = 0;
-  };
-
-  struct DmabufImageSpec {
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::uint32_t drmFormat = 0;
-    std::span<DmabufPlane const> planes;
-  };
-
   /// Create an image reference backed by caller-owned Vulkan resources.
   /// The VkImage and VkImageView must outlive all rendering that references the returned Image.
   static std::shared_ptr<Image> fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
                                                    std::uint32_t width, std::uint32_t height);
-
-  /// Import a single-plane Linux dma-buf as a Vulkan sampled image on Linux (LAMBDAUI_VULKAN).
-  /// Not available on macOS/Metal builds: callers must guard with `#if LAMBDAUI_VULKAN` or platform checks.
-  /// The supplied plane fd is consumed by this call whether import succeeds or fails.
-  static std::shared_ptr<Image> fromDmabuf(DmabufImageSpec const& spec);
 #endif
 
 #if LAMBDAUI_METAL

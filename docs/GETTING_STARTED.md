@@ -21,7 +21,7 @@ Linux Wayland requirements:
 
 - `pkg-config`.
 - `wayland-client`, `wayland-cursor`, and `wayland-protocols`.
-- `libdrm`, `xkbcommon`, Vulkan loader/headers, FreeType, fontconfig, HarfBuzz, librsvg, and zlib.
+- `xkbcommon`, Vulkan loader/headers, FreeType, fontconfig, HarfBuzz, librsvg, and zlib.
 - `glslangValidator` or `glslang` for shader compilation.
 
 Package names vary by distribution. Install development packages, not just runtime packages.

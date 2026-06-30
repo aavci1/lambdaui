@@ -18,7 +18,6 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 #include <Lambda/UI/Clipboard.hpp>
 #include <Lambda/UI/MenuItem.hpp>
@@ -164,8 +163,6 @@ public:
   std::string name() const;
   std::string userDataDir() const;
   std::string cacheDir() const;
-  /// Returns platform output names when available.
-  std::vector<std::string> availableOutputs() const;
   /// True when another live window is registered as a modal child of this window.
   bool isWindowInputBlockedByModal(unsigned int handle) const;
   std::optional<WindowState> loadWindowState(std::string const& restoreId) const;

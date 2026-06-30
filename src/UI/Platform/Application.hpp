@@ -10,7 +10,6 @@
 #include <memory>
 #include <string>
 #include <unordered_set>
-#include <vector>
 
 namespace lambdaui::platform {
 
@@ -47,7 +46,6 @@ public:
   virtual std::string userDataDir() const = 0;
   virtual std::string cacheDir() const = 0;
   virtual std::unique_ptr<Clipboard> createClipboard() { return nullptr; }
-  virtual std::vector<std::string> availableOutputs() const { return {}; }
   virtual GpuSurfaceProvider* gpuSurfaceProvider() { return nullptr; }
 };
 

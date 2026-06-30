@@ -177,7 +177,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   endif()
   pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
   pkg_check_modules(WAYLAND_CURSOR REQUIRED IMPORTED_TARGET wayland-cursor)
-  pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
@@ -198,7 +197,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     "${LAMBDA_XX_CUTOUTS_XML}|xx-cutouts-v1"
     "${LAMBDA_WLR_LAYER_SHELL_XML}|wlr-layer-shell-unstable-v1"
     "${LAMBDA_EXT_BACKGROUND_EFFECT_XML}|ext-background-effect-v1"
-    "${LAMBDA_LINUX_DMABUF_XML}|linux-dmabuf-unstable-v1"
     "${LAMBDA_CURSOR_SHAPE_XML}|cursor-shape-v1"
     "${LAMBDA_IDLE_INHIBIT_XML}|idle-inhibit-unstable-v1"
     "${LAMBDA_PRESENTATION_TIME_XML}|presentation-time"
@@ -312,7 +310,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   target_link_libraries(lambdaui PRIVATE
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::WAYLAND_CURSOR
-    PkgConfig::LIBDRM
     PkgConfig::XKBCOMMON
     PkgConfig::VULKAN
     PkgConfig::FREETYPE

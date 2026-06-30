@@ -74,11 +74,9 @@ target_link_libraries(lambda-tests PRIVATE
 if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
-  pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
   target_link_libraries(lambda-tests PRIVATE
     PkgConfig::VULKAN
-    PkgConfig::LIBDRM
     PkgConfig::ZLIB)
   if(DEFINED LAMBDA_WAYLAND_PROTOCOL_DIR)
     target_include_directories(lambda-tests PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})

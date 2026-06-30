@@ -328,17 +328,6 @@ public:
     return url ? std::string(url.path.UTF8String) : std::string{};
   }
 
-  std::vector<std::string> availableOutputs() const override {
-    std::vector<std::string> outputs;
-    for (NSScreen* screen in [NSScreen screens]) {
-      NSString* name = screen.localizedName;
-      if (name && name.length > 0) {
-        outputs.emplace_back(name.UTF8String);
-      }
-    }
-    return outputs;
-  }
-
   bool dispatchMenuItem(NSMenuItem* item) {
     NSString* actionObject = [item representedObject];
     if (!actionObject) {

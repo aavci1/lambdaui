@@ -5,7 +5,6 @@
 #include "Platform/Linux/GpuSurfaceProvider.hpp"
 #include "UI/Platform/Application.hpp"
 #include "Platform/Linux/WaylandNativeSurface.hpp"
-#include "Platform/Linux/WaylandOutputs.hpp"
 
 #include <cctype>
 #include <cstdlib>
@@ -92,10 +91,6 @@ public:
 
   std::unique_ptr<Clipboard> createClipboard() override {
     return createWaylandClipboard();
-  }
-
-  std::vector<std::string> availableOutputs() const override {
-    return linux_platform::availableWaylandOutputs();
   }
 
   platform::GpuSurfaceProvider* gpuSurfaceProvider() override {
