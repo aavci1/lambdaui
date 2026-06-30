@@ -152,7 +152,7 @@ public:
   }
 
   /// Borrowed WebGPU device handle for image/resource creation.
-  /// Use with `loadImage(path, canvas.webGpuDevice())` when GPU-backed resources need a device.
+  /// Use with `loadImage(path, canvas.webGpuDevice())` when WebGPU-backed resources need a device.
   virtual WGPUDevice webGpuDevice() const = 0;
 
   virtual bool requestNextFrameCapture() = 0;

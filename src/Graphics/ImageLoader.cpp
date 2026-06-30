@@ -299,8 +299,8 @@ bool Image::updateRgbaPixels(std::span<std::uint8_t const>, WGPUDevice) {
   return false;
 }
 
-bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, WGPUDevice gpuDevice) {
-  return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, gpuDevice);
+bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, WGPUDevice webGpuDevice) {
+  return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, webGpuDevice);
 }
 
 bool Image::updatePixelsRegion(std::span<std::uint8_t const>,
@@ -349,15 +349,15 @@ std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path) {
   return decodeImageRgbaFromFile(path, 0);
 }
 
-std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, WGPUDevice gpuDevice) {
+std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, WGPUDevice webGpuDevice) {
   if (decoded.width == 0 || decoded.height == 0 || decoded.pixels.empty()) {
     return nullptr;
   }
   std::span<std::uint8_t const> pixels(decoded.pixels.data(), decoded.pixels.size());
-  return Image::fromRgbaPixels(decoded.width, decoded.height, pixels, gpuDevice);
+  return Image::fromRgbaPixels(decoded.width, decoded.height, pixels, webGpuDevice);
 }
 
-std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice gpuDevice) {
+std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice webGpuDevice) {
   std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path);
   if (!decoded) {
 #ifndef NDEBUG
@@ -365,10 +365,10 @@ std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice gpuDevice) {
 #endif
     return nullptr;
   }
-  return imageFromDecodedRgba(*decoded, gpuDevice);
+  return imageFromDecodedRgba(*decoded, webGpuDevice);
 }
 
-std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice gpuDevice, std::uint32_t maxLongEdge) {
+std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice webGpuDevice, std::uint32_t maxLongEdge) {
   std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path, maxLongEdge);
   if (!decoded) {
 #ifndef NDEBUG
@@ -376,7 +376,7 @@ std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice gpuDevice, st
 #endif
     return nullptr;
   }
-  return imageFromDecodedRgba(*decoded, gpuDevice);
+  return imageFromDecodedRgba(*decoded, webGpuDevice);
 }
 
 } // namespace lambdaui

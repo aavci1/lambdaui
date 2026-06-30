@@ -69,11 +69,11 @@ public:
   Size size() const override { return size_; }
   bool premultipliedAlpha() const noexcept override { return premultiplied_; }
 
-  bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, WGPUDevice gpuDevice) override {
-    return updatePixels(rgbaPixels, PixelFormat::Rgba8888, gpuDevice);
+  bool updateRgbaPixels(std::span<std::uint8_t const> rgbaPixels, WGPUDevice webGpuDevice) override {
+    return updatePixels(rgbaPixels, PixelFormat::Rgba8888, webGpuDevice);
   }
 
-  bool updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, WGPUDevice gpuDevice) override {
+  bool updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, WGPUDevice webGpuDevice) override {
     if (externalTextureView_) {
       return false;
     }
@@ -87,12 +87,12 @@ public:
     }
     pixels_.assign(pixels.begin(), pixels.end());
     textureDirty_ = true;
-    if (gpuDevice) {
-      WGPUQueue queue = wgpuDeviceGetQueue(gpuDevice);
+    if (webGpuDevice) {
+      WGPUQueue queue = wgpuDeviceGetQueue(webGpuDevice);
       if (!queue) {
         return false;
       }
-      ensureTexture(gpuDevice, queue);
+      ensureTexture(webGpuDevice, queue);
       wgpuQueueRelease(queue);
     }
     return true;
@@ -104,7 +104,7 @@ public:
                           std::uint32_t y,
                           std::uint32_t width,
                           std::uint32_t height,
-                          WGPUDevice gpuDevice = nullptr,
+                          WGPUDevice webGpuDevice = nullptr,
                           std::uint32_t sourceBytesPerRow = 0) override {
     if (externalTextureView_) {
       return false;
@@ -126,12 +126,12 @@ public:
       std::memcpy(dst, src, static_cast<std::size_t>(width) * 4u);
     }
     textureDirty_ = true;
-    if (gpuDevice) {
-      WGPUQueue queue = wgpuDeviceGetQueue(gpuDevice);
+    if (webGpuDevice) {
+      WGPUQueue queue = wgpuDeviceGetQueue(webGpuDevice);
       if (!queue) {
         return false;
       }
-      ensureTexture(gpuDevice, queue);
+      ensureTexture(webGpuDevice, queue);
       wgpuQueueRelease(queue);
     }
     return true;
@@ -3664,30 +3664,30 @@ WGPUTextureFormat webGpuRenderTargetFormat(Canvas const& canvas) noexcept {
 std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width,
                                              std::uint32_t height,
                                              std::span<std::uint8_t const> rgbaPixels,
-                                             WGPUDevice gpuDevice) {
+                                             WGPUDevice webGpuDevice) {
   if (width == 0 || height == 0 || rgbaPixels.size() != static_cast<std::size_t>(width) * height * 4u) {
     return nullptr;
   }
-  return fromPixels(width, height, rgbaPixels, PixelFormat::Rgba8888, gpuDevice);
+  return fromPixels(width, height, rgbaPixels, PixelFormat::Rgba8888, webGpuDevice);
 }
 
 std::shared_ptr<Image> Image::fromPixels(std::uint32_t width,
                                          std::uint32_t height,
                                          std::span<std::uint8_t const> pixels,
                                          PixelFormat format,
-                                         WGPUDevice gpuDevice) {
+                                         WGPUDevice webGpuDevice) {
   if (width == 0 || height == 0 || pixels.size() != static_cast<std::size_t>(width) * height * 4u) {
     return nullptr;
   }
   std::vector<std::uint8_t> copy(pixels.begin(), pixels.end());
   auto image = std::make_shared<webgpu::WebGpuImage>(width, height, std::move(copy), format, false);
-  if (gpuDevice) {
+  if (webGpuDevice) {
     try {
-      WGPUQueue queue = wgpuDeviceGetQueue(gpuDevice);
+      WGPUQueue queue = wgpuDeviceGetQueue(webGpuDevice);
       if (!queue) {
         return nullptr;
       }
-      (void)image->textureView(gpuDevice, queue);
+      (void)image->textureView(webGpuDevice, queue);
       wgpuQueueRelease(queue);
     } catch (...) {
       return nullptr;
