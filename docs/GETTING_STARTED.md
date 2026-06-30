@@ -20,7 +20,7 @@ Linux Wayland requirements:
 
 - `pkg-config`.
 - `wayland-client`, `wayland-cursor`, and `wayland-protocols`.
-- `xkbcommon`, FreeType, fontconfig, HarfBuzz, librsvg, and zlib.
+- `xkbcommon`, FreeType, fontconfig, HarfBuzz, and zlib.
 
 Package names vary by distribution. Install development packages, not just runtime packages.
 

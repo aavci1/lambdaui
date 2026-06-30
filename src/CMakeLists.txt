@@ -174,7 +174,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
   pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
   pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
-  pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
   lambda_setup_wayland_protocol_paths("${WAYLAND_PROTOCOLS_DIR}")
   add_library(lambda_wayland_client_protocols OBJECT
@@ -256,7 +255,6 @@ if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     PkgConfig::FREETYPE
     PkgConfig::FONTCONFIG
     PkgConfig::HARFBUZZ
-    PkgConfig::LIBRSVG
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 elseif(LAMBDAUI_PLATFORM_MACOS)

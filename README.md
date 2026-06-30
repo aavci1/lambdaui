@@ -20,7 +20,7 @@ Prerequisites:
 - CMake 3.25 or newer.
 - A C++23-capable compiler.
 - WebGPU renderer: Dawn installed with CMake package files, a local Dawn source checkout, or `LAMBDAUI_DAWN_FETCH=ON`.
-- Linux Wayland: development packages for Wayland, wayland-protocols, xkbcommon, FreeType, fontconfig, HarfBuzz, librsvg, zlib, and pkg-config.
+- Linux Wayland: development packages for Wayland, wayland-protocols, xkbcommon, FreeType, fontconfig, HarfBuzz, zlib, and pkg-config.
 
 Build the library, demos, and tests:
 

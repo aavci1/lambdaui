@@ -1,10 +1,5 @@
 #include <Lambda/Graphics/Image.hpp>
 
-#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
-#include <cairo.h>
-#include <librsvg/rsvg.h>
-#endif
-
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -19,9 +14,7 @@
 #endif
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
-#include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -57,14 +50,6 @@ void logLoadImageFailure(std::string_view path) {
 }
 #endif
 
-bool isSvgPath(std::filesystem::path const& path) {
-  std::string extension = path.extension().string();
-  std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char ch) {
-    return static_cast<char>(std::tolower(ch));
-  });
-  return extension == ".svg" || extension == ".svgz";
-}
-
 std::optional<DecodedImageRgba> decodeImageRgbaFromBytes(std::span<std::uint8_t const> data) {
   if (data.empty() || data.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     return std::nullopt;
@@ -97,109 +82,6 @@ std::optional<DecodedImageRgba> decodeImageRgbaFromBytes(std::span<std::uint8_t 
   stbi_image_free(decoded);
   return result;
 }
-
-#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
-std::optional<DecodedImageRgba> decodeSvgRgbaFromFile(std::filesystem::path const& path,
-                                                      std::uint32_t maxLongEdge) {
-  GError* error = nullptr;
-  RsvgHandle* handle = rsvg_handle_new_from_file(path.string().c_str(), &error);
-  if (!handle) {
-    if (error) g_error_free(error);
-    return std::nullopt;
-  }
-
-  double intrinsicWidth = 0.0;
-  double intrinsicHeight = 0.0;
-  if (!rsvg_handle_get_intrinsic_size_in_pixels(handle, &intrinsicWidth, &intrinsicHeight) ||
-      intrinsicWidth <= 0.0 || intrinsicHeight <= 0.0) {
-    g_object_unref(handle);
-    return std::nullopt;
-  }
-
-  double const scale = maxLongEdge > 0
-                           ? static_cast<double>(maxLongEdge) / std::max(intrinsicWidth, intrinsicHeight)
-                           : 1.0;
-  std::uint32_t const width = std::min<std::uint32_t>(
-      4096u, std::max(1u, static_cast<std::uint32_t>(std::ceil(intrinsicWidth * scale))));
-  std::uint32_t const height = std::min<std::uint32_t>(
-      4096u, std::max(1u, static_cast<std::uint32_t>(std::ceil(intrinsicHeight * scale))));
-  if (static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) >
-      static_cast<std::uint64_t>(std::numeric_limits<int>::max() / 4)) {
-    g_object_unref(handle);
-    return std::nullopt;
-  }
-
-  cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-                                                        static_cast<int>(width),
-                                                        static_cast<int>(height));
-  if (!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
-    if (surface) cairo_surface_destroy(surface);
-    g_object_unref(handle);
-    return std::nullopt;
-  }
-  cairo_t* cr = cairo_create(surface);
-  if (!cr || cairo_status(cr) != CAIRO_STATUS_SUCCESS) {
-    if (cr) cairo_destroy(cr);
-    cairo_surface_destroy(surface);
-    g_object_unref(handle);
-    return std::nullopt;
-  }
-
-  RsvgRectangle viewport{
-      .x = 0.0,
-      .y = 0.0,
-      .width = static_cast<double>(width),
-      .height = static_cast<double>(height),
-  };
-  error = nullptr;
-  gboolean const rendered = rsvg_handle_render_document(handle, cr, &viewport, &error);
-  cairo_destroy(cr);
-  g_object_unref(handle);
-  if (!rendered) {
-    if (error) g_error_free(error);
-    cairo_surface_destroy(surface);
-    return std::nullopt;
-  }
-
-  cairo_surface_flush(surface);
-  unsigned char* data = cairo_image_surface_get_data(surface);
-  int const stride = cairo_image_surface_get_stride(surface);
-  if (!data || stride <= 0) {
-    cairo_surface_destroy(surface);
-    return std::nullopt;
-  }
-
-  DecodedImageRgba decoded{
-      .width = width,
-      .height = height,
-      .pixels = std::vector<std::uint8_t>(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u),
-  };
-  for (std::uint32_t y = 0; y < height; ++y) {
-    auto const* row = data + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
-    for (std::uint32_t x = 0; x < width; ++x) {
-      std::size_t const src = static_cast<std::size_t>(x) * 4u;
-      std::size_t const dst = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
-                               static_cast<std::size_t>(x)) * 4u;
-      std::uint8_t const b = row[src + 0u];
-      std::uint8_t const g = row[src + 1u];
-      std::uint8_t const r = row[src + 2u];
-      std::uint8_t const a = row[src + 3u];
-      decoded.pixels[dst + 3u] = a;
-      if (a == 0) {
-        decoded.pixels[dst + 0u] = 0;
-        decoded.pixels[dst + 1u] = 0;
-        decoded.pixels[dst + 2u] = 0;
-      } else {
-        decoded.pixels[dst + 0u] = static_cast<std::uint8_t>(std::min(255u, (static_cast<unsigned>(r) * 255u) / a));
-        decoded.pixels[dst + 1u] = static_cast<std::uint8_t>(std::min(255u, (static_cast<unsigned>(g) * 255u) / a));
-        decoded.pixels[dst + 2u] = static_cast<std::uint8_t>(std::min(255u, (static_cast<unsigned>(b) * 255u) / a));
-      }
-    }
-  }
-  cairo_surface_destroy(surface);
-  return decoded;
-}
-#endif
 
 DecodedImageRgba halveDecodedImageRgbaBox(DecodedImageRgba const& source) {
   std::uint32_t const srcW = source.width;
@@ -320,11 +202,6 @@ bool Image::updatePixelsRegion(std::span<std::uint8_t const>,
 
 std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path, std::uint32_t maxLongEdge) {
   std::filesystem::path const imagePath{std::string(path)};
-#if defined(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
-  if (isSvgPath(imagePath)) {
-    return decodeSvgRgbaFromFile(imagePath, maxLongEdge);
-  }
-#endif
   std::ifstream in(imagePath, std::ios::binary);
   if (!in) {
     return std::nullopt;

@@ -102,7 +102,7 @@ struct DecodedImageRgba {
 [[nodiscard]] lambdaui::DecodedImageRgba downscaleDecodedImageRgba(lambdaui::DecodedImageRgba image,
                                                                std::uint32_t maxLongEdge);
 
-/// Decodes an image file to tightly packed RGBA pixels without creating a WebGPU image.
+/// Decodes a raster image file to tightly packed RGBA pixels without creating a WebGPU image.
 [[nodiscard]] std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path);
 [[nodiscard]] std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path,
                                                                        std::uint32_t maxLongEdge);
@@ -112,7 +112,7 @@ struct DecodedImageRgba {
                                                           WGPUDevice webGpuDevice = nullptr,
                                                           WGPUQueue webGpuQueue = nullptr);
 
-/// Loads an image from disk into a WebGPU image.
+/// Loads a raster image from disk into a WebGPU image.
 /// `webGpuDevice` and `webGpuQueue` must match the target canvas when eager upload is required.
 std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice webGpuDevice = nullptr);
 std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice webGpuDevice, WGPUQueue webGpuQueue);
