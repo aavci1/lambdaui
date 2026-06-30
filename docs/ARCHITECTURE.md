@@ -142,6 +142,7 @@ WebGPU rendering:
 - Dawn is discovered as an installed CMake package, added from `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched with `LAMBDAUI_DAWN_FETCH`.
 - CAMetalLayer surfaces on macOS and Wayland surfaces on Linux.
 - WGSL pipelines for primitives, paths, images, glyphs, clips, render targets, and frame readback.
+- Offscreen render targets can allocate internal WebGPU textures or render into caller-owned `WGPUTextureView` targets.
 
 Rendering code is split across:
 

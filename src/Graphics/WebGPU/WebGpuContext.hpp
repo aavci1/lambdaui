@@ -11,6 +11,7 @@ class WebGpuContext {
 public:
   WebGpuContext();
   explicit WebGpuContext(WGPUSurface compatibleSurface);
+  explicit WebGpuContext(WGPUDevice device, WGPUQueue queue = nullptr);
   ~WebGpuContext();
 
   WebGpuContext(WebGpuContext const&) = delete;
@@ -24,6 +25,7 @@ public:
   [[nodiscard]] WGPUQueue queue() const noexcept { return queue_; }
 
   void initializeDevice(WGPUSurface compatibleSurface);
+  void initializeExternalDevice(WGPUDevice device, WGPUQueue queue = nullptr);
   [[nodiscard]] bool hasDevice() const noexcept { return device_ != nullptr; }
 
 private:

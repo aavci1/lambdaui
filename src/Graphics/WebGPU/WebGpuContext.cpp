@@ -112,6 +112,10 @@ WebGpuContext::WebGpuContext(WGPUSurface compatibleSurface) : WebGpuContext() {
   initializeDevice(compatibleSurface);
 }
 
+WebGpuContext::WebGpuContext(WGPUDevice device, WGPUQueue queue) {
+  initializeExternalDevice(device, queue);
+}
+
 void WebGpuContext::createInstance() {
   static constexpr WGPUInstanceFeatureName kInstanceFeatures[] = {
       WGPUInstanceFeatureName_TimedWaitAny,
@@ -166,6 +170,28 @@ void WebGpuContext::initializeDevice(WGPUSurface compatibleSurface) {
   queue_ = wgpuDeviceGetQueue(device_);
   if (!queue_) {
     throw std::runtime_error("Lambda WebGPU: failed to get device queue");
+  }
+}
+
+void WebGpuContext::initializeExternalDevice(WGPUDevice device, WGPUQueue queue) {
+  if (device_) {
+    throw std::runtime_error("Lambda WebGPU: device already initialized");
+  }
+  if (!device) {
+    throw std::runtime_error("Lambda WebGPU: external render targets require a WGPUDevice");
+  }
+
+  device_ = device;
+  wgpuDeviceAddRef(device_);
+
+  if (queue) {
+    queue_ = queue;
+    wgpuQueueAddRef(queue_);
+  } else {
+    queue_ = wgpuDeviceGetQueue(device_);
+  }
+  if (!queue_) {
+    throw std::runtime_error("Lambda WebGPU: failed to get external device queue");
   }
 }
 

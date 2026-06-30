@@ -13,6 +13,9 @@
 #if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
 #include <vulkan/vulkan.h>
 #endif
+#if LAMBDAUI_WEBGPU
+#include <webgpu/webgpu.h>
+#endif
 
 #if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_METAL && defined(__OBJC__)
 @class MTLTexture;
@@ -70,6 +73,14 @@ struct WebGpuRenderTargetSpec {
   std::uint32_t pixelWidth = 0;
   std::uint32_t pixelHeight = 0;
   float dpiScale = 1.f;
+
+  /// Optional caller-owned WebGPU render target. When set, `device` must be the
+  /// device that created `textureView`; Lambda retains the view while the
+  /// RenderTarget exists and submits drawing work to the device queue.
+  WGPUDevice device = nullptr;
+  WGPUQueue queue = nullptr;
+  WGPUTextureView textureView = nullptr;
+  WGPUTextureFormat format = WGPUTextureFormat_RGBA8Unorm;
 };
 #endif
 

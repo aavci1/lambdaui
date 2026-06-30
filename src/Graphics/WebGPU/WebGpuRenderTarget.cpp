@@ -45,10 +45,24 @@ public:
     if (logicalSize_.width <= 0.f || logicalSize_.height <= 0.f || pixelWidth_ == 0 || pixelHeight_ == 0) {
       throw std::runtime_error("Lambda WebGPU RenderTarget requires positive logical and pixel dimensions");
     }
-    canvas_ = webgpu::createWebGpuRenderTargetCanvas(renderTargetTextSystem(),
-                                                     logicalSize_,
-                                                     pixelWidth_,
-                                                     pixelHeight_);
+    if (spec.textureView) {
+      if (!spec.device) {
+        throw std::runtime_error("Lambda WebGPU RenderTarget external texture views require a WGPUDevice");
+      }
+      canvas_ = webgpu::createWebGpuExternalRenderTargetCanvas(renderTargetTextSystem(),
+                                                               logicalSize_,
+                                                               pixelWidth_,
+                                                               pixelHeight_,
+                                                               spec.device,
+                                                               spec.queue,
+                                                               spec.textureView,
+                                                               spec.format);
+    } else {
+      canvas_ = webgpu::createWebGpuRenderTargetCanvas(renderTargetTextSystem(),
+                                                       logicalSize_,
+                                                       pixelWidth_,
+                                                       pixelHeight_);
+    }
     if (!canvas_) {
       throw std::runtime_error("Failed to create WebGPU RenderTarget canvas");
     }

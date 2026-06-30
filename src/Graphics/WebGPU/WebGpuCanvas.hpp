@@ -3,6 +3,8 @@
 #include <Lambda/Graphics/Canvas.hpp>
 #include <Lambda/Core/Geometry.hpp>
 
+#include <webgpu/webgpu.h>
+
 #include <cstdint>
 #include <memory>
 
@@ -34,6 +36,15 @@ std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
                                                        Size logicalSize,
                                                        std::uint32_t pixelWidth,
                                                        std::uint32_t pixelHeight);
+
+std::unique_ptr<Canvas> createWebGpuExternalRenderTargetCanvas(TextSystem& textSystem,
+                                                               Size logicalSize,
+                                                               std::uint32_t pixelWidth,
+                                                               std::uint32_t pixelHeight,
+                                                               WGPUDevice device,
+                                                               WGPUQueue queue,
+                                                               WGPUTextureView textureView,
+                                                               WGPUTextureFormat format);
 
 } // namespace webgpu
 } // namespace lambdaui

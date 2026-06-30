@@ -133,6 +133,7 @@ docs/                 Project documentation
 - `LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING`: log built-in application event handlers.
 
 The CMake target exports `LAMBDAUI_NATIVE_RENDERERS`; it is `1` only for legacy Metal/Vulkan renderer builds.
+For WebGPU builds, `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
 
 The build uses CMake `FetchContent` for `libtess2`, and for `doctest` when tests are enabled.
 

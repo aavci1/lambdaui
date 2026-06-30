@@ -1039,9 +1039,35 @@ public:
     clip_ = viewportBounds();
   }
 
+  WebGpuCanvas(TextSystem& textSystem,
+               Size logicalSize,
+               std::uint32_t pixelWidth,
+               std::uint32_t pixelHeight,
+               WGPUDevice device,
+               WGPUQueue queue,
+               WGPUTextureView textureView,
+               WGPUTextureFormat format)
+      : textSystem_(textSystem),
+        size_(logicalSize),
+        context_(device, queue),
+        surfaceFormat_(format == WGPUTextureFormat_Undefined ? WGPUTextureFormat_RGBA8Unorm : format),
+        surfaceCopySrcSupported_(false),
+        externalRenderTargetView_(textureView),
+        offscreenPixelWidth_(std::max(1u, pixelWidth)),
+        offscreenPixelHeight_(std::max(1u, pixelHeight)) {
+    if (!textureView) {
+      throw std::runtime_error("Lambda WebGPU: external render targets require a WGPUTextureView");
+    }
+    wgpuTextureViewAddRef(externalRenderTargetView_);
+    dpiScale_ = std::max(logicalSize.width > 0.f ? static_cast<float>(offscreenPixelWidth_) / logicalSize.width : 1.f,
+                         logicalSize.height > 0.f ? static_cast<float>(offscreenPixelHeight_) / logicalSize.height : 1.f);
+    clip_ = viewportBounds();
+  }
+
   ~WebGpuCanvas() override {
     releaseFrameObjects();
     clearPendingFrameCapture();
+    releaseExternalRenderTarget();
     releaseOffscreenTarget();
     releaseDrawResources();
     if (surface_) {
@@ -1062,6 +1088,9 @@ public:
     size_ = {static_cast<float>(width), static_cast<float>(height)};
     if (surface_) {
       configureSurface();
+    } else if (externalRenderTargetView_) {
+      offscreenPixelWidth_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width * dpiScale_)));
+      offscreenPixelHeight_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height * dpiScale_)));
     } else {
       offscreenPixelWidth_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width * dpiScale_)));
       offscreenPixelHeight_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height * dpiScale_)));
@@ -1861,11 +1890,14 @@ private:
   }
 
   void ensureFrameObjects() {
-    if (currentTexture_) {
+    if (currentTexture_ || currentView_) {
       return;
     }
 
-    if (surface_) {
+    if (externalRenderTargetView_) {
+      currentView_ = externalRenderTargetView_;
+      wgpuTextureViewAddRef(currentView_);
+    } else if (surface_) {
       WGPUSurfaceTexture surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
       wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
       if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
@@ -1878,11 +1910,13 @@ private:
       currentTexture_ = offscreenTexture_;
     }
 
-    WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
-    viewDescriptor.label = stringView(surface_ ? "LambdaUI WebGPU Surface View" : "LambdaUI WebGPU Offscreen View");
-    currentView_ = wgpuTextureCreateView(currentTexture_, &viewDescriptor);
     if (!currentView_) {
-      throw std::runtime_error("Lambda WebGPU: failed to create frame texture view");
+      WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
+      viewDescriptor.label = stringView(surface_ ? "LambdaUI WebGPU Surface View" : "LambdaUI WebGPU Offscreen View");
+      currentView_ = wgpuTextureCreateView(currentTexture_, &viewDescriptor);
+      if (!currentView_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create frame texture view");
+      }
     }
 
     WGPUCommandEncoderDescriptor encoderDescriptor = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
@@ -2112,6 +2146,13 @@ private:
     if (offscreenTexture_) {
       wgpuTextureRelease(offscreenTexture_);
       offscreenTexture_ = nullptr;
+    }
+  }
+
+  void releaseExternalRenderTarget() noexcept {
+    if (externalRenderTargetView_) {
+      wgpuTextureViewRelease(externalRenderTargetView_);
+      externalRenderTargetView_ = nullptr;
     }
   }
 
@@ -2920,6 +2961,7 @@ private:
   WGPUSurface surface_ = nullptr;
   WGPUTextureFormat surfaceFormat_ = WGPUTextureFormat_Undefined;
   bool surfaceCopySrcSupported_ = false;
+  WGPUTextureView externalRenderTargetView_ = nullptr;
   WGPUTexture offscreenTexture_ = nullptr;
   std::uint32_t offscreenPixelWidth_ = 0;
   std::uint32_t offscreenPixelHeight_ = 0;
@@ -3007,6 +3049,24 @@ std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
                                                        std::uint32_t pixelWidth,
                                                        std::uint32_t pixelHeight) {
   return std::make_unique<WebGpuCanvas>(textSystem, logicalSize, pixelWidth, pixelHeight);
+}
+
+std::unique_ptr<Canvas> createWebGpuExternalRenderTargetCanvas(TextSystem& textSystem,
+                                                               Size logicalSize,
+                                                               std::uint32_t pixelWidth,
+                                                               std::uint32_t pixelHeight,
+                                                               WGPUDevice device,
+                                                               WGPUQueue queue,
+                                                               WGPUTextureView textureView,
+                                                               WGPUTextureFormat format) {
+  return std::make_unique<WebGpuCanvas>(textSystem,
+                                        logicalSize,
+                                        pixelWidth,
+                                        pixelHeight,
+                                        device,
+                                        queue,
+                                        textureView,
+                                        format);
 }
 
 void unpremultiplyRgbaPixels(std::vector<std::uint8_t>& pixels) {
