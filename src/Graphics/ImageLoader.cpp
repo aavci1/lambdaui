@@ -295,11 +295,11 @@ DecodedImageRgba downscaleDecodedImageRgba(DecodedImageRgba image, std::uint32_t
   return dst;
 }
 
-bool Image::updateRgbaPixels(std::span<std::uint8_t const>, void*) {
+bool Image::updateRgbaPixels(std::span<std::uint8_t const>, WGPUDevice) {
   return false;
 }
 
-bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, void* gpuDevice) {
+bool Image::updatePixels(std::span<std::uint8_t const> pixels, PixelFormat format, WGPUDevice gpuDevice) {
   return format == PixelFormat::Rgba8888 && updateRgbaPixels(pixels, gpuDevice);
 }
 
@@ -309,7 +309,7 @@ bool Image::updatePixelsRegion(std::span<std::uint8_t const>,
                                std::uint32_t,
                                std::uint32_t,
                                std::uint32_t,
-                               void*,
+                               WGPUDevice,
                                std::uint32_t) {
   return false;
 }
@@ -349,7 +349,7 @@ std::optional<DecodedImageRgba> decodeImageRgbaFromFile(std::string_view path) {
   return decodeImageRgbaFromFile(path, 0);
 }
 
-std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, void* gpuDevice) {
+std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, WGPUDevice gpuDevice) {
   if (decoded.width == 0 || decoded.height == 0 || decoded.pixels.empty()) {
     return nullptr;
   }
@@ -357,7 +357,7 @@ std::shared_ptr<Image> imageFromDecodedRgba(DecodedImageRgba const& decoded, voi
   return Image::fromRgbaPixels(decoded.width, decoded.height, pixels, gpuDevice);
 }
 
-std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
+std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice gpuDevice) {
   std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path);
   if (!decoded) {
 #ifndef NDEBUG
@@ -368,7 +368,7 @@ std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice) {
   return imageFromDecodedRgba(*decoded, gpuDevice);
 }
 
-std::shared_ptr<Image> loadImage(std::string_view path, void* gpuDevice, std::uint32_t maxLongEdge) {
+std::shared_ptr<Image> loadImage(std::string_view path, WGPUDevice gpuDevice, std::uint32_t maxLongEdge) {
   std::optional<DecodedImageRgba> decoded = decodeImageRgbaFromFile(path, maxLongEdge);
   if (!decoded) {
 #ifndef NDEBUG

@@ -19,6 +19,8 @@
 #include <string_view>
 #include <vector>
 
+#include <webgpu/webgpu.h>
+
 namespace lambdaui {
 
 class Image;
@@ -139,7 +141,7 @@ public:
   virtual void drawBackdropBlur(Rect const& rect, float radius, Color tint = Colors::transparent,
                                 CornerRadius const& corners = {}) = 0;
 
-  /// Draw a backdrop blur while allowing backends to cache a larger stable source region.
+  /// Draw a backdrop blur while allowing the canvas to cache a larger stable source region.
   /// This is useful for animated masks whose destination rect changes every frame but whose
   /// underlying backdrop does not.
   virtual void drawBackdropBlurCached(Rect const& rect, Rect const& cacheRect, float radius,
@@ -151,7 +153,7 @@ public:
 
   /// WebGPU device handle for image/resource creation, currently a `WGPUDevice`.
   /// Use with `loadImage(path, canvas.gpuDevice())` when GPU-backed resources need a device.
-  virtual void* gpuDevice() const = 0;
+  virtual WGPUDevice gpuDevice() const = 0;
 
   virtual bool requestNextFrameCapture() = 0;
   virtual bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width,
