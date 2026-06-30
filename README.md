@@ -1,6 +1,6 @@
 # LambdaUI
 
-LambdaUI is a C++23 UI framework for building native desktop interfaces with declarative component bodies, fine-grained reactivity, and a retained scene graph. It builds as a shared CMake library and includes a Dawn/WebGPU renderer that is preferred when Dawn is available, with native macOS/Metal and Linux/Vulkan backends still available during the migration.
+LambdaUI is a C++23 UI framework for building native desktop interfaces with declarative component bodies, fine-grained reactivity, and a retained scene graph. It builds as a shared CMake library and renders through Dawn/WebGPU on macOS and Linux.
 
 The public API lives under `include/Lambda`, implementation lives under `src`, and examples live under `demos`.
 
@@ -11,8 +11,6 @@ The public API lives under `include/Lambda`, implementation lives under `src`, a
 - Retained scene graph with reactive bindings, keyed control-flow views, hit testing, layout, and render caching.
 - Built-in views for text, stacks, grids, scroll views, buttons, text input, menus, popovers, dialogs, alerts, sliders, tables, icons, SVG, and more.
 - Dawn/WebGPU renderer for macOS CAMetalLayer and Linux Wayland surfaces.
-- Metal renderer on macOS with Cocoa/CoreText integration while the native backend remains enabled.
-- Vulkan renderer on Linux with a Wayland backend while the native backend remains enabled.
 - CMake helpers for apps and demos, plus doctest-based unit/integration tests.
 
 ## Quick Start
@@ -22,8 +20,7 @@ Prerequisites:
 - CMake 3.25 or newer.
 - A C++23-capable compiler.
 - WebGPU renderer: Dawn installed with CMake package files, a local Dawn source checkout, or `LAMBDAUI_DAWN_FETCH=ON`.
-- macOS native renderer: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
-- Linux Wayland native renderer: development packages for Wayland, wayland-protocols, libdrm, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
+- Linux Wayland: development packages for Wayland, wayland-protocols, xkbcommon, FreeType, fontconfig, HarfBuzz, librsvg, zlib, and pkg-config.
 
 Build the library, demos, and tests:
 
@@ -48,11 +45,10 @@ cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=AUTO -DCMAKE_PREFIX_PATH=/path/to
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
-cmake -S . -B build-native -DLAMBDAUI_RENDERER=NATIVE -DLAMBDAUI_ENABLE_NATIVE_RENDERERS=ON
 ```
 
 `LAMBDAUI_PLATFORM=AUTO` is the default. It selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
-`LAMBDAUI_RENDERER=AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`. Legacy Metal/Vulkan renderers are disabled by default and require `LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON`.
+`LAMBDAUI_RENDERER=AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`; otherwise configure fails with Dawn setup guidance.
 
 ## Minimal App
 
@@ -118,8 +114,7 @@ docs/                 Project documentation
 ## Important CMake Options
 
 - `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, or `LINUX_WAYLAND`.
-- `LAMBDAUI_RENDERER`: `AUTO`, `NATIVE`, or `WEBGPU`.
-- `LAMBDAUI_ENABLE_NATIVE_RENDERERS`: opt in to the legacy Metal/Vulkan renderers while WebGPU replaces them.
+- `LAMBDAUI_RENDERER`: `AUTO` or `WEBGPU`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` for WebGPU builds.
 - `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.
@@ -132,7 +127,7 @@ docs/                 Project documentation
 - `LAMBDAUI_PROFILE_REACTIVE`: compile reactive profiling counters.
 - `LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING`: log built-in application event handlers.
 
-The CMake target exports `LAMBDAUI_NATIVE_RENDERERS`; it is `1` only for legacy Metal/Vulkan renderer builds.
+The CMake target exports `LAMBDAUI_NATIVE_RENDERERS=0`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=0`, and `LAMBDAUI_WEBGPU=1` for supported renderer builds.
 For WebGPU builds, `webGpuCanvasHandles(canvas)` returns borrowed Dawn handles, and `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
 
 The build uses CMake `FetchContent` for `libtess2`, and for `doctest` when tests are enabled.

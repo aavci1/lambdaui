@@ -30,7 +30,7 @@ elseif(LAMBDAUI_DAWN_FETCH)
     GIT_TAG "${LAMBDAUI_DAWN_GIT_TAG}"
   )
   FetchContent_MakeAvailable(lambda_dawn)
-else()
+elseif(NOT TARGET dawn::webgpu_dawn)
   find_package(Dawn CONFIG QUIET)
 endif()
 

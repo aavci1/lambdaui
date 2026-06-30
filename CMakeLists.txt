@@ -38,12 +38,8 @@ set(LAMBDAUI_DAWN_GIT_TAG "main" CACHE STRING
   "Git tag, branch, or commit used when LAMBDAUI_DAWN_FETCH is enabled.")
 
 set(LAMBDAUI_RENDERER "AUTO" CACHE STRING
-    "LambdaUI renderer: AUTO, NATIVE or WEBGPU.")
-set_property(CACHE LAMBDAUI_RENDERER PROPERTY STRINGS AUTO NATIVE WEBGPU)
-option(LAMBDAUI_ENABLE_NATIVE_RENDERERS
-  "Opt in to the legacy Metal/Vulkan renderers while Dawn/WebGPU replaces the native backends."
-  OFF)
-set(LAMBDAUI_RENDERER_NATIVE OFF)
+    "LambdaUI renderer: AUTO or WEBGPU.")
+set_property(CACHE LAMBDAUI_RENDERER PROPERTY STRINGS AUTO WEBGPU)
 set(LAMBDAUI_RENDERER_WEBGPU OFF)
 if(LAMBDAUI_RENDERER STREQUAL "AUTO")
   if(LAMBDAUI_DAWN_SOURCE_DIR OR LAMBDAUI_DAWN_FETCH)
@@ -57,23 +53,16 @@ if(LAMBDAUI_RENDERER STREQUAL "AUTO")
     if(TARGET dawn::webgpu_dawn)
       set(LAMBDAUI_RENDERER_WEBGPU ON)
       message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected WEBGPU because Dawn was found.")
-    elseif(LAMBDAUI_ENABLE_NATIVE_RENDERERS)
-      set(LAMBDAUI_RENDERER_NATIVE ON)
-      message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected NATIVE because Dawn was not found.")
     else()
       message(FATAL_ERROR
-        "LambdaUI: LAMBDAUI_RENDERER=AUTO could not select WEBGPU because Dawn was not found "
-        "and legacy native renderers are disabled. Configure Dawn with CMAKE_PREFIX_PATH, "
-        "LAMBDAUI_DAWN_SOURCE_DIR, or LAMBDAUI_DAWN_FETCH=ON; or opt in to the legacy "
-        "Metal/Vulkan renderers with LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON.")
+        "LambdaUI: LAMBDAUI_RENDERER=AUTO could not select WEBGPU because Dawn was not found. "
+        "Configure Dawn with CMAKE_PREFIX_PATH, LAMBDAUI_DAWN_SOURCE_DIR, or "
+        "LAMBDAUI_DAWN_FETCH=ON.")
     endif()
   endif()
 elseif(LAMBDAUI_RENDERER STREQUAL "NATIVE")
-  if(NOT LAMBDAUI_ENABLE_NATIVE_RENDERERS)
-    message(FATAL_ERROR
-      "LambdaUI: LAMBDAUI_RENDERER=NATIVE requires LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON.")
-  endif()
-  set(LAMBDAUI_RENDERER_NATIVE ON)
+  message(FATAL_ERROR
+    "LambdaUI: LAMBDAUI_RENDERER=NATIVE has been removed. Configure Dawn and use WEBGPU.")
 elseif(LAMBDAUI_RENDERER STREQUAL "WEBGPU")
   set(LAMBDAUI_RENDERER_WEBGPU ON)
 else()
@@ -109,74 +98,6 @@ endif()
 if(LAMBDAUI_PLATFORM_MACOS)
   enable_language(OBJC)
   enable_language(OBJCXX)
-endif()
-
-if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_NATIVE)
-  find_program(LAMBDAUI_XCRUN_EXECUTABLE xcrun)
-  if(NOT LAMBDAUI_XCRUN_EXECUTABLE)
-    message(FATAL_ERROR
-      "LambdaUI macOS builds require xcrun. Install Xcode from the App Store or Apple Developer, "
-      "then select it with: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer")
-  endif()
-
-  execute_process(
-    COMMAND ${LAMBDAUI_XCRUN_EXECUTABLE} -sdk macosx -find metal
-    RESULT_VARIABLE LAMBDAUI_METAL_FIND_RESULT
-    OUTPUT_VARIABLE LAMBDAUI_METAL_FIND_OUTPUT
-    ERROR_VARIABLE LAMBDAUI_METAL_FIND_ERROR
-  )
-  if(NOT LAMBDAUI_METAL_FIND_RESULT EQUAL 0)
-    string(STRIP "${LAMBDAUI_METAL_FIND_OUTPUT}" LAMBDAUI_METAL_FIND_OUTPUT)
-    string(STRIP "${LAMBDAUI_METAL_FIND_ERROR}" LAMBDAUI_METAL_FIND_ERROR)
-    message(FATAL_ERROR
-      "LambdaUI macOS builds require the Metal shader compiler (`xcrun -sdk macosx metal`). "
-      "Install full Xcode, not only the Command Line Tools, then run: "
-      "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer\n"
-      "If Xcode was just installed or updated, accept the license with: "
-      "sudo xcodebuild -license accept\n"
-      "xcrun output: ${LAMBDAUI_METAL_FIND_OUTPUT}${LAMBDAUI_METAL_FIND_ERROR}")
-  endif()
-
-  execute_process(
-    COMMAND ${LAMBDAUI_XCRUN_EXECUTABLE} -sdk macosx metal --help
-    RESULT_VARIABLE LAMBDAUI_METAL_HELP_RESULT
-    OUTPUT_VARIABLE LAMBDAUI_METAL_HELP_OUTPUT
-    ERROR_VARIABLE LAMBDAUI_METAL_HELP_ERROR
-  )
-  if(LAMBDAUI_METAL_HELP_OUTPUT MATCHES "missing Metal Toolchain" OR
-      LAMBDAUI_METAL_HELP_ERROR MATCHES "missing Metal Toolchain")
-    message(FATAL_ERROR
-      "LambdaUI macOS builds require Xcode's optional Metal Toolchain component. "
-      "Install it with: xcodebuild -downloadComponent MetalToolchain\n"
-      "xcrun output: ${LAMBDAUI_METAL_HELP_OUTPUT}${LAMBDAUI_METAL_HELP_ERROR}")
-  endif()
-
-  execute_process(
-    COMMAND ${LAMBDAUI_XCRUN_EXECUTABLE} -sdk macosx -find metallib
-    RESULT_VARIABLE LAMBDAUI_METALLIB_FIND_RESULT
-    OUTPUT_VARIABLE LAMBDAUI_METALLIB_FIND_OUTPUT
-    ERROR_VARIABLE LAMBDAUI_METALLIB_FIND_ERROR
-  )
-  if(NOT LAMBDAUI_METALLIB_FIND_RESULT EQUAL 0)
-    string(STRIP "${LAMBDAUI_METALLIB_FIND_OUTPUT}" LAMBDAUI_METALLIB_FIND_OUTPUT)
-    string(STRIP "${LAMBDAUI_METALLIB_FIND_ERROR}" LAMBDAUI_METALLIB_FIND_ERROR)
-    message(FATAL_ERROR
-      "LambdaUI macOS builds require the Metal library tool (`xcrun -sdk macosx metallib`). "
-      "Install full Xcode, not only the Command Line Tools, then run: "
-      "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer\n"
-      "If Xcode was just installed or updated, accept the license with: "
-      "sudo xcodebuild -license accept\n"
-      "If this Xcode install is missing optional Metal tools, install them with: "
-      "xcodebuild -downloadComponent MetalToolchain\n"
-      "xcrun output: ${LAMBDAUI_METALLIB_FIND_OUTPUT}${LAMBDAUI_METALLIB_FIND_ERROR}")
-  endif()
-
-  find_program(LAMBDAUI_XXD_EXECUTABLE xxd)
-  if(NOT LAMBDAUI_XXD_EXECUTABLE)
-    message(FATAL_ERROR
-      "LambdaUI macOS builds require xxd to embed the compiled Metal shader library. "
-      "Install Xcode or Vim/xxd and make sure xxd is on PATH.")
-  endif()
 endif()
 
 FetchContent_Declare(libtess2

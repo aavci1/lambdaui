@@ -13,16 +13,14 @@ Common requirements:
 macOS requirements:
 
 - macOS 12 or newer deployment target.
-- Full Xcode, not only Command Line Tools.
-- `xcrun`, `metal`, `metallib`, and `xxd` available on `PATH`.
-- Cocoa, Foundation, QuartzCore, Metal, MetalKit, CoreText, and CoreVideo frameworks.
+- Xcode or Command Line Tools with a macOS SDK.
+- Cocoa, Foundation, QuartzCore, CoreText, and CoreVideo frameworks.
 
 Linux Wayland requirements:
 
 - `pkg-config`.
 - `wayland-client`, `wayland-cursor`, and `wayland-protocols`.
 - `xkbcommon`, FreeType, fontconfig, HarfBuzz, librsvg, and zlib.
-- Native renderer only: `libdrm`, Vulkan loader/headers, and `glslangValidator` or `glslang` for shader compilation.
 
 Package names vary by distribution. Install development packages, not just runtime packages.
 
@@ -81,24 +79,20 @@ cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=AUTO -DCMAKE_PREFIX_PATH=/path/to
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
-cmake -S . -B build-native -DLAMBDAUI_RENDERER=NATIVE -DLAMBDAUI_ENABLE_NATIVE_RENDERERS=ON
 ```
 
-`AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`. Legacy Metal/Vulkan renderers are disabled by default and require `LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON`. WebGPU builds define `LAMBDAUI_WEBGPU=1` and do not require Vulkan/libdrm/glslang on Linux.
+`AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`. If Dawn is not available, configure fails with Dawn setup guidance. WebGPU builds define `LAMBDAUI_WEBGPU=1` and do not require Vulkan/libdrm/glslang on Linux.
 
 Platform defines exported to consumers:
 
-- `LAMBDAUI_NATIVE_RENDERERS=1`, `LAMBDAUI_METAL=1`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=0` on native macOS builds.
-- `LAMBDAUI_NATIVE_RENDERERS=1`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1`, `LAMBDAUI_WEBGPU=0` on native Linux Wayland builds.
 - `LAMBDAUI_NATIVE_RENDERERS=0`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=1` on WebGPU builds.
 
-Use these defines to guard platform-specific APIs. Legacy Metal/Vulkan entry points such as Vulkan image import require both `LAMBDAUI_NATIVE_RENDERERS=1` and their backend define. WebGPU builds expose borrowed Dawn handles through `webGpuCanvasHandles(canvas)` for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
+Use these defines to guard platform-specific APIs. WebGPU builds expose borrowed Dawn handles through `webGpuCanvasHandles(canvas)` for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
 
 ## Useful Build Options
 
 - `LAMBDAUI_BUILD_DEMOS`: build standalone demos under `demos/`.
-- `LAMBDAUI_RENDERER`: select `AUTO`, `NATIVE`, or `WEBGPU`.
-- `LAMBDAUI_ENABLE_NATIVE_RENDERERS`: opt in to the legacy Metal/Vulkan renderers while WebGPU replaces them.
+- `LAMBDAUI_RENDERER`: select `AUTO` or `WEBGPU`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` when an installed package or source checkout is not provided.
 - `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.
@@ -147,7 +141,7 @@ cmake --build build --target lambda-tests
 ctest --test-dir build --output-on-failure
 ```
 
-Platform-specific tests are included only when their backend is enabled. For example, Metal canvas tests build on native macOS, while Vulkan render-target tests build for native Linux Vulkan backends.
+Platform-specific tests are included for the selected platform. The active renderer path is Dawn/WebGPU.
 
 ## Demos
 
@@ -161,18 +155,5 @@ Enable demos with `LAMBDAUI_BUILD_DEMOS=ON`. The demos exercise the main built-i
 - Control demos such as `button-demo`, `textinput-demo`, `table-demo`, `popover-demo`, `toast-demo`, `slider-demo`, and `select-demo`.
 
 ## Troubleshooting
-
-If macOS shader compilation fails, make sure full Xcode is selected:
-
-```sh
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-sudo xcodebuild -license accept
-```
-
-If Xcode reports a missing Metal toolchain, install it:
-
-```sh
-xcodebuild -downloadComponent MetalToolchain
-```
 
 If Linux configuration fails, read the missing `pkg-config` package in the CMake error and install the matching development package.

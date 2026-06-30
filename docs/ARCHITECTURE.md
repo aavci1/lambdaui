@@ -1,6 +1,6 @@
 # Architecture
 
-LambdaUI is organized as a native C++ UI framework with a retained scene graph, fine-grained reactivity, backend-specific renderers, and platform window/input integrations.
+LambdaUI is organized as a native C++ UI framework with a retained scene graph, fine-grained reactivity, a Dawn/WebGPU renderer, and platform window/input integrations.
 
 ## Repository Layout
 
@@ -30,7 +30,7 @@ Use `include/Lambda.hpp` as the broad umbrella include. Use narrower headers fro
 - `UI`: `Application`, `Window`, `Element`, components, hooks, environments, commands, menus, overlays, popovers, and built-in views.
 - `Debug`: debug flags and performance counters.
 
-The implementation mirrors these modules in `src/`. Platform-specific code lives under `src/Platform`, `src/Graphics/Metal`, `src/Graphics/Vulkan`, and `src/Graphics/Linux`.
+The implementation mirrors these modules in `src/`. Platform-specific code lives under `src/Platform`, `src/Graphics/WebGPU`, and `src/Graphics/Linux`.
 
 ## Runtime Flow
 
@@ -45,7 +45,7 @@ The high-level flow for a typical app is:
 7. Platform input is normalized into LambdaUI input events and routed by `Runtime`.
 8. Dirty retained nodes request redraws.
 9. `SceneRenderer` traverses the scene graph and emits drawing commands to `Canvas`.
-10. The active backend presents through Metal or Vulkan.
+10. The WebGPU renderer presents through Dawn-managed platform surfaces.
 
 The key point: ordinary component bodies are mount-time declarations. LambdaUI does not repeatedly rerun arbitrary bodies to discover every property change. Reactive bindings and control-flow views update the retained tree.
 
@@ -120,20 +120,18 @@ Core files:
 
 Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
 
-Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` prefers Dawn/WebGPU when Dawn is explicitly configured or discoverable. Legacy Metal/Vulkan renderers are disabled by default; `LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON` makes `LAMBDAUI_RENDERER=NATIVE` available during the migration. `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU.
+Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` selects Dawn/WebGPU when Dawn is explicitly configured or discoverable. `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU. The legacy Metal/Vulkan renderer selection path has been removed from CMake.
 
 macOS rendering:
 
 - Cocoa windowing.
-- Metal canvas and render targets.
+- WebGPU canvas and render targets over CAMetalLayer.
 - CoreText text system.
-- Metal shaders compiled and embedded at build time.
 
 Linux rendering:
 
-- Vulkan canvas and render targets.
+- WebGPU canvas and render targets over Wayland surfaces.
 - FreeType/fontconfig/HarfBuzz text system.
-- GLSL shaders compiled to SPIR-V headers at build time.
 - Wayland client presentation.
 
 WebGPU rendering:
@@ -146,10 +144,8 @@ WebGPU rendering:
 - Consumers can query borrowed `WGPUDevice`, `WGPUQueue`, and render format handles from a WebGPU canvas.
 - Backdrop blur snapshots previously rendered pixels into WebGPU textures, runs separable blur passes, then composites the masked region.
 
-Rendering code is split across:
+Active rendering code is split across:
 
-- `src/Graphics/Metal`
-- `src/Graphics/Vulkan`
 - `src/Graphics/WebGPU`
 - `src/Graphics/Linux`
 - `src/SceneGraph/SceneRenderer.cpp`
@@ -186,15 +182,15 @@ Platform selection is controlled by `LAMBDAUI_PLATFORM`; renderer selection is c
 `MACOS`:
 
 - Uses Objective-C++ sources in `src/Platform/Mac`.
-- Uses Cocoa, Metal, MetalKit, QuartzCore, Foundation, CoreText, and CoreVideo.
-- Defines `LAMBDAUI_NATIVE_RENDERERS=1` and `LAMBDAUI_METAL=1`.
+- Uses Cocoa, CAMetalLayer, QuartzCore, Foundation, CoreText, CoreVideo, and Dawn/WebGPU.
+- Defines `LAMBDAUI_NATIVE_RENDERERS=0` and `LAMBDAUI_WEBGPU=1`.
 
 `LINUX_WAYLAND`:
 
 - Uses Wayland client protocols and `src/Platform/Linux/Wayland*`.
-- Uses Vulkan for rendering.
+- Uses Dawn/WebGPU for rendering.
 - Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
-- Defines `LAMBDAUI_NATIVE_RENDERERS=1` and `LAMBDAUI_VULKAN=1`.
+- Defines `LAMBDAUI_NATIVE_RENDERERS=0` and `LAMBDAUI_WEBGPU=1`.
 
 `WEBGPU` renderer:
 
@@ -210,7 +206,7 @@ Platform selection is controlled by `LAMBDAUI_PLATFORM`; renderer selection is c
 - Add or change a built-in control: `include/Lambda/UI/Views`, `src/UI/Views`, and a matching demo/test when practical.
 - Change reactive behavior: `include/Lambda/Reactive` and `src/Reactive`.
 - Change layout behavior: `include/Lambda/Layout`, `src/Layout`, `SceneNode::relayout`, and layout tests.
-- Change rendering output: `src/SceneGraph/SceneRenderer.cpp` plus the relevant Metal/Vulkan canvas code.
+- Change rendering output: `src/SceneGraph/SceneRenderer.cpp` plus `src/Graphics/WebGPU`.
 - Change input routing: `src/UI/Runtime.cpp`, `include/Lambda/SceneGraph/SceneTraversal.hpp`, and runtime input tests.
 - Change platform window behavior: `src/Platform/Mac` or `src/Platform/Linux/Wayland*`.
 - Change app build integration: `cmake/LambdaApp.cmake`.

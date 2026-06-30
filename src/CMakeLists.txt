@@ -138,39 +138,7 @@ add_custom_target(lambdaui_module_dependency_check
   VERBATIM
 )
 
-if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_NATIVE)
-  set(LAMBDAUI_METAL_SOURCE ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Graphics/Metal/CanvasShaders.metal)
-  set(LAMBDAUI_METAL_AIR ${CMAKE_CURRENT_BINARY_DIR}/CanvasShaders.air)
-  set(LAMBDAUI_METALLIB ${CMAKE_CURRENT_BINARY_DIR}/LambdaUIShaders.metallib)
-  set(LAMBDAUI_METALLIB_EMBED_H ${CMAKE_CURRENT_BINARY_DIR}/LambdaUIShaders.metallib.h)
-  add_custom_command(
-    OUTPUT ${LAMBDAUI_METAL_AIR} ${LAMBDAUI_METALLIB} ${LAMBDAUI_METALLIB_EMBED_H}
-    COMMAND xcrun -sdk macosx metal -mmacosx-version-min=11.0 -std=metal3.0 -c ${LAMBDAUI_METAL_SOURCE} -o ${LAMBDAUI_METAL_AIR}
-    COMMAND xcrun -sdk macosx metallib ${LAMBDAUI_METAL_AIR} -o ${LAMBDAUI_METALLIB}
-    COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}
-            xxd -i LambdaUIShaders.metallib LambdaUIShaders.metallib.h
-    DEPENDS ${LAMBDAUI_METAL_SOURCE}
-    COMMENT "Compile CanvasShaders.metal to LambdaUIShaders.metallib (embedded)"
-    VERBATIM
-  )
-  add_custom_target(lambdaui_shaders DEPENDS ${LAMBDAUI_METALLIB_EMBED_H})
-  add_dependencies(lambdaui lambdaui_shaders)
-  target_sources(lambdaui PRIVATE
-    UI/Application.mm
-    Graphics/CoreTextSystem.mm
-    Graphics/Metal/MetalFrameRecorder.mm
-    Graphics/Metal/GlyphAtlas.mm
-    Graphics/Metal/MetalImage.mm
-    Graphics/Metal/MetalRenderTarget.mm
-    Graphics/Metal/MetalPathRasterizer.cpp
-    Graphics/Metal/MetalShaderLibrary.mm
-    Graphics/Metal/MetalDeviceResources.mm
-    Graphics/Metal/MetalCanvas.mm
-    Platform/Mac/MacApplication.mm
-    Platform/Mac/MacMetalWindow.mm
-    Platform/Mac/MacClipboard.mm
-  )
-elseif(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
+if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
   target_sources(lambdaui PRIVATE
     UI/Application.mm
     Graphics/CoreTextSystem.mm
@@ -198,11 +166,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
   pkg_check_modules(LIBRSVG REQUIRED IMPORTED_TARGET librsvg-2.0)
   pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
-  if(LAMBDAUI_RENDERER_NATIVE)
-    pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
-    pkg_check_modules(VULKAN REQUIRED IMPORTED_TARGET vulkan)
-    find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
-  endif()
   lambda_setup_wayland_protocol_paths("${WAYLAND_PROTOCOLS_DIR}")
   add_library(lambda_wayland_client_protocols OBJECT
     ${LAMBDAUI_FRAMEWORK_PROTOCOL_DIR}/wayland/tablet-v2-tool-interface-stub.c)
@@ -230,20 +193,7 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     Platform/Linux/WaylandApplication.cpp
     Platform/Linux/WaylandWindow.cpp
   )
-  if(LAMBDAUI_RENDERER_NATIVE)
-    target_sources(lambdaui PRIVATE
-      Graphics/Vulkan/VulkanAllocator.cpp
-      Graphics/Vulkan/VulkanContext.cpp
-      Graphics/Vulkan/VulkanDrawCommands.cpp
-      Graphics/Vulkan/VulkanFrameRecorder.cpp
-      Graphics/Vulkan/VulkanGlyphAtlas.cpp
-      Graphics/Vulkan/VulkanGpuCanvas.cpp
-      Graphics/Vulkan/VulkanImage.cpp
-      Graphics/Vulkan/VulkanPipelines.cpp
-      Graphics/Vulkan/VulkanRenderTarget.cpp
-      Graphics/Vulkan/VulkanSwapchain.cpp
-    )
-  elseif(LAMBDAUI_RENDERER_WEBGPU)
+  if(LAMBDAUI_RENDERER_WEBGPU)
     target_sources(lambdaui PRIVATE
       Graphics/WebGPU/WebGpuContext.cpp
       Graphics/WebGPU/WebGpuCanvas.cpp
@@ -251,38 +201,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     )
   endif()
   target_link_libraries(lambdaui PRIVATE lambda_wayland_client_protocols)
-endif()
-
-if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_NATIVE)
-  set(LAMBDA_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
-  file(MAKE_DIRECTORY ${LAMBDA_VULKAN_GENERATED_DIR})
-  set(_lambda_vulkan_shader_headers)
-  foreach(_lambda_shader rect.vert rect.frag callout.vert callout.frag image.vert image.frag image_unpremultiply.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
-    string(REPLACE "." "_" _lambda_shader_name ${_lambda_shader})
-    set(_lambda_shader_src ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Graphics/Vulkan/shaders/${_lambda_shader})
-    set(_lambda_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_lambda_shader}.spv)
-    set(_lambda_shader_header ${LAMBDA_VULKAN_GENERATED_DIR}/${_lambda_shader_name}_spv.hpp)
-    add_custom_command(
-      OUTPUT ${_lambda_shader_header}
-      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders
-      COMMAND ${GLSLANG_VALIDATOR} -V ${_lambda_shader_src} -o ${_lambda_shader_spv}
-      COMMAND ${CMAKE_COMMAND}
-              -DINPUT=${_lambda_shader_spv}
-              -DOUTPUT=${_lambda_shader_header}
-              -DSYMBOL=lambda_${_lambda_shader_name}_spv
-              -P ${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaEmbedBinary.cmake
-      DEPENDS ${_lambda_shader_src} ${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaEmbedBinary.cmake
-      VERBATIM
-    )
-    list(APPEND _lambda_vulkan_shader_headers ${_lambda_shader_header})
-  endforeach()
-  add_custom_target(lambda_vulkan_shaders DEPENDS ${_lambda_vulkan_shader_headers})
-  add_custom_target(lambda_vulkan_shaders_check
-    DEPENDS ${_lambda_vulkan_shader_headers}
-    COMMENT "Regenerating Vulkan SPIR-V headers from shader sources"
-    VERBATIM
-  )
-  add_dependencies(lambdaui lambda_vulkan_shaders)
 endif()
 
 target_include_directories(lambdaui PUBLIC
@@ -323,39 +241,10 @@ if(LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
   target_compile_definitions(lambdaui PRIVATE LAMBDAUI_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
 endif()
 
-set(LAMBDAUI_NATIVE_RENDERERS_DEFINE 0)
-if(LAMBDAUI_RENDERER_NATIVE)
-  set(LAMBDAUI_NATIVE_RENDERERS_DEFINE 1)
-endif()
 target_compile_definitions(lambdaui PUBLIC
-  LAMBDAUI_NATIVE_RENDERERS=${LAMBDAUI_NATIVE_RENDERERS_DEFINE})
+  LAMBDAUI_NATIVE_RENDERERS=0)
 
-if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_NATIVE)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=1 LAMBDAUI_VULKAN=0 LAMBDAUI_WEBGPU=0 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
-  target_link_libraries(lambdaui PRIVATE
-    "-framework Cocoa"
-    "-framework QuartzCore"
-    "-framework Metal"
-    "-framework MetalKit"
-    "-framework Foundation"
-    "-framework CoreText"
-    "-framework CoreVideo")
-elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_NATIVE)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=1 LAMBDAUI_WEBGPU=0 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
-  target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
-  target_link_libraries(lambdaui PRIVATE
-    PkgConfig::WAYLAND_CLIENT
-    PkgConfig::WAYLAND_CURSOR
-    PkgConfig::LIBDRM
-    PkgConfig::XKBCOMMON
-    PkgConfig::VULKAN
-    PkgConfig::FREETYPE
-    PkgConfig::FONTCONFIG
-    PkgConfig::HARFBUZZ
-    PkgConfig::LIBRSVG
-    PkgConfig::ZLIB
-    ${CMAKE_DL_LIBS})
-elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_WEBGPU)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_WEBGPU)
   target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=0 LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
   target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
   target_link_libraries(lambdaui PRIVATE
