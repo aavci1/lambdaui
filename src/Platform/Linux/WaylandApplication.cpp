@@ -2,14 +2,6 @@
 #include "Platform/Linux/WaylandNativeSurface.hpp"
 #include "Platform/Linux/WaylandOutputs.hpp"
 
-#if !LAMBDAUI_WEBGPU
-#define VK_USE_PLATFORM_WAYLAND_KHR
-#include <vulkan/vulkan.h>
-
-#include "Graphics/Vulkan/VulkanCheck.hpp"
-#include "Platform/Linux/GpuSurfaceProvider.hpp"
-#endif
-
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
@@ -51,11 +43,7 @@ std::string appDir(std::string const& base, std::string const& appName) {
   return path.string();
 }
 
-class WaylandApplication final : public platform::Application
-#if !LAMBDAUI_WEBGPU
-    , public platform::GpuSurfaceProvider
-#endif
-{
+class WaylandApplication final : public platform::Application {
 public:
   void initialize() override {}
 
@@ -104,33 +92,6 @@ public:
   std::vector<std::string> availableOutputs() const override {
     return linux_platform::availableWaylandOutputs();
   }
-
-#if !LAMBDAUI_WEBGPU
-  platform::GpuSurfaceProvider* gpuSurfaceProvider() override {
-    return this;
-  }
-
-  std::span<char const* const> requiredInstanceExtensions() const override {
-    static constexpr char const* exts[] = {
-        VK_KHR_SURFACE_EXTENSION_NAME,
-        VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
-    };
-    return exts;
-  }
-
-  VkSurfaceKHR createSurface(VkInstance instance, void* nativeHandle) override {
-    auto* native = static_cast<WaylandNativeSurface*>(nativeHandle);
-    if (!native || !native->display || !native->surface) {
-      throw std::runtime_error("Invalid Wayland Vulkan surface handle");
-    }
-    auto info = vkStructure<VkWaylandSurfaceCreateInfoKHR>(VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR);
-    info.display = native->display;
-    info.surface = native->surface;
-    VkSurfaceKHR surface = VK_NULL_HANDLE;
-    vkCheck(vkCreateWaylandSurfaceKHR(instance, &info, nullptr, &surface), "vkCreateWaylandSurfaceKHR");
-    return surface;
-  }
-#endif
 
 private:
   void collectShortcuts(MenuItem const& item) {

@@ -101,7 +101,7 @@ float legacyAnimatedValue(float from,
   if (options.autoreverse && (iteration % 2) == 1) {
     t = 1.f - t;
   }
-  return lerp(from, to, legacyTimelineEasing(options.transition, t));
+  return lambdaui::lerp(from, to, legacyTimelineEasing(options.transition, t));
 }
 
 float legacyClipValue(float from,
@@ -119,7 +119,7 @@ float legacyClipValue(float from,
     return to;
   }
   float const t = static_cast<float>(elapsed / duration);
-  return lerp(from, to, legacyTimelineEasing(transition, t));
+  return lambdaui::lerp(from, to, legacyTimelineEasing(transition, t));
 }
 
 class FakeTextSystem final : public TextSystem {

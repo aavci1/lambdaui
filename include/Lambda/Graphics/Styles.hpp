@@ -24,7 +24,7 @@ enum class FillRule { NonZero, EvenOdd };
 inline constexpr std::size_t kMaxGradientStops = 4;
 inline constexpr std::size_t kMaxLinearGradientStops = kMaxGradientStops;
 
-/// Compositing / blend mode for drawing. The Metal backend maps each value to fixed-function
+/// Compositing / blend mode for drawing. The renderer maps each value to fixed-function
 /// blend state where possible; modes that are not representable use the same factors as `Normal`.
 enum class BlendMode {
   Normal,

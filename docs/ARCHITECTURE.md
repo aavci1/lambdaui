@@ -120,7 +120,7 @@ Core files:
 
 Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
 
-Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` selects Dawn/WebGPU when Dawn is explicitly configured or discoverable. `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU. The legacy Metal/Vulkan renderer selection path has been removed from CMake.
+Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` selects Dawn/WebGPU when Dawn is explicitly configured or discoverable. `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU. The legacy native renderer selection path has been removed from CMake.
 
 macOS rendering:
 
@@ -183,19 +183,19 @@ Platform selection is controlled by `LAMBDAUI_PLATFORM`; renderer selection is c
 
 - Uses Objective-C++ sources in `src/Platform/Mac`.
 - Uses Cocoa, CAMetalLayer, QuartzCore, Foundation, CoreText, CoreVideo, and Dawn/WebGPU.
-- Defines `LAMBDAUI_NATIVE_RENDERERS=0` and `LAMBDAUI_WEBGPU=1`.
+- Defines `LAMBDAUI_WEBGPU=1`.
 
 `LINUX_WAYLAND`:
 
 - Uses Wayland client protocols and `src/Platform/Linux/Wayland*`.
 - Uses Dawn/WebGPU for rendering.
 - Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
-- Defines `LAMBDAUI_NATIVE_RENDERERS=0` and `LAMBDAUI_WEBGPU=1`.
+- Defines `LAMBDAUI_WEBGPU=1`.
 
 `WEBGPU` renderer:
 
 - Uses Dawn for GPU device, queue, surface, and WebGPU command encoding.
-- Defines `LAMBDAUI_NATIVE_RENDERERS=0` and `LAMBDAUI_WEBGPU=1`.
+- Defines `LAMBDAUI_WEBGPU=1`.
 
 ## Runtime Resources
 

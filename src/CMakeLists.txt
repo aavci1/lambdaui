@@ -241,14 +241,10 @@ if(LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
   target_compile_definitions(lambdaui PRIVATE LAMBDAUI_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
 endif()
 
-target_compile_definitions(lambdaui PUBLIC
-  LAMBDAUI_NATIVE_RENDERERS=0)
-
 if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_WEBGPU)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=0 LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
   target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
-  target_link_libraries(lambdaui PRIVATE
-    dawn::webgpu_dawn
+  target_link_libraries(lambdaui PUBLIC dawn::webgpu_dawn PRIVATE
     PkgConfig::WAYLAND_CLIENT
     PkgConfig::WAYLAND_CURSOR
     PkgConfig::XKBCOMMON
@@ -259,9 +255,8 @@ if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_WEBGPU)
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
 elseif(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
-  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_METAL=0 LAMBDAUI_VULKAN=0 LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
-  target_link_libraries(lambdaui PRIVATE
-    dawn::webgpu_dawn
+  target_compile_definitions(lambdaui PUBLIC LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
+  target_link_libraries(lambdaui PUBLIC dawn::webgpu_dawn PRIVATE
     "-framework Cocoa"
     "-framework QuartzCore"
     "-framework Foundation"

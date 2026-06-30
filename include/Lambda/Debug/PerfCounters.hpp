@@ -67,16 +67,6 @@ struct RenderCounters {
   std::uint64_t recorderCapacityGrowthBytes = 0;
   std::uint64_t glyphAtlasGrowths = 0;
   std::uint64_t glyphAtlasGrowPixels = 0;
-  std::uint64_t vulkanRecordNs = 0;
-  std::uint64_t vulkanDrawOpsNs = 0;
-  std::uint64_t vulkanStackedBlurNs = 0;
-  std::uint64_t vulkanPathTessellateNs = 0;
-  std::uint64_t vulkanDrawOpsCalls = 0;
-  std::uint64_t vulkanDrawOpsVisited = 0;
-  std::uint64_t vulkanDrawOpsSubmitted = 0;
-  std::uint64_t vulkanScissorChanges = 0;
-  std::uint64_t vulkanStackedOps = 0;
-  std::uint64_t vulkanPathTessellations = 0;
 };
 
 struct SceneCounters {
@@ -474,44 +464,6 @@ inline void recordGlyphAtlasGrowth(std::uint64_t oldPixels, std::uint64_t newPix
   auto& render = detail::counters().render;
   ++render.glyphAtlasGrowths;
   render.glyphAtlasGrowPixels += newPixels > oldPixels ? newPixels - oldPixels : newPixels;
-}
-
-inline void recordVulkanRecordDuration(std::chrono::nanoseconds elapsed) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  detail::counters().render.vulkanRecordNs += static_cast<std::uint64_t>(elapsed.count());
-}
-
-inline void recordVulkanDrawOps(std::chrono::nanoseconds elapsed, std::uint64_t visited,
-                                std::uint64_t submitted, std::uint64_t scissorChanges) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  auto& render = detail::counters().render;
-  render.vulkanDrawOpsNs += static_cast<std::uint64_t>(elapsed.count());
-  ++render.vulkanDrawOpsCalls;
-  render.vulkanDrawOpsVisited += visited;
-  render.vulkanDrawOpsSubmitted += submitted;
-  render.vulkanScissorChanges += scissorChanges;
-}
-
-inline void recordVulkanStackedBlur(std::chrono::nanoseconds elapsed, std::uint64_t ops) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  auto& render = detail::counters().render;
-  render.vulkanStackedBlurNs += static_cast<std::uint64_t>(elapsed.count());
-  render.vulkanStackedOps += ops;
-}
-
-inline void recordVulkanPathTessellation(std::chrono::nanoseconds elapsed) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  auto& render = detail::counters().render;
-  render.vulkanPathTessellateNs += static_cast<std::uint64_t>(elapsed.count());
-  ++render.vulkanPathTessellations;
 }
 
 inline void recordBackdropBlurPreparedRun(std::uint64_t ops, std::uint64_t quads) {

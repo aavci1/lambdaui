@@ -302,7 +302,7 @@ class CountingBoundsNode final : public SceneNode {
 
 class DpiOnlyCanvas final : public Canvas {
   public:
-    Backend backend() const noexcept override { return Backend::Vulkan; }
+    Backend backend() const noexcept override { return Backend::WebGPU; }
     unsigned int windowHandle() const override { return 0; }
     void resize(int, int) override {}
     void updateDpiScale(float scaleX, float scaleY) override { dpiScale_ = std::max(scaleX, scaleY); }

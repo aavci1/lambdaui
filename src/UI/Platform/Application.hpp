@@ -14,8 +14,6 @@
 
 namespace lambdaui::platform {
 
-class GpuSurfaceProvider;
-
 struct ShortcutKey {
   KeyCode key = 0;
   Modifiers modifiers = Modifiers::None;
@@ -48,7 +46,6 @@ public:
   virtual std::string cacheDir() const = 0;
   virtual std::unique_ptr<Clipboard> createClipboard() { return nullptr; }
   virtual std::vector<std::string> availableOutputs() const { return {}; }
-  virtual GpuSurfaceProvider* gpuSurfaceProvider() { return nullptr; }
 };
 
 std::unique_ptr<Application> createApplication();

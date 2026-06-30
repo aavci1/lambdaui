@@ -81,13 +81,13 @@ cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
 ```
 
-`AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`. If Dawn is not available, configure fails with Dawn setup guidance. WebGPU builds define `LAMBDAUI_WEBGPU=1` and do not require Vulkan/libdrm/glslang on Linux.
+`AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`. If Dawn is not available, configure fails with Dawn setup guidance. WebGPU builds define `LAMBDAUI_WEBGPU=1`.
 
-Platform defines exported to consumers:
+Renderer defines exported to consumers:
 
-- `LAMBDAUI_NATIVE_RENDERERS=0`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=1` on WebGPU builds.
+- `LAMBDAUI_WEBGPU=1` on supported renderer builds.
 
-Use these defines to guard platform-specific APIs. WebGPU builds expose borrowed Dawn handles through `webGpuCanvasHandles(canvas)` for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
+Use this define to guard WebGPU-specific APIs. WebGPU builds expose borrowed Dawn handles through `webGpuCanvasHandles(canvas)` for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
 
 ## Useful Build Options
 

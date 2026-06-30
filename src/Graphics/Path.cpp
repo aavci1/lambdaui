@@ -136,7 +136,7 @@ void Path::rect(const Rect& rect, const CornerRadius& cornerRadius) {
   CornerRadius cr = cornerRadius;
   clampCornerRadii(w, h, cr);
 
-  // Single Rect command so Metal (and future backends) can use the same SDF path as drawRect.
+  // Single Rect command so the renderer can use the same SDF path as drawRect.
   pushCommand(CommandType::Rect, PathWinding::CounterClockwise,
               {x, y, w, h, cr.topLeft, cr.topRight, cr.bottomRight, cr.bottomLeft});
   invalidateBounds();
