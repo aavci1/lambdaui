@@ -41,31 +41,11 @@ namespace {
 
 void logUnsupportedWindowConfigOnce(char const* feature) {
   static bool loggedBackground = false;
-  static bool loggedLayerShell = false;
-  static bool loggedBackgroundBlur = false;
   bool* slot = nullptr;
   if (std::strcmp(feature, "background") == 0) slot = &loggedBackground;
-  else if (std::strcmp(feature, "layerShell") == 0) slot = &loggedLayerShell;
-  else if (std::strcmp(feature, "backgroundBlur") == 0) slot = &loggedBackgroundBlur;
   if (!slot || *slot) return;
   *slot = true;
-  if (std::strcmp(feature, "background") == 0) {
-    std::fprintf(stderr, "lambda: Window.background is not supported on this platform backend\n");
-  } else {
-    std::fprintf(stderr, "lambda: WindowConfig.%s is not supported on this platform backend\n", feature);
-  }
-}
-
-void validateWindowConfig(WindowConfig const& config, PlatformWindowCapabilities const& capabilities) {
-  char const* env = std::getenv("LAMBDA_LOG_WINDOW_CONFIG");
-  if (!env || !*env || *env == '0') return;
-
-  if (config.layerShell.enabled && !capabilities.supportsLayerShell) {
-    logUnsupportedWindowConfigOnce("layerShell");
-  }
-  if (config.layerShell.backgroundBlur && !capabilities.supportsBackgroundBlur) {
-    logUnsupportedWindowConfigOnce("backgroundBlur");
-  }
+  std::fprintf(stderr, "lambda: Window.background is not supported on this platform backend\n");
 }
 
 void validateWindowBackground(WindowBackground const& background, PlatformWindowCapabilities const& capabilities) {
@@ -265,7 +245,6 @@ void Window::Impl::shutdown() {
 Window::Window(const WindowConfig& config) {
   d = std::make_unique<Impl>(*this, config);
   d->platform_ = platform::createWindow(config);
-  validateWindowConfig(config, d->platform_->capabilities());
   d->platform_->setLambdaWindow(this);
   d->refreshChromeMetrics();
   Application::instance().eventQueue().post(WindowLifecycleEvent{
@@ -369,14 +348,6 @@ void Window::dismissPopover(PopoverSurfaceId id) {
     return entry.id == id;
   });
   d->platform_->dismissPopover(id);
-}
-
-void Window::setLayerShellKeyboardInteractive(bool enabled) {
-  d->platform_->setLayerShellKeyboardInteractive(enabled);
-}
-
-void Window::setLayerShellOptions(LayerShellOptions const& options) {
-  d->platform_->setLayerShellOptions(options);
 }
 
 void Window::setTransientParent(unsigned int parentHandle, bool modal) {

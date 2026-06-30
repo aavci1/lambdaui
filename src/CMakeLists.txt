@@ -193,8 +193,6 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
     "${LAMBDA_XDG_DECORATION_XML}|xdg-decoration-unstable-v1"
     "${LAMBDA_VIEWPORTER_XML}|viewporter"
     "${LAMBDA_FRACTIONAL_SCALE_XML}|fractional-scale-v1"
-    "${LAMBDA_XX_CUTOUTS_XML}|xx-cutouts-v1"
-    "${LAMBDA_WLR_LAYER_SHELL_XML}|wlr-layer-shell-unstable-v1"
     "${LAMBDA_EXT_BACKGROUND_EFFECT_XML}|ext-background-effect-v1"
     "${LAMBDA_CURSOR_SHAPE_XML}|cursor-shape-v1"
     "${LAMBDA_IDLE_INHIBIT_XML}|idle-inhibit-unstable-v1"

@@ -72,11 +72,6 @@ public:
 
   virtual void setCursor(Cursor /*kind*/) {}
 
-  /// Layer-shell surfaces only. No-op on xdg toplevel windows.
-  virtual void setLayerShellKeyboardInteractive(bool /*enabled*/) {}
-  /// Layer-shell surfaces only. No-op on xdg toplevel windows.
-  virtual void setLayerShellOptions(LayerShellOptions const& /*options*/) {}
-
   [[nodiscard]] virtual PlatformWindowCapabilities capabilities() const { return {}; }
 };
 

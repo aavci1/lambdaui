@@ -55,36 +55,8 @@ class OverlayManager;
 ///
 /// Backend matrix (config field → capability):
 /// - `background.kind == Glass` → native/compositor-backed window material where available
-/// - `layerShell` / `backgroundBlur` → Wayland compositor client only
 struct PlatformWindowCapabilities {
   bool supportsWindowGlass = false;
-  bool supportsLayerShell = false;
-  bool supportsBackgroundBlur = false;
-};
-
-enum class LayerShellLayer {
-  Background,
-  Bottom,
-  Top,
-  Overlay,
-};
-
-enum class LayerShellChromeStyle : std::uint8_t {
-  None,
-  BlurPanel,
-  BlurPanelBorder,
-};
-
-enum class LayerShellBackgroundEffectShape : std::uint8_t {
-  RoundedRect,
-  Callout,
-};
-
-enum class LayerShellCalloutPlacement : std::uint8_t {
-  Below,
-  Above,
-  End,
-  Start,
 };
 
 struct GlassEffectOptions {
@@ -97,53 +69,6 @@ struct GlassEffectOptions {
   Color tintColor{0.86f, 0.96f, 1.f, 0.56f};
   Color borderColor{1.f, 1.f, 1.f, 0.62f};
   float opacity = 1.f;
-};
-
-struct LayerShellChromeOptions {
-  LayerShellChromeStyle style = LayerShellChromeStyle::None;
-  GlassEffectOptions glass{};
-  CornerRadius cornerRadius{16.f};
-};
-
-struct LayerShellBackgroundEffectRegion {
-  int x = 0;
-  int y = 0;
-  int width = 0;
-  int height = 0;
-  LayerShellBackgroundEffectShape shape = LayerShellBackgroundEffectShape::RoundedRect;
-  LayerShellCalloutPlacement calloutPlacement = LayerShellCalloutPlacement::Below;
-  float arrowWidth = 16.f;
-  float arrowHeight = 8.f;
-};
-
-struct LayerShellInputRegion {
-  int x = 0;
-  int y = 0;
-  int width = 0;
-  int height = 0;
-};
-
-struct LayerShellOptions {
-  bool enabled = false;
-  LayerShellLayer layer = LayerShellLayer::Top;
-  std::string nameSpace;
-  bool anchorTop = false;
-  bool anchorBottom = false;
-  bool anchorLeft = false;
-  bool anchorRight = false;
-  int marginTop = 0;
-  int marginRight = 0;
-  int marginBottom = 0;
-  int marginLeft = 0;
-  int exclusiveZone = 0;
-  bool keyboardInteractive = false;
-  /// When supported by the compositor, apply a blurred background effect to the full surface region.
-  bool backgroundBlur = false;
-  /// Optional surface-local region for the background effect. When omitted, the full surface is used.
-  std::optional<LayerShellBackgroundEffectRegion> backgroundEffectRegion{};
-  /// Optional surface-local input region. An empty region makes the surface pointer-transparent.
-  std::optional<LayerShellInputRegion> inputRegion{};
-  LayerShellChromeOptions chrome{};
 };
 
 enum class WindowBackgroundKind : std::uint8_t {
@@ -173,9 +98,6 @@ struct WindowConfig {
   Size minSize{};
   Size maxSize{};
   std::string restoreId;
-  /// On Wayland, create this window as a layer-shell surface instead of an xdg_toplevel.
-  /// Other backends currently ignore this value.
-  LayerShellOptions layerShell{};
 };
 
 struct WindowState {
@@ -208,10 +130,6 @@ public:
                                std::optional<ComponentKey> anchorTrackComponentKey = std::nullopt,
                                std::optional<ComponentKey> anchorTrackLeafKey = std::nullopt);
   void dismissPopover(PopoverSurfaceId id);
-  /// Layer-shell windows only. Updates keyboard focus routing on the compositor.
-  void setLayerShellKeyboardInteractive(bool enabled);
-  /// Layer-shell windows only. Updates layer, anchors, margins, exclusive zone and chrome.
-  void setLayerShellOptions(LayerShellOptions const& options);
   unsigned int handle() const;
 
   /// Lazily creates the backing canvas on first use.

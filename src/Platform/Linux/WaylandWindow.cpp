@@ -25,8 +25,6 @@
 #include "ext-background-effect-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
-#include "wlr-layer-shell-unstable-v1-client-protocol.h"
-#include "xx-cutouts-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -227,8 +225,6 @@ struct SharedWaylandConnection {
   xdg_wm_base* wmBase = nullptr;
   zxdg_decoration_manager_v1* decorationManager = nullptr;
   std::uint32_t decorationManagerVersion = 0;
-  xx_cutouts_manager_v1* cutoutsManager = nullptr;
-  zwlr_layer_shell_v1* layerShell = nullptr;
   ext_background_effect_manager_v1* backgroundEffectManager = nullptr;
   wl_data_device_manager* dataDeviceManager = nullptr;
   wl_seat* seat = nullptr;
@@ -544,8 +540,6 @@ void clearDisconnectedWaylandGlobals(SharedWaylandConnection& shared) {
   shared.wmBase = nullptr;
   shared.decorationManager = nullptr;
   shared.decorationManagerVersion = 0;
-  shared.cutoutsManager = nullptr;
-  shared.layerShell = nullptr;
   shared.backgroundEffectManager = nullptr;
   shared.dataDeviceManager = nullptr;
   shared.seat = nullptr;
@@ -572,72 +566,12 @@ void clearDisconnectedWaylandGlobals(SharedWaylandConnection& shared) {
   clearClipboardOffers(shared, false);
 }
 
-std::uint32_t layerShellLayer(LayerShellLayer layer) {
-  switch (layer) {
-  case LayerShellLayer::Background: return ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND;
-  case LayerShellLayer::Bottom: return ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM;
-  case LayerShellLayer::Top: return ZWLR_LAYER_SHELL_V1_LAYER_TOP;
-  case LayerShellLayer::Overlay: return ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY;
-  }
-  return ZWLR_LAYER_SHELL_V1_LAYER_TOP;
-}
-
-std::uint32_t layerShellAnchor(LayerShellOptions const& options) {
-  std::uint32_t anchor = 0;
-  if (options.anchorTop) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP;
-  if (options.anchorBottom) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
-  if (options.anchorLeft) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT;
-  if (options.anchorRight) anchor |= ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
-  return anchor;
-}
-
-int roundedLayerShellDimension(float value) {
-  return std::max(0, static_cast<int>(std::lround(value)));
-}
-
-std::uint32_t layerShellProtocolWidth(Size const& size, LayerShellOptions const& options) {
-  int const width = roundedLayerShellDimension(size.width);
-  // Layer-shell size 0 is only valid on axes anchored to both opposing edges.
-  if (width == 0 && !(options.anchorLeft && options.anchorRight)) return 1u;
-  return static_cast<std::uint32_t>(width);
-}
-
-std::uint32_t layerShellProtocolHeight(Size const& size, LayerShellOptions const& options) {
-  int const height = roundedLayerShellDimension(size.height);
-  if (height == 0 && !(options.anchorTop && options.anchorBottom)) return 1u;
-  return static_cast<std::uint32_t>(height);
-}
-
 std::uint32_t colorToRgba(Color color) {
   auto channel = [&](float value) {
     return static_cast<std::uint32_t>(std::clamp(value, 0.f, 1.f) * 255.f + 0.5f);
   };
   return (channel(color.r) << 24u) | (channel(color.g) << 16u) | (channel(color.b) << 8u) |
          channel(color.a);
-}
-
-std::uint32_t backgroundEffectShape(LayerShellBackgroundEffectShape shape) {
-  switch (shape) {
-  case LayerShellBackgroundEffectShape::Callout:
-    return EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_CALLOUT;
-  case LayerShellBackgroundEffectShape::RoundedRect:
-  default:
-    return EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_ROUNDED_RECT;
-  }
-}
-
-std::uint32_t backgroundEffectCalloutPlacement(LayerShellCalloutPlacement placement) {
-  switch (placement) {
-  case LayerShellCalloutPlacement::Above:
-    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_ABOVE;
-  case LayerShellCalloutPlacement::End:
-    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_END;
-  case LayerShellCalloutPlacement::Start:
-    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_START;
-  case LayerShellCalloutPlacement::Below:
-  default:
-    return EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_BELOW;
-  }
 }
 
 int createPopupSharedMemoryFile(char const* name, std::size_t size) {
@@ -957,10 +891,6 @@ void releaseWaylandConnection() {
     gWaylandConnection.decorationManager = nullptr;
     gWaylandConnection.decorationManagerVersion = 0;
   }
-  if (gWaylandConnection.cutoutsManager) {
-    if (destroyProxies) xx_cutouts_manager_v1_destroy(gWaylandConnection.cutoutsManager);
-    gWaylandConnection.cutoutsManager = nullptr;
-  }
   if (gWaylandConnection.viewporter) {
     if (destroyProxies) wp_viewporter_destroy(gWaylandConnection.viewporter);
     gWaylandConnection.viewporter = nullptr;
@@ -976,10 +906,6 @@ void releaseWaylandConnection() {
   if (gWaylandConnection.compositor) {
     if (destroyProxies) wl_compositor_destroy(gWaylandConnection.compositor);
     gWaylandConnection.compositor = nullptr;
-  }
-  if (gWaylandConnection.layerShell) {
-    if (destroyProxies) zwlr_layer_shell_v1_destroy(gWaylandConnection.layerShell);
-    gWaylandConnection.layerShell = nullptr;
   }
   if (gWaylandConnection.backgroundEffectManager) {
     if (destroyProxies) ext_background_effect_manager_v1_destroy(gWaylandConnection.backgroundEffectManager);
@@ -1132,8 +1058,7 @@ class WaylandWindow final : public platform::Window, public platform::WindowEven
 public:
   explicit WaylandWindow(WindowConfig const& config)
       : handle_(gNextHandle.fetch_add(1)), size_(config.size), title_(config.title),
-        fullscreen_(config.fullscreen), titlebarMode_(config.titlebar),
-        layerShellConfig_(config.layerShell) {
+        fullscreen_(config.fullscreen), titlebarMode_(config.titlebar) {
     if (pipe(wakePipe_) != 0) {
       throw std::runtime_error("Failed to create Wayland wake pipe");
     }
@@ -1156,22 +1081,18 @@ public:
       wl_surface_set_buffer_scale(surface_, 1);
     }
     appId_ = Application::instance().name();
-    if (layerShellConfig_.enabled) {
-      configureLayerShellSurface();
-    } else {
-      xdgSurface_ = xdg_wm_base_get_xdg_surface(shared->wmBase, surface_);
-      xdg_surface_add_listener(xdgSurface_, &xdgSurfaceListener_, this);
-      toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
-      xdg_toplevel_add_listener(toplevel_, &toplevelListener_, this);
-      xdg_toplevel_set_title(toplevel_, title_.c_str());
-      xdg_toplevel_set_app_id(toplevel_, appId_.c_str());
-      setTransientParent(detail::currentWindowCreationTransientParentHandle(),
-                         detail::currentWindowCreationModal());
-      if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
-      if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
-      configureDecorationProtocol();
-      if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
-    }
+    xdgSurface_ = xdg_wm_base_get_xdg_surface(shared->wmBase, surface_);
+    xdg_surface_add_listener(xdgSurface_, &xdgSurfaceListener_, this);
+    toplevel_ = xdg_surface_get_toplevel(xdgSurface_);
+    xdg_toplevel_add_listener(toplevel_, &toplevelListener_, this);
+    xdg_toplevel_set_title(toplevel_, title_.c_str());
+    xdg_toplevel_set_app_id(toplevel_, appId_.c_str());
+    setTransientParent(detail::currentWindowCreationTransientParentHandle(),
+                       detail::currentWindowCreationModal());
+    if (config.minSize.width > 0.f || config.minSize.height > 0.f) setMinSize(config.minSize);
+    if (config.maxSize.width > 0.f || config.maxSize.height > 0.f) setMaxSize(config.maxSize);
+    configureDecorationProtocol();
+    if (fullscreen_) xdg_toplevel_set_fullscreen(toplevel_, nullptr);
     updateBackgroundEffectRegion();
     updateOpaqueRegion();
     wl_surface_commit(surface_);
@@ -1214,8 +1135,6 @@ public:
     if (destroyProxies) {
       if (frameCallback_) wl_callback_destroy(frameCallback_);
       if (backgroundEffect_) ext_background_effect_surface_v1_destroy(backgroundEffect_);
-      if (layerSurface_) zwlr_layer_surface_v1_destroy(layerSurface_);
-      if (cutouts_) xx_cutouts_v1_destroy(cutouts_);
       if (decoration_) zxdg_toplevel_decoration_v1_destroy(decoration_);
       if (toplevel_) xdg_toplevel_destroy(toplevel_);
       if (xdgSurface_) xdg_surface_destroy(xdgSurface_);
@@ -1258,16 +1177,6 @@ public:
 
   void resize(Size const& newSize) override {
     size_ = newSize;
-    if (layerSurface_) {
-      zwlr_layer_surface_v1_set_size(layerSurface_,
-                                     layerShellProtocolWidth(size_, layerShellConfig_),
-                                     layerShellProtocolHeight(size_, layerShellConfig_));
-      updateOpaqueRegion();
-      commitSurface();
-      if (size_.width <= 0.f || size_.height <= 0.f) {
-        return;
-      }
-    }
     if (lambdaWindow_) lambdaWindow_->updateCanvasDpiScale(dpiScaleX_, dpiScaleY_);
     if (canvas_) {
       canvas_->resize(static_cast<int>(std::max(1, static_cast<int>(std::lround(size_.width)))),
@@ -1281,42 +1190,9 @@ public:
     requestResizeRedraw();
   }
 
-  void setLayerShellKeyboardInteractive(bool enabled) override {
-    if (!layerSurface_) {
-      return;
-    }
-    zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_, enabled ? 1u : 0u);
-    commitSurface();
-  }
-
-  void setLayerShellOptions(LayerShellOptions const& options) override {
-    layerShellConfig_ = options;
-    if (!layerSurface_) {
-      return;
-    }
-    zwlr_layer_surface_v1_set_anchor(layerSurface_, layerShellAnchor(layerShellConfig_));
-    zwlr_layer_surface_v1_set_margin(layerSurface_,
-                                     layerShellConfig_.marginTop,
-                                     layerShellConfig_.marginRight,
-                                     layerShellConfig_.marginBottom,
-                                     layerShellConfig_.marginLeft);
-    zwlr_layer_surface_v1_set_exclusive_zone(layerSurface_, layerShellConfig_.exclusiveZone);
-    zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
-                                                     layerShellConfig_.keyboardInteractive ? 1u : 0u);
-    zwlr_layer_surface_v1_set_size(layerSurface_,
-                                   layerShellProtocolWidth(size_, layerShellConfig_),
-                                   layerShellProtocolHeight(size_, layerShellConfig_));
-    updateBackgroundEffectRegion();
-    updateOpaqueRegion();
-    updateLayerShellInputRegion();
-    commitSurface();
-  }
-
   PlatformWindowCapabilities capabilities() const override {
     return {
         .supportsWindowGlass = shared_ && shared_->backgroundEffectManager,
-        .supportsLayerShell = true,
-        .supportsBackgroundBlur = shared_ && shared_->backgroundEffectManager,
     };
   }
 
@@ -1412,17 +1288,10 @@ public:
     metrics.titlebarHeight = kClientTitlebarHeight;
     if (titlebarMode_ == WindowTitlebarMode::Integrated && serverSideDecorationsActive_) {
       metrics.systemControlsVisible = true;
-      if (receivedCutout_ && lastCutoutWidth_ > 0 && lastCutoutHeight_ > 0) {
-        metrics.reservedRegions.push_back(Rect::sharp(static_cast<float>(lastCutoutX_),
-                                                       static_cast<float>(lastCutoutY_),
-                                                       static_cast<float>(lastCutoutWidth_),
-                                                       static_cast<float>(lastCutoutHeight_)));
-      } else {
-        metrics.reservedRegions.push_back(Rect::sharp(std::max(0.f, size_.width - kCompositorControlReserveWidth),
-                                                       0.f,
-                                                       std::min(kCompositorControlReserveWidth, size_.width),
-                                                       kClientTitlebarHeight));
-      }
+      metrics.reservedRegions.push_back(Rect::sharp(std::max(0.f, size_.width - kCompositorControlReserveWidth),
+                                                     0.f,
+                                                     std::min(kCompositorControlReserveWidth, size_.width),
+                                                     kClientTitlebarHeight));
     }
     return metrics;
   }
@@ -1452,7 +1321,7 @@ public:
         menu.items.empty() || !canSendWaylandRequests(shared_)) {
       return false;
     }
-    if (!xdgSurface_ && !layerSurface_) {
+    if (!xdgSurface_) {
       return false;
     }
 
@@ -1497,9 +1366,6 @@ public:
     xdg_positioner_set_offset(positioner, 0, 4);
     state->popup = xdg_surface_get_popup(state->xdgSurface, xdgSurface_, positioner);
     xdg_popup_add_listener(state->popup, &popupListener_, state.get());
-    if (layerSurface_) {
-      zwlr_layer_surface_v1_get_popup(layerSurface_, state->popup);
-    }
     xdg_positioner_destroy(positioner);
 
     state->buffer = createWaylandMenuBuffer(shared_->shm, state->width, state->height);
@@ -1514,7 +1380,7 @@ public:
         !canSendWaylandRequests(shared_)) {
       return kInvalidPopoverSurfaceId;
     }
-    if (!xdgSurface_ && !layerSurface_) {
+    if (!xdgSurface_) {
       return kInvalidPopoverSurfaceId;
     }
 
@@ -1563,9 +1429,6 @@ public:
     configurePopoverPositioner(positioner, popover, anchor);
     state->popup = xdg_surface_get_popup(state->xdgSurface, xdgSurface_, positioner);
     xdg_popup_add_listener(state->popup, &popoverListener_, state.get());
-    if (layerSurface_) {
-      zwlr_layer_surface_v1_get_popup(layerSurface_, state->popup);
-    }
     xdg_positioner_destroy(positioner);
 
     wl_surface_commit(state->surface);
@@ -2377,24 +2240,6 @@ private:
 	  }
 	  static void topCapabilities(void*, xdg_toplevel*, wl_array*) {}
 
-	  static void layerConfigure(void* data,
-	                             zwlr_layer_surface_v1* layerSurface,
-	                             std::uint32_t serial,
-	                             std::uint32_t width,
-	                             std::uint32_t height) {
-	    auto* self = static_cast<WaylandWindow*>(data);
-	    zwlr_layer_surface_v1_ack_configure(layerSurface, serial);
-	    self->configured_ = true;
-	    if (width > 0 && height > 0) {
-	      self->applyConfiguredSize(static_cast<int>(width), static_cast<int>(height));
-	    }
-	  }
-
-	  static void layerClosed(void* data, zwlr_layer_surface_v1*) {
-	    auto* self = static_cast<WaylandWindow*>(data);
-	    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::CloseRequest, self->handle_});
-	  }
-
   static void decorationConfigure(void* data, zxdg_toplevel_decoration_v1*, std::uint32_t mode) {
     auto* self = static_cast<WaylandWindow*>(data);
     self->serverSideDecorationsActive_ = mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
@@ -2407,41 +2252,6 @@ private:
       self->warnedDecorationFallback_ = true;
       std::fprintf(stderr, "Lambda Wayland: compositor refused server-side decorations; resize chrome may be absent.\n");
     }
-    Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
-  }
-
-  static void cutoutBox(void* data,
-                        xx_cutouts_v1*,
-                        std::int32_t x,
-                        std::int32_t y,
-                        std::int32_t width,
-                        std::int32_t height,
-                        std::uint32_t,
-                        std::uint32_t id) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    self->pendingCutoutReceived_ = true;
-    self->pendingCutoutX_ = x;
-    self->pendingCutoutY_ = y;
-    self->pendingCutoutWidth_ = width;
-    self->pendingCutoutHeight_ = height;
-    self->pendingCutoutId_ = id;
-  }
-
-  static void cutoutCorner(void*, xx_cutouts_v1*, std::uint32_t, std::uint32_t, std::uint32_t) {}
-  static void cutoutsConfigure(void* data, xx_cutouts_v1*) {
-    auto* self = static_cast<WaylandWindow*>(data);
-    self->receivedCutout_ = self->pendingCutoutReceived_;
-    self->lastCutoutX_ = self->pendingCutoutX_;
-    self->lastCutoutY_ = self->pendingCutoutY_;
-    self->lastCutoutWidth_ = self->pendingCutoutWidth_;
-    self->lastCutoutHeight_ = self->pendingCutoutHeight_;
-    self->lastCutoutId_ = self->pendingCutoutId_;
-    self->pendingCutoutReceived_ = false;
-    self->pendingCutoutX_ = 0;
-    self->pendingCutoutY_ = 0;
-    self->pendingCutoutWidth_ = 0;
-    self->pendingCutoutHeight_ = 0;
-    self->pendingCutoutId_ = 0;
     Application::instance().eventQueue().post(WindowEvent{WindowEvent::Kind::Resize, self->handle_, self->size_});
   }
 
@@ -2636,11 +2446,6 @@ private:
 
   void configureDecorationProtocol() {
     serverSideDecorationsActive_ = false;
-    receivedCutout_ = false;
-    if (cutouts_ && titlebarMode_ != WindowTitlebarMode::Integrated) {
-      if (canSendWaylandRequests(shared_)) xx_cutouts_v1_destroy(cutouts_);
-      cutouts_ = nullptr;
-    }
     if (!canSendWaylandRequests(shared_)) {
       return;
     }
@@ -2653,9 +2458,6 @@ private:
     }
 
     requestServerSideDecorations();
-    if (titlebarMode_ == WindowTitlebarMode::Integrated) {
-      requestCutouts();
-    }
   }
 
   void commitSurface() {
@@ -2693,16 +2495,12 @@ private:
   }
 
   void updateBackgroundEffectRegion() {
-    LayerShellChromeOptions const& chrome = layerShellConfig_.chrome;
     bool const wantsGlass = background_.kind == WindowBackgroundKind::Glass;
-    bool const wantsBlur = wantsGlass ||
-                           layerShellConfig_.backgroundBlur ||
-                           chrome.style != LayerShellChromeStyle::None;
     if (!shared_ || !shared_->backgroundEffectManager || !shared_->compositor || !surface_ ||
         !canSendWaylandRequests(shared_)) {
       return;
     }
-    if (!wantsBlur) {
+    if (!wantsGlass) {
       if (!backgroundEffect_) {
         return;
       }
@@ -2722,131 +2520,30 @@ private:
                                                                                  surface_);
     }
     wl_region* region = wl_compositor_create_region(shared_->compositor);
-    if (layerShellConfig_.backgroundEffectRegion) {
-      auto const& requested = *layerShellConfig_.backgroundEffectRegion;
-      int const x = std::clamp(requested.x, 0, width);
-      int const y = std::clamp(requested.y, 0, height);
-      int const right = std::clamp(requested.x + requested.width, x, width);
-      int const bottom = std::clamp(requested.y + requested.height, y, height);
-      if (right > x && bottom > y) {
-        wl_region_add(region, x, y, right - x, bottom - y);
-      }
-    } else {
-      wl_region_add(region, 0, 0, width, height);
-    }
+    wl_region_add(region, 0, 0, width, height);
     ext_background_effect_surface_v1_set_blur_region(backgroundEffect_, region);
     wl_region_destroy(region);
     if (ext_background_effect_surface_v1_get_version(backgroundEffect_) >= 4) {
-      if (layerShellConfig_.backgroundEffectRegion) {
-        auto const& requested = *layerShellConfig_.backgroundEffectRegion;
-        ext_background_effect_surface_v1_set_shape(backgroundEffect_,
-                                                   backgroundEffectShape(requested.shape),
-                                                   backgroundEffectCalloutPlacement(requested.calloutPlacement),
-                                                   wl_fixed_from_double(requested.arrowWidth),
-                                                   wl_fixed_from_double(requested.arrowHeight));
-      } else {
-        ext_background_effect_surface_v1_set_shape(backgroundEffect_,
-                                                   EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_ROUNDED_RECT,
-                                                   EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_BELOW,
-                                                   wl_fixed_from_double(0.f),
-                                                   wl_fixed_from_double(0.f));
-      }
+      ext_background_effect_surface_v1_set_shape(backgroundEffect_,
+                                                 EXT_BACKGROUND_EFFECT_SURFACE_V1_SHAPE_ROUNDED_RECT,
+                                                 EXT_BACKGROUND_EFFECT_SURFACE_V1_CALLOUT_PLACEMENT_BELOW,
+                                                 wl_fixed_from_double(0.f),
+                                                 wl_fixed_from_double(0.f));
     }
-    if (wantsGlass) {
-      float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
-      Color baseColor = background_.glass.baseColor;
-      baseColor.a *= opacity;
-      Color tint = background_.glass.tintColor;
-      tint.a *= opacity;
-      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
-      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
-      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
-      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
-    } else if (chrome.style != LayerShellChromeStyle::None) {
-      float const opacity = std::clamp(chrome.glass.opacity, 0.f, 1.f);
-      Color baseColor = chrome.glass.baseColor;
-      baseColor.a *= opacity;
-      Color tint = chrome.glass.tintColor;
-      tint.a *= opacity;
-      ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(chrome.glass.blurRadius));
-      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
-      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
-      ext_background_effect_surface_v1_set_border(
-          backgroundEffect_,
-          colorToRgba(chrome.style == LayerShellChromeStyle::BlurPanelBorder
-                          ? chrome.glass.borderColor
-                          : Color{0.f, 0.f, 0.f, 0.f}));
-      CornerRadius const radius = chrome.cornerRadius;
-      ext_background_effect_surface_v1_set_corner_radii(backgroundEffect_,
-                                                        wl_fixed_from_double(radius.topLeft),
-                                                        wl_fixed_from_double(radius.topRight),
-                                                        wl_fixed_from_double(radius.bottomRight),
-                                                        wl_fixed_from_double(radius.bottomLeft));
-    } else {
-      ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
-      ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
-      ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(Color{0.f, 0.f, 0.f, 0.f}));
-    }
-  }
-
-  void updateLayerShellInputRegion() {
-    if (!layerSurface_ || !shared_ || !shared_->compositor || !surface_ || !canSendWaylandRequests(shared_)) {
-      return;
-    }
-    if (!layerShellConfig_.inputRegion) {
-      wl_surface_set_input_region(surface_, nullptr);
-      return;
-    }
-
-    auto const& requested = *layerShellConfig_.inputRegion;
-    wl_region* region = wl_compositor_create_region(shared_->compositor);
-    if (requested.width > 0 && requested.height > 0) {
-      wl_region_add(region, requested.x, requested.y, requested.width, requested.height);
-    }
-    wl_surface_set_input_region(surface_, region);
-    wl_region_destroy(region);
+    float const opacity = std::clamp(background_.glass.opacity, 0.f, 1.f);
+    Color baseColor = background_.glass.baseColor;
+    baseColor.a *= opacity;
+    Color tint = background_.glass.tintColor;
+    tint.a *= opacity;
+    ext_background_effect_surface_v1_set_blur_radius(backgroundEffect_, wl_fixed_from_double(background_.glass.blurRadius));
+    ext_background_effect_surface_v1_set_base_color(backgroundEffect_, colorToRgba(baseColor));
+    ext_background_effect_surface_v1_set_tint(backgroundEffect_, colorToRgba(tint));
+    ext_background_effect_surface_v1_set_border(backgroundEffect_, colorToRgba(background_.glass.borderColor));
   }
 
   bool wantsTransparentSurface() const {
     return background_.kind == WindowBackgroundKind::Glass ||
            background_.kind == WindowBackgroundKind::Transparent;
-  }
-
-  void configureLayerShellSurface() {
-    if (!shared_ || !shared_->layerShell) {
-      throw std::runtime_error("Wayland compositor does not expose zwlr_layer_shell_v1");
-    }
-    std::string ns = layerShellConfig_.nameSpace.empty() ? appId_ : layerShellConfig_.nameSpace;
-    layerSurface_ = zwlr_layer_shell_v1_get_layer_surface(shared_->layerShell,
-                                                          surface_,
-                                                          nullptr,
-                                                          layerShellLayer(layerShellConfig_.layer),
-                                                          ns.c_str());
-    zwlr_layer_surface_v1_add_listener(layerSurface_, &layerSurfaceListener_, this);
-    zwlr_layer_surface_v1_set_size(layerSurface_,
-                                   layerShellProtocolWidth(size_, layerShellConfig_),
-                                   layerShellProtocolHeight(size_, layerShellConfig_));
-    zwlr_layer_surface_v1_set_anchor(layerSurface_, layerShellAnchor(layerShellConfig_));
-    zwlr_layer_surface_v1_set_margin(layerSurface_,
-                                     layerShellConfig_.marginTop,
-                                     layerShellConfig_.marginRight,
-                                     layerShellConfig_.marginBottom,
-                                     layerShellConfig_.marginLeft);
-    zwlr_layer_surface_v1_set_exclusive_zone(layerSurface_, layerShellConfig_.exclusiveZone);
-    zwlr_layer_surface_v1_set_keyboard_interactivity(layerSurface_,
-                                                     layerShellConfig_.keyboardInteractive ? 1u : 0u);
-    updateBackgroundEffectRegion();
-    updateLayerShellInputRegion();
-  }
-
-  void requestCutouts() {
-    if (cutouts_) {
-      if (canSendWaylandRequests(shared_)) xx_cutouts_v1_destroy(cutouts_);
-      cutouts_ = nullptr;
-    }
-    if (!shared_ || !shared_->cutoutsManager || !surface_ || !canSendWaylandRequests(shared_)) return;
-    cutouts_ = xx_cutouts_manager_v1_get_cutouts(shared_->cutoutsManager, surface_);
-    if (cutouts_) xx_cutouts_v1_add_listener(cutouts_, &cutoutsListener_, this);
   }
 
   float outputScale(wl_output* output) const {
@@ -3005,9 +2702,7 @@ private:
   static inline wl_callback_listener popoverFrameCallbackListener_{popoverFrameDone};
   static inline xdg_toplevel_listener toplevelListener_{topConfigure, topClose, topConfigureBounds,
                                                        topCapabilities};
-  static inline zwlr_layer_surface_v1_listener layerSurfaceListener_{layerConfigure, layerClosed};
   static inline zxdg_toplevel_decoration_v1_listener decorationListener_{decorationConfigure};
-  static inline xx_cutouts_v1_listener cutoutsListener_{cutoutBox, cutoutCorner, cutoutsConfigure};
   static constexpr float kClientTitlebarHeight = 48.f;
   static constexpr float kCompositorControlReserveWidth = 96.f;
 
@@ -3033,10 +2728,8 @@ private:
 	  wl_callback* frameCallback_ = nullptr;
 	  xdg_surface* xdgSurface_ = nullptr;
 	  xdg_toplevel* toplevel_ = nullptr;
-	  zwlr_layer_surface_v1* layerSurface_ = nullptr;
 	  ext_background_effect_surface_v1* backgroundEffect_ = nullptr;
 	  zxdg_toplevel_decoration_v1* decoration_ = nullptr;
-  xx_cutouts_v1* cutouts_ = nullptr;
   wp_viewport* viewport_ = nullptr;
   wp_fractional_scale_v1* fractionalScale_ = nullptr;
   Canvas* canvas_ = nullptr;
@@ -3055,28 +2748,15 @@ private:
   bool fullscreen_ = false;
   WindowTitlebarMode titlebarMode_ = WindowTitlebarMode::System;
   WindowBackground background_{};
-  LayerShellOptions layerShellConfig_{};
   bool surfaceCommitted_ = false;
   bool configured_ = false;
   bool serverSideDecorationsActive_ = false;
-  bool receivedCutout_ = false;
   bool warnedDecorationFallback_ = false;
   bool loggedDecorationMode_ = false;
   bool opaqueRegionConfigured_ = false;
   bool opaqueRegionEnabled_ = false;
   int opaqueRegionWidth_ = 0;
   int opaqueRegionHeight_ = 0;
-  std::int32_t lastCutoutX_ = 0;
-  std::int32_t lastCutoutY_ = 0;
-  std::int32_t lastCutoutWidth_ = 0;
-  std::int32_t lastCutoutHeight_ = 0;
-  std::uint32_t lastCutoutId_ = 0;
-  bool pendingCutoutReceived_ = false;
-  std::int32_t pendingCutoutX_ = 0;
-  std::int32_t pendingCutoutY_ = 0;
-  std::int32_t pendingCutoutWidth_ = 0;
-  std::int32_t pendingCutoutHeight_ = 0;
-  std::uint32_t pendingCutoutId_ = 0;
   int pendingWidth_ = 0;
   int pendingHeight_ = 0;
   int configureBoundsWidth_ = 0;
@@ -3306,18 +2986,12 @@ void sharedRegistryGlobal(void* data, wl_registry* registry, std::uint32_t name,
     shared->decorationManagerVersion = std::min(version, 2u);
     shared->decorationManager = static_cast<zxdg_decoration_manager_v1*>(
         wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, shared->decorationManagerVersion));
-  } else if (std::strcmp(interface, xx_cutouts_manager_v1_interface.name) == 0) {
-    shared->cutoutsManager = static_cast<xx_cutouts_manager_v1*>(
-        wl_registry_bind(registry, name, &xx_cutouts_manager_v1_interface, 1));
   } else if (std::strcmp(interface, wp_viewporter_interface.name) == 0) {
     shared->viewporter = static_cast<wp_viewporter*>(
         wl_registry_bind(registry, name, &wp_viewporter_interface, 1));
 	  } else if (std::strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0) {
 	    shared->fractionalScaleManager = static_cast<wp_fractional_scale_manager_v1*>(
 	        wl_registry_bind(registry, name, &wp_fractional_scale_manager_v1_interface, 1));
-	  } else if (std::strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
-	    shared->layerShell = static_cast<zwlr_layer_shell_v1*>(
-	        wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, std::min(version, 4u)));
 	  } else if (std::strcmp(interface, ext_background_effect_manager_v1_interface.name) == 0) {
 	    shared->backgroundEffectManager = static_cast<ext_background_effect_manager_v1*>(
 	        wl_registry_bind(registry, name, &ext_background_effect_manager_v1_interface, std::min(version, 4u)));

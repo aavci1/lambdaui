@@ -27,8 +27,6 @@ function(lambda_setup_wayland_protocol_paths WAYLAND_PROTOCOLS_DIR)
   set(LAMBDA_RELATIVE_POINTER_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/relative-pointer/relative-pointer-unstable-v1.xml" PARENT_SCOPE)
   set(LAMBDA_PRIMARY_SELECTION_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/primary-selection/primary-selection-unstable-v1.xml" PARENT_SCOPE)
   set(LAMBDA_FRACTIONAL_SCALE_XML "${_lambda_protocol_local}/fractional-scale-v1.xml" PARENT_SCOPE)
-  set(LAMBDA_XX_CUTOUTS_XML "${_lambda_protocol_local}/xx-cutouts-v1.xml" PARENT_SCOPE)
-  set(LAMBDA_WLR_LAYER_SHELL_XML "${_lambda_protocol_local}/wlr-layer-shell-unstable-v1.xml" PARENT_SCOPE)
   set(LAMBDA_EXT_BACKGROUND_EFFECT_XML "${_lambda_protocol_local}/ext-background-effect-v1.xml" PARENT_SCOPE)
 endfunction()
 

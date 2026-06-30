@@ -180,7 +180,7 @@ Backend selection is controlled by `LAMBDAUI_PLATFORM`.
 
 - Uses Wayland client protocols and `src/Platform/Linux/Wayland*`.
 - Uses Vulkan for rendering.
-- Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
+- Supports xdg-shell and optional protocols for scaling, background effects, pointer constraints, activation, and related behavior.
 - Defines `LAMBDAUI_VULKAN=1`.
 
 ## Runtime Resources
