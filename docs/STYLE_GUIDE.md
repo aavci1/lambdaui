@@ -7,7 +7,7 @@ This guide captures project conventions that help future contributors and agents
 - Use C++23.
 - Prefer existing local abstractions over new helper layers.
 - Keep public API in `include/Lambda/...` and implementation in the matching `src/...` module.
-- Keep platform-specific code in the existing platform/backend folders.
+- Keep platform-specific code in the existing platform folders.
 - Add comments only when they explain non-obvious ownership, lifetime, platform, or performance constraints.
 - Prefer targeted tests for behavior changes.
 
@@ -30,7 +30,7 @@ Lower modules should not depend on higher UI concepts. When adding a feature, st
 Examples:
 
 - A new control belongs in `UI/Views`.
-- A new draw primitive usually touches `Graphics`, `SceneGraph`, and backend canvases.
+- A new draw primitive usually touches `Graphics`, `SceneGraph`, and the WebGPU canvas.
 - A new reactive primitive belongs in `Reactive`, not `UI`.
 - A platform event quirk belongs under `src/Platform/...`, with normalized behavior exposed to `UI/Runtime`.
 

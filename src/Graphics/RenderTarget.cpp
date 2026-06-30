@@ -11,7 +11,7 @@ namespace {
 
 platform::RenderTarget& checkedTarget(std::unique_ptr<platform::RenderTarget> const& impl) {
   if (!impl) {
-    throw std::runtime_error("Lambda RenderTarget backend is unavailable");
+    throw std::runtime_error("Lambda RenderTarget implementation is unavailable");
   }
   return *impl;
 }

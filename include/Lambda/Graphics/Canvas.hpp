@@ -135,7 +135,7 @@ public:
                  CornerRadius const& corners = {}, float opacity = 1.f);
 
   /// Draw a transparent backdrop-filter region. `radius` is expressed in logical pixels.
-  /// Backends sample the scene rendered before this operation, blur it, then draw this
+  /// The WebGPU canvas samples the scene rendered before this operation, blurs it, then draws this
   /// region from that blurred snapshot through the region's bounds and corners. Consecutive
   /// backdrop regions may share one snapshot so multi-rect masks stay visually coherent.
   virtual void drawBackdropBlur(Rect const& rect, float radius, Color tint = Colors::transparent,

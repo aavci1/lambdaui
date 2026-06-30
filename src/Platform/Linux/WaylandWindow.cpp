@@ -2063,7 +2063,7 @@ private:
     }
     state.autotestEscapeDispatched = true;
     std::fprintf(stderr,
-                 "[wayland-popover-autotest] backend-escape id=%" PRIu64
+                 "[wayland-popover-autotest] fallback-escape id=%" PRIu64
                  " frameDones=%" PRIu64 "\n",
                  state.id.value,
                  state.frameDoneCount);

@@ -24,7 +24,7 @@ Use `include/Lambda.hpp` as the broad umbrella include. Use narrower headers fro
 
 - `Core`: geometry, color, identity, and small foundational types.
 - `Reactive`: `Signal`, `Computed`, `Effect`, `Scope`, bindables, animation clocks, transitions, and tracking utilities.
-- `Graphics`: canvas abstraction, styles, text layout, images, SVG paths, render targets, and backend-facing drawing types.
+- `Graphics`: WebGPU canvas, styles, text layout, images, SVG paths, render targets, and drawing types.
 - `SceneGraph`: retained nodes, layout constraints, hit testing, interaction metadata, traversal, and scene rendering.
 - `Layout`: layout primitives and stack algorithms.
 - `UI`: `Application`, `Window`, `Element`, components, hooks, environments, commands, menus, overlays, popovers, and built-in views.

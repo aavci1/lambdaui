@@ -89,7 +89,7 @@ enum class LayerShellCalloutPlacement : std::uint8_t {
 
 struct GlassEffectOptions {
   /// Preferred blur radius for platforms that expose a tunable backdrop blur.
-  /// Some backends map this to the nearest native material instead.
+  /// Some platforms map this to the nearest native material instead.
   float blurRadius = 46.f;
   /// Base material wash applied over the blurred backdrop before the tint.
   Color baseColor{1.f, 1.f, 1.f, 0.5f};
@@ -174,7 +174,7 @@ struct WindowConfig {
   Size maxSize{};
   std::string restoreId;
   /// On Wayland, create this window as a layer-shell surface instead of an xdg_toplevel.
-  /// Other backends currently ignore this value.
+  /// Other platforms currently ignore this value.
   LayerShellOptions layerShell{};
 };
 
@@ -292,7 +292,7 @@ public:
 
   EnvironmentBinding const& environmentBinding() const;
 
-  /// Reports which optional `WindowConfig` fields the current platform backend honors.
+  /// Reports which optional `WindowConfig` fields the current platform honors.
   [[nodiscard]] PlatformWindowCapabilities platformCapabilities() const;
 
   template<typename T>

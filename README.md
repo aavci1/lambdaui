@@ -88,7 +88,7 @@ See `demos/hello-world/main.cpp` and the other demos for complete examples.
 ## Documentation
 
 - [Getting Started](docs/GETTING_STARTED.md): dependencies, build options, demos, tests, and app integration.
-- [Architecture](docs/ARCHITECTURE.md): repository map, module boundaries, runtime flow, rendering, input, and platform backends.
+- [Architecture](docs/ARCHITECTURE.md): repository map, module boundaries, runtime flow, rendering, input, and platforms.
 - [UI Model](docs/UI_MODEL.md): components, retained mounting, hooks, built-in views, bindings, environments, and control flow.
 - [Reactivity](docs/REACTIVITY.md): signals, computed values, effects, scopes, bindables, and animation helpers.
 - [Event Queue](docs/EVENTS.md): event types, dispatch order, threading expectations, timers, and custom payloads.

@@ -50,9 +50,9 @@ void logUnsupportedWindowConfigOnce(char const* feature) {
   if (!slot || *slot) return;
   *slot = true;
   if (std::strcmp(feature, "background") == 0) {
-    std::fprintf(stderr, "lambda: Window.background is not supported on this platform backend\n");
+    std::fprintf(stderr, "lambda: Window.background is not supported on this platform\n");
   } else {
-    std::fprintf(stderr, "lambda: WindowConfig.%s is not supported on this platform backend\n", feature);
+    std::fprintf(stderr, "lambda: WindowConfig.%s is not supported on this platform\n", feature);
   }
 }
 
