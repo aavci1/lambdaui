@@ -6,7 +6,6 @@
 /// graphics (Canvas, styles). Prefer including specific `<Lambda/...>` headers when you only need a
 /// subset to reduce compile time.
 
-#include <Lambda/Config.hpp>
 #include <Lambda/UI/Application.hpp>
 #include <Lambda/UI/Cursor.hpp>
 #include <Lambda/UI/EventQueue.hpp>
