@@ -21,14 +21,14 @@ Prerequisites:
 
 - CMake 3.25 or newer.
 - A C++23-capable compiler.
+- WebGPU renderer: Dawn installed with CMake package files, a local Dawn source checkout, or `LAMBDAUI_DAWN_FETCH=ON`.
 - macOS native renderer: full Xcode with `xcrun`, `metal`, `metallib`, and `xxd`.
 - Linux Wayland native renderer: development packages for Wayland, wayland-protocols, libdrm, xkbcommon, Vulkan, FreeType, fontconfig, HarfBuzz, librsvg, zlib, pkg-config, and glslang.
-- WebGPU renderer: Dawn installed with CMake package files, or a local Dawn source checkout.
 
 Build the library, demos, and tests:
 
 ```sh
-cmake -S . -B build -DLAMBDAUI_BUILD_DEMOS=ON -DLAMBDAUI_BUILD_TESTS=ON
+cmake -S . -B build -DLAMBDAUI_DAWN_FETCH=ON -DLAMBDAUI_BUILD_DEMOS=ON -DLAMBDAUI_BUILD_TESTS=ON
 cmake --build build
 ctest --test-dir build
 ```
@@ -42,17 +42,17 @@ Run a demo:
 Choose a backend explicitly when needed:
 
 ```sh
-cmake -S . -B build -DLAMBDAUI_PLATFORM=MACOS
-cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_WAYLAND
+cmake -S . -B build-macos-webgpu -DLAMBDAUI_PLATFORM=MACOS -DLAMBDAUI_DAWN_FETCH=ON
+cmake -S . -B build-linux-webgpu -DLAMBDAUI_PLATFORM=LINUX_WAYLAND -DLAMBDAUI_DAWN_FETCH=ON
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=AUTO -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
-cmake -S . -B build-webgpu-only -DLAMBDAUI_RENDERER=AUTO -DLAMBDAUI_ENABLE_NATIVE_RENDERERS=OFF -DLAMBDAUI_DAWN_FETCH=ON
+cmake -S . -B build-native -DLAMBDAUI_RENDERER=NATIVE -DLAMBDAUI_ENABLE_NATIVE_RENDERERS=ON
 ```
 
 `LAMBDAUI_PLATFORM=AUTO` is the default. It selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
-`LAMBDAUI_RENDERER=AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`, and falls back to `NATIVE` while the port is completed. Set `LAMBDAUI_ENABLE_NATIVE_RENDERERS=OFF` to enforce the Dawn/WebGPU-only path.
+`LAMBDAUI_RENDERER=AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`. Legacy Metal/Vulkan renderers are disabled by default and require `LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON`.
 
 ## Minimal App
 
@@ -119,7 +119,7 @@ docs/                 Project documentation
 
 - `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, or `LINUX_WAYLAND`.
 - `LAMBDAUI_RENDERER`: `AUTO`, `NATIVE`, or `WEBGPU`.
-- `LAMBDAUI_ENABLE_NATIVE_RENDERERS`: allow the legacy Metal/Vulkan renderers as a temporary fallback while WebGPU replaces them.
+- `LAMBDAUI_ENABLE_NATIVE_RENDERERS`: opt in to the legacy Metal/Vulkan renderers while WebGPU replaces them.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` for WebGPU builds.
 - `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.

@@ -120,7 +120,7 @@ Core files:
 
 Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
 
-Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` prefers Dawn/WebGPU when Dawn is explicitly configured or discoverable, then falls back to the existing native renderer while the port is completed. `LAMBDAUI_ENABLE_NATIVE_RENDERERS=OFF` disables that fallback and turns missing Dawn into a configure-time error. `LAMBDAUI_RENDERER=NATIVE` keeps the existing Metal or Vulkan renderer, while `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU.
+Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` prefers Dawn/WebGPU when Dawn is explicitly configured or discoverable. Legacy Metal/Vulkan renderers are disabled by default; `LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON` makes `LAMBDAUI_RENDERER=NATIVE` available during the migration. `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU.
 
 macOS rendering:
 
