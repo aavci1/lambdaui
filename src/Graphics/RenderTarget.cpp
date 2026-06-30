@@ -64,11 +64,22 @@ RenderTarget::RenderTarget(WebGpuRenderTargetSpec const& spec) {
                                                              spec.queue,
                                                              spec.textureView,
                                                              spec.format);
+  } else if (spec.device) {
+    canvas_ = webgpu::createWebGpuRenderTargetCanvas(renderTargetTextSystem(),
+                                                     spec.logicalSize,
+                                                     pixelWidth,
+                                                     pixelHeight,
+                                                     spec.device,
+                                                     spec.queue,
+                                                     spec.format);
+  } else if (spec.queue) {
+    throw std::runtime_error("Lambda WebGPU RenderTarget queues require a WGPUDevice");
   } else {
     canvas_ = webgpu::createWebGpuRenderTargetCanvas(renderTargetTextSystem(),
                                                      spec.logicalSize,
                                                      pixelWidth,
-                                                     pixelHeight);
+                                                     pixelHeight,
+                                                     spec.format);
   }
   checkedCanvas(canvas_);
 }

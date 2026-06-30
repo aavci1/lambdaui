@@ -39,6 +39,7 @@ set(_lambda_test_sources
   Reactive/ScopeTests.cpp
   Reactive/DiamondTests.cpp
   Reactive/BindableTests.cpp
+  RenderTargetTests.cpp
   RuntimeInputTests.cpp
   RuntimeTests.cpp
   SceneGraphTests.cpp

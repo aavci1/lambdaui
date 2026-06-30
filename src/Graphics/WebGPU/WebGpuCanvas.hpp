@@ -53,7 +53,16 @@ std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuSurfaceSource surfaceSource,
 std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
                                                        Size logicalSize,
                                                        std::uint32_t pixelWidth,
-                                                       std::uint32_t pixelHeight);
+                                                       std::uint32_t pixelHeight,
+                                                       WGPUTextureFormat format = WGPUTextureFormat_RGBA8Unorm);
+
+std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
+                                                       Size logicalSize,
+                                                       std::uint32_t pixelWidth,
+                                                       std::uint32_t pixelHeight,
+                                                       WGPUDevice device,
+                                                       WGPUQueue queue,
+                                                       WGPUTextureFormat format);
 
 std::unique_ptr<Canvas> createWebGpuExternalRenderTargetCanvas(TextSystem& textSystem,
                                                                Size logicalSize,

@@ -1130,15 +1130,35 @@ public:
   WebGpuCanvas(TextSystem& textSystem,
                Size logicalSize,
                std::uint32_t pixelWidth,
-               std::uint32_t pixelHeight)
+               std::uint32_t pixelHeight,
+               WGPUTextureFormat format)
       : textSystem_(textSystem),
         size_(logicalSize),
         context_(),
-        surfaceFormat_(WGPUTextureFormat_RGBA8Unorm),
+        surfaceFormat_(format == WGPUTextureFormat_Undefined ? WGPUTextureFormat_RGBA8Unorm : format),
         surfaceCopySrcSupported_(true),
         offscreenPixelWidth_(std::max(1u, pixelWidth)),
         offscreenPixelHeight_(std::max(1u, pixelHeight)) {
     context_.initializeDevice(nullptr);
+    dpiScale_ = std::max(logicalSize.width > 0.f ? static_cast<float>(offscreenPixelWidth_) / logicalSize.width : 1.f,
+                         logicalSize.height > 0.f ? static_cast<float>(offscreenPixelHeight_) / logicalSize.height : 1.f);
+    clip_ = viewportBounds();
+  }
+
+  WebGpuCanvas(TextSystem& textSystem,
+               Size logicalSize,
+               std::uint32_t pixelWidth,
+               std::uint32_t pixelHeight,
+               WGPUDevice device,
+               WGPUQueue queue,
+               WGPUTextureFormat format)
+      : textSystem_(textSystem),
+        size_(logicalSize),
+        context_(device, queue),
+        surfaceFormat_(format == WGPUTextureFormat_Undefined ? WGPUTextureFormat_RGBA8Unorm : format),
+        surfaceCopySrcSupported_(true),
+        offscreenPixelWidth_(std::max(1u, pixelWidth)),
+        offscreenPixelHeight_(std::max(1u, pixelHeight)) {
     dpiScale_ = std::max(logicalSize.width > 0.f ? static_cast<float>(offscreenPixelWidth_) / logicalSize.width : 1.f,
                          logicalSize.height > 0.f ? static_cast<float>(offscreenPixelHeight_) / logicalSize.height : 1.f);
     clip_ = viewportBounds();
@@ -1661,7 +1681,13 @@ public:
     std::uint32_t const pixelWidth = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.width * scale)));
     std::uint32_t const pixelHeight = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.height * scale)));
 
-    WebGpuCanvas target(textSystem_, logicalSize, pixelWidth, pixelHeight);
+    WebGpuCanvas target(textSystem_,
+                        logicalSize,
+                        pixelWidth,
+                        pixelHeight,
+                        context_.device(),
+                        context_.queue(),
+                        surfaceFormat_);
     target.updateDpiScale(scale, scale);
     target.beginFrame();
     target.clear(Colors::transparent);
@@ -3623,8 +3649,19 @@ std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuSurfaceSource surfaceSource,
 std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
                                                        Size logicalSize,
                                                        std::uint32_t pixelWidth,
-                                                       std::uint32_t pixelHeight) {
-  return std::make_unique<WebGpuCanvas>(textSystem, logicalSize, pixelWidth, pixelHeight);
+                                                       std::uint32_t pixelHeight,
+                                                       WGPUTextureFormat format) {
+  return std::make_unique<WebGpuCanvas>(textSystem, logicalSize, pixelWidth, pixelHeight, format);
+}
+
+std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,
+                                                       Size logicalSize,
+                                                       std::uint32_t pixelWidth,
+                                                       std::uint32_t pixelHeight,
+                                                       WGPUDevice device,
+                                                       WGPUQueue queue,
+                                                       WGPUTextureFormat format) {
+  return std::make_unique<WebGpuCanvas>(textSystem, logicalSize, pixelWidth, pixelHeight, device, queue, format);
 }
 
 std::unique_ptr<Canvas> createWebGpuExternalRenderTargetCanvas(TextSystem& textSystem,

@@ -23,12 +23,14 @@ struct WebGpuRenderTargetSpec {
   std::uint32_t pixelHeight = 0;
   float dpiScale = 1.f;
 
-  /// Optional caller-owned WebGPU render target. When set, `device` must be the
-  /// device that created `textureView`; Lambda retains the view while the
-  /// RenderTarget exists and submits drawing work to the device queue.
+  /// Optional caller-owned WebGPU device and render target.
+  /// When `device` is set without `textureView`, Lambda creates an internal texture on that device.
+  /// When `textureView` is set, `device` must be the device that created it; Lambda retains the view
+  /// while the RenderTarget exists. If `queue` is null, Lambda uses the device's default queue.
   WGPUDevice device = nullptr;
   WGPUQueue queue = nullptr;
   WGPUTextureView textureView = nullptr;
+  /// Color target format for Lambda-owned textures, or the format of `textureView`.
   WGPUTextureFormat format = WGPUTextureFormat_RGBA8Unorm;
 };
 
