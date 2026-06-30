@@ -17,26 +17,26 @@ class TextSystem;
 
 namespace webgpu {
 
-struct WebGpuNativeSurface {
+struct WebGpuSurfaceSource {
   enum class Kind {
     None,
     MetalLayer,
     WaylandSurface,
   };
 
-  static WebGpuNativeSurface metalLayer(void* layer) noexcept {
-    WebGpuNativeSurface native{};
-    native.kind = Kind::MetalLayer;
-    native.metalLayerHandle = layer;
-    return native;
+  static WebGpuSurfaceSource metalLayer(void* layer) noexcept {
+    WebGpuSurfaceSource source{};
+    source.kind = Kind::MetalLayer;
+    source.metalLayerHandle = layer;
+    return source;
   }
 
-  static WebGpuNativeSurface wayland(wl_display* display, wl_surface* surface) noexcept {
-    WebGpuNativeSurface native{};
-    native.kind = Kind::WaylandSurface;
-    native.waylandDisplay = display;
-    native.waylandSurface = surface;
-    return native;
+  static WebGpuSurfaceSource wayland(wl_display* display, wl_surface* surface) noexcept {
+    WebGpuSurfaceSource source{};
+    source.kind = Kind::WaylandSurface;
+    source.waylandDisplay = display;
+    source.waylandSurface = surface;
+    return source;
   }
 
   Kind kind = Kind::None;
@@ -45,7 +45,7 @@ struct WebGpuNativeSurface {
   wl_surface* waylandSurface = nullptr;
 };
 
-std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuNativeSurface nativeSurface,
+std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuSurfaceSource surfaceSource,
                                            unsigned int handle,
                                            TextSystem& textSystem,
                                            Size initialSize,

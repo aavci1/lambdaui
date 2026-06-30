@@ -995,36 +995,36 @@ void encodeFill(FillStyle const& fill, WebGpuRectInstance& instance) {
   instance.params[1] = 1.f;
 }
 
-WGPUSurface createSurface(WGPUInstance instance, WebGpuNativeSurface native) {
+WGPUSurface createSurface(WGPUInstance instance, WebGpuSurfaceSource source) {
   WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
   descriptor.label = stringView("LambdaUI WebGPU Surface");
 
   WGPUSurfaceSourceMetalLayer metalLayer = WGPU_SURFACE_SOURCE_METAL_LAYER_INIT;
   WGPUSurfaceSourceWaylandSurface wayland = WGPU_SURFACE_SOURCE_WAYLAND_SURFACE_INIT;
 
-  switch (native.kind) {
-    case WebGpuNativeSurface::Kind::MetalLayer:
-      if (!native.metalLayerHandle) {
+  switch (source.kind) {
+    case WebGpuSurfaceSource::Kind::MetalLayer:
+      if (!source.metalLayerHandle) {
         throw std::runtime_error("Lambda WebGPU: missing CAMetalLayer surface");
       }
-      metalLayer.layer = native.metalLayerHandle;
+      metalLayer.layer = source.metalLayerHandle;
       descriptor.nextInChain = &metalLayer.chain;
       break;
-    case WebGpuNativeSurface::Kind::WaylandSurface:
-      if (!native.waylandDisplay || !native.waylandSurface) {
+    case WebGpuSurfaceSource::Kind::WaylandSurface:
+      if (!source.waylandDisplay || !source.waylandSurface) {
         throw std::runtime_error("Lambda WebGPU: missing Wayland display or surface");
       }
-      wayland.display = native.waylandDisplay;
-      wayland.surface = native.waylandSurface;
+      wayland.display = source.waylandDisplay;
+      wayland.surface = source.waylandSurface;
       descriptor.nextInChain = &wayland.chain;
       break;
-    case WebGpuNativeSurface::Kind::None:
-      throw std::runtime_error("Lambda WebGPU: window canvas requires a native surface");
+    case WebGpuSurfaceSource::Kind::None:
+      throw std::runtime_error("Lambda WebGPU: window canvas requires a surface source");
   }
 
   WGPUSurface surface = wgpuInstanceCreateSurface(instance, &descriptor);
   if (!surface) {
-    throw std::runtime_error("Lambda WebGPU: failed to create native surface");
+    throw std::runtime_error("Lambda WebGPU: failed to create surface");
   }
   return surface;
 }
@@ -1069,18 +1069,18 @@ class WebGpuCanvas final : public Canvas {
   };
 
 public:
-  WebGpuCanvas(WebGpuNativeSurface nativeSurface,
+  WebGpuCanvas(WebGpuSurfaceSource surfaceSource,
                unsigned int handle,
                TextSystem& textSystem,
                Size initialSize,
                bool transparentSurface)
-      : nativeSurface_(nativeSurface),
+      : surfaceSource_(surfaceSource),
         handle_(handle),
         textSystem_(textSystem),
         size_(initialSize),
         transparentSurface_(transparentSurface),
         context_(),
-        surface_(createSurface(context_.instance(), nativeSurface_)) {
+        surface_(createSurface(context_.instance(), surfaceSource_)) {
     context_.initializeDevice(surface_);
     configureSurface();
     clip_ = viewportBounds();
@@ -3437,7 +3437,7 @@ private:
     blurUniformBufferCapacity_ = 0;
   }
 
-  WebGpuNativeSurface nativeSurface_{};
+  WebGpuSurfaceSource surfaceSource_{};
   unsigned int handle_ = 0;
   TextSystem& textSystem_;
   Size size_{};
@@ -3538,12 +3538,12 @@ private:
 
 } // namespace
 
-std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuNativeSurface nativeSurface,
+std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuSurfaceSource surfaceSource,
                                            unsigned int handle,
                                            TextSystem& textSystem,
                                            Size initialSize,
                                            bool transparentSurface) {
-  return std::make_unique<WebGpuCanvas>(nativeSurface, handle, textSystem, initialSize, transparentSurface);
+  return std::make_unique<WebGpuCanvas>(surfaceSource, handle, textSystem, initialSize, transparentSurface);
 }
 
 std::unique_ptr<Canvas> createWebGpuRenderTargetCanvas(TextSystem& textSystem,

@@ -1235,7 +1235,7 @@ public:
   }
 
   std::unique_ptr<Canvas> createCanvas(::lambdaui::Window&) override {
-    auto canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::wayland(display_, surface_),
+    auto canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuSurfaceSource::wayland(display_, surface_),
                                              handle_,
                                              Application::instance().textSystem(),
                                              size_,
@@ -1967,7 +1967,7 @@ private:
       return false;
     }
     try {
-      state.canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::wayland(state.shared->display,
+      state.canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuSurfaceSource::wayland(state.shared->display,
                                                                                      state.surface),
                                                 handle_,
                                                 Application::instance().textSystem(),
