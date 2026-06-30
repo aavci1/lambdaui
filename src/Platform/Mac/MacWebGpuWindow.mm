@@ -429,7 +429,7 @@ public:
   platform::WindowEventPump* eventPump() override { return this; }
   platform::WindowEventPump const* eventPump() const override { return this; }
 
-  std::unique_ptr<Canvas> createCanvas(::lambdaui::Window& owner) override;
+  std::unique_ptr<Canvas> createWebGpuCanvas(::lambdaui::Window& owner) override;
 
   void processEvents() override;
   void waitForEvents(int timeoutMs) override;
@@ -1877,7 +1877,7 @@ void MacWebGpuWindow::setRenderLayerPresentsWithTransaction(bool enable) {
   }
 }
 
-std::unique_ptr<Canvas> MacWebGpuWindow::createCanvas(::lambdaui::Window& owner) {
+std::unique_ptr<Canvas> MacWebGpuWindow::createWebGpuCanvas(::lambdaui::Window& owner) {
   (void)owner;
   if (!d->webGpuView_) {
     return nullptr;

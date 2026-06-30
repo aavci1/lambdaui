@@ -389,7 +389,7 @@ unsigned int Window::handle() const {
 
 Canvas& Window::canvas() {
   if (!d->canvas_) {
-    d->canvas_ = d->platform_->createCanvas(*this);
+    d->canvas_ = d->platform_->createWebGpuCanvas(*this);
   }
   return *d->canvas_;
 }

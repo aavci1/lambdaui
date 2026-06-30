@@ -1234,7 +1234,7 @@ public:
     Application::instance().flushRedraw();
   }
 
-  std::unique_ptr<Canvas> createCanvas(::lambdaui::Window&) override {
+  std::unique_ptr<Canvas> createWebGpuCanvas(::lambdaui::Window&) override {
     auto canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuSurfaceSource::wayland(display_, surface_),
                                              Application::instance().textSystem(),
                                              size_,

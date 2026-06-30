@@ -35,7 +35,7 @@ public:
   /// valid `Window*`). Default: no-op.
   virtual void show() {}
 
-  virtual std::unique_ptr<::lambdaui::Canvas> createCanvas(::lambdaui::Window& owner) = 0;
+  virtual std::unique_ptr<::lambdaui::Canvas> createWebGpuCanvas(::lambdaui::Window& owner) = 0;
 
   virtual void resize(const Size& newSize) = 0;
   virtual void setMinSize(Size /*size*/) {}
