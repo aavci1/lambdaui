@@ -5,6 +5,7 @@
 /// Part of the Lambda public API.
 
 
+#include <Lambda/Config.hpp>
 #include <Lambda/Core/Geometry.hpp>
 
 #include <cstdint>
@@ -14,7 +15,7 @@
 #include <string_view>
 #include <vector>
 
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
 #include <vulkan/vulkan.h>
 #endif
 #if LAMBDAUI_WEBGPU
@@ -79,7 +80,7 @@ public:
                                            PixelFormat format,
                                            void* gpuDevice = nullptr);
 
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
   struct DmabufPlane {
     int fd = -1;
     std::uint32_t offset = 0;
@@ -99,13 +100,14 @@ public:
   static std::shared_ptr<Image> fromExternalVulkan(VkImage image, VkImageView view, VkFormat format,
                                                    std::uint32_t width, std::uint32_t height);
 
-  /// Import a single-plane Linux dma-buf as a Vulkan sampled image on Linux (LAMBDAUI_VULKAN).
-  /// Not available on macOS/Metal builds: callers must guard with `#if LAMBDAUI_VULKAN` or platform checks.
+  /// Import a single-plane Linux dma-buf as a Vulkan sampled image on Linux native renderer builds.
+  /// Not available on WebGPU or macOS/Metal builds: callers must guard with
+  /// `#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN` or platform checks.
   /// The supplied plane fd is consumed by this call whether import succeeds or fails.
   static std::shared_ptr<Image> fromDmabuf(DmabufImageSpec const& spec);
 #endif
 
-#if LAMBDAUI_METAL
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_METAL
   /// Create an image reference backed by a caller-owned id<MTLTexture>.
   /// The texture must outlive all rendering that references the returned Image.
   static std::shared_ptr<Image> fromExternalMetal(void* texture, std::uint32_t width, std::uint32_t height);

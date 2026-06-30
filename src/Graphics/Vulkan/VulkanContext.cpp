@@ -1,6 +1,6 @@
 #include <Lambda/Graphics/VulkanContext.hpp>
 
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
 
 #include "Graphics/Vulkan/VulkanContextPrivate.hpp"
 
@@ -53,4 +53,4 @@ void VulkanContext::ensureInitialized() {
 
 } // namespace lambdaui
 
-#endif // LAMBDAUI_VULKAN
+#endif // LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN

@@ -89,11 +89,11 @@ cmake -S . -B build-webgpu-only -DLAMBDAUI_RENDERER=AUTO -DLAMBDAUI_ENABLE_NATIV
 
 Platform defines exported to consumers:
 
-- `LAMBDAUI_METAL=1`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=0` on native macOS builds.
-- `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1`, `LAMBDAUI_WEBGPU=0` on native Linux Wayland builds.
-- `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=1` on WebGPU builds.
+- `LAMBDAUI_NATIVE_RENDERERS=1`, `LAMBDAUI_METAL=1`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=0` on native macOS builds.
+- `LAMBDAUI_NATIVE_RENDERERS=1`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1`, `LAMBDAUI_WEBGPU=0` on native Linux Wayland builds.
+- `LAMBDAUI_NATIVE_RENDERERS=0`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=1` on WebGPU builds.
 
-Use these defines to guard platform-specific APIs such as Vulkan image import.
+Use these defines to guard platform-specific APIs. Legacy Metal/Vulkan entry points such as Vulkan image import require both `LAMBDAUI_NATIVE_RENDERERS=1` and their backend define.
 
 ## Useful Build Options
 

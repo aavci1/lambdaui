@@ -132,6 +132,8 @@ docs/                 Project documentation
 - `LAMBDAUI_PROFILE_REACTIVE`: compile reactive profiling counters.
 - `LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING`: log built-in application event handlers.
 
+The CMake target exports `LAMBDAUI_NATIVE_RENDERERS`; it is `1` only for legacy Metal/Vulkan renderer builds.
+
 The build uses CMake `FetchContent` for `libtess2`, and for `doctest` when tests are enabled.
 
 ## License

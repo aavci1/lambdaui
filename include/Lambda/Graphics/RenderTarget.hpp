@@ -4,16 +4,17 @@
 ///
 /// Public render destination abstraction for window-backed, offscreen, and externally-owned GPU targets.
 
+#include <Lambda/Config.hpp>
 #include <Lambda/Graphics/Canvas.hpp>
 
 #include <cstdint>
 #include <memory>
 
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
 #include <vulkan/vulkan.h>
 #endif
 
-#if LAMBDAUI_METAL && defined(__OBJC__)
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_METAL && defined(__OBJC__)
 @class MTLTexture;
 @class MTLCommandBuffer;
 @class MTLSharedEvent;
@@ -25,7 +26,7 @@ namespace scenegraph {
 class SceneGraph;
 }
 
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
 struct VulkanRenderTargetSpec {
   VkImage image = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
@@ -50,7 +51,7 @@ struct VulkanRenderTargetSpec {
 };
 #endif
 
-#if LAMBDAUI_METAL
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_METAL
 struct MetalRenderTargetSpec {
   void* texture = nullptr;       ///< id<MTLTexture>; required.
   int format = 0;                ///< MTLPixelFormat; 0 means match the texture.
@@ -78,10 +79,10 @@ class RenderTarget;
 
 class RenderTarget {
 public:
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
   explicit RenderTarget(VulkanRenderTargetSpec const& spec);
 #endif
-#if LAMBDAUI_METAL
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_METAL
   explicit RenderTarget(MetalRenderTargetSpec const& spec);
 #endif
 #if LAMBDAUI_WEBGPU

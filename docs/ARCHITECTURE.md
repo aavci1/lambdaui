@@ -184,19 +184,19 @@ Platform selection is controlled by `LAMBDAUI_PLATFORM`; renderer selection is c
 
 - Uses Objective-C++ sources in `src/Platform/Mac`.
 - Uses Cocoa, Metal, MetalKit, QuartzCore, Foundation, CoreText, and CoreVideo.
-- Defines `LAMBDAUI_METAL=1`.
+- Defines `LAMBDAUI_NATIVE_RENDERERS=1` and `LAMBDAUI_METAL=1`.
 
 `LINUX_WAYLAND`:
 
 - Uses Wayland client protocols and `src/Platform/Linux/Wayland*`.
 - Uses Vulkan for rendering.
 - Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
-- Defines `LAMBDAUI_VULKAN=1`.
+- Defines `LAMBDAUI_NATIVE_RENDERERS=1` and `LAMBDAUI_VULKAN=1`.
 
 `WEBGPU` renderer:
 
 - Uses Dawn for GPU device, queue, surface, and WebGPU command encoding.
-- Defines `LAMBDAUI_WEBGPU=1`.
+- Defines `LAMBDAUI_NATIVE_RENDERERS=0` and `LAMBDAUI_WEBGPU=1`.
 
 ## Runtime Resources
 

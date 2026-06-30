@@ -18,14 +18,14 @@ platform::RenderTarget& checkedTarget(std::unique_ptr<platform::RenderTarget> co
 
 } // namespace
 
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
 RenderTarget::RenderTarget(VulkanRenderTargetSpec const& spec)
     : impl_(platform::createRenderTarget(spec)) {
   checkedTarget(impl_);
 }
 #endif
 
-#if LAMBDAUI_METAL
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_METAL
 RenderTarget::RenderTarget(MetalRenderTargetSpec const& spec)
     : impl_(platform::createRenderTarget(spec)) {
   checkedTarget(impl_);

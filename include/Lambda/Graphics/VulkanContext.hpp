@@ -4,9 +4,11 @@
 ///
 /// Public access to Lambda's shared Vulkan device/core.
 
+#include <Lambda/Config.hpp>
+
 #include <cstdint>
 
-#if LAMBDAUI_VULKAN
+#if LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
 
 #include <vulkan/vulkan.h>
 
@@ -46,4 +48,4 @@ private:
 
 } // namespace lambdaui
 
-#endif // LAMBDAUI_VULKAN
+#endif // LAMBDAUI_NATIVE_RENDERERS && LAMBDAUI_VULKAN
