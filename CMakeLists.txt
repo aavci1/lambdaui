@@ -27,10 +27,39 @@ set(LAMBDAUI_PLATFORM "AUTO" CACHE STRING
     "LambdaUI backend: AUTO, MACOS, LINUX_WAYLAND.")
 set_property(CACHE LAMBDAUI_PLATFORM PROPERTY STRINGS AUTO MACOS LINUX_WAYLAND)
 
-set(LAMBDAUI_RENDERER "NATIVE" CACHE STRING
-    "LambdaUI renderer: NATIVE or WEBGPU.")
-set_property(CACHE LAMBDAUI_RENDERER PROPERTY STRINGS NATIVE WEBGPU)
-if(LAMBDAUI_RENDERER STREQUAL "NATIVE")
+set(LAMBDAUI_DAWN_SOURCE_DIR "" CACHE PATH
+  "Optional path to a Dawn source checkout. When empty, LambdaUI uses find_package(Dawn).")
+option(LAMBDAUI_DAWN_FETCH
+  "Fetch Dawn from source with CMake FetchContent when no installed package or source checkout is provided."
+  OFF)
+set(LAMBDAUI_DAWN_GIT_REPOSITORY "https://dawn.googlesource.com/dawn" CACHE STRING
+  "Git repository used when LAMBDAUI_DAWN_FETCH is enabled.")
+set(LAMBDAUI_DAWN_GIT_TAG "main" CACHE STRING
+  "Git tag, branch, or commit used when LAMBDAUI_DAWN_FETCH is enabled.")
+
+set(LAMBDAUI_RENDERER "AUTO" CACHE STRING
+    "LambdaUI renderer: AUTO, NATIVE or WEBGPU.")
+set_property(CACHE LAMBDAUI_RENDERER PROPERTY STRINGS AUTO NATIVE WEBGPU)
+set(LAMBDAUI_RENDERER_NATIVE OFF)
+set(LAMBDAUI_RENDERER_WEBGPU OFF)
+if(LAMBDAUI_RENDERER STREQUAL "AUTO")
+  if(LAMBDAUI_DAWN_SOURCE_DIR OR LAMBDAUI_DAWN_FETCH)
+    set(LAMBDAUI_RENDERER_WEBGPU ON)
+    message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected WEBGPU because Dawn is explicitly configured.")
+  else()
+    find_package(Dawn CONFIG QUIET)
+    if(NOT TARGET dawn::webgpu_dawn AND TARGET webgpu_dawn)
+      add_library(dawn::webgpu_dawn ALIAS webgpu_dawn)
+    endif()
+    if(TARGET dawn::webgpu_dawn)
+      set(LAMBDAUI_RENDERER_WEBGPU ON)
+      message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected WEBGPU because Dawn was found.")
+    else()
+      set(LAMBDAUI_RENDERER_NATIVE ON)
+      message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected NATIVE because Dawn was not found.")
+    endif()
+  endif()
+elseif(LAMBDAUI_RENDERER STREQUAL "NATIVE")
   set(LAMBDAUI_RENDERER_NATIVE ON)
 elseif(LAMBDAUI_RENDERER STREQUAL "WEBGPU")
   set(LAMBDAUI_RENDERER_WEBGPU ON)

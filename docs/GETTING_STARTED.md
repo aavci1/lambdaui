@@ -21,8 +21,8 @@ Linux Wayland requirements:
 
 - `pkg-config`.
 - `wayland-client`, `wayland-cursor`, and `wayland-protocols`.
-- `libdrm`, `xkbcommon`, Vulkan loader/headers, FreeType, fontconfig, HarfBuzz, librsvg, and zlib.
-- `glslangValidator` or `glslang` for shader compilation.
+- `xkbcommon`, FreeType, fontconfig, HarfBuzz, librsvg, and zlib.
+- Native renderer only: `libdrm`, Vulkan loader/headers, and `glslangValidator` or `glslang` for shader compilation.
 
 Package names vary by distribution. Install development packages, not just runtime packages.
 
@@ -76,13 +76,15 @@ cmake -S . -B build -DLAMBDAUI_PLATFORM=LINUX_WAYLAND
 The renderer switch is `LAMBDAUI_RENDERER`:
 
 ```sh
+cmake -S . -B build -DLAMBDAUI_RENDERER=AUTO
 cmake -S . -B build -DLAMBDAUI_RENDERER=NATIVE
+cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=AUTO -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
 cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
 ```
 
-`NATIVE` is the default while the Dawn/WebGPU renderer is being ported. WebGPU builds define `LAMBDAUI_WEBGPU=1` and do not require Vulkan/libdrm/glslang on Linux.
+`AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`, and falls back to `NATIVE` while the Dawn/WebGPU renderer is being ported. WebGPU builds define `LAMBDAUI_WEBGPU=1` and do not require Vulkan/libdrm/glslang on Linux.
 
 Platform defines exported to consumers:
 
@@ -95,7 +97,7 @@ Use these defines to guard platform-specific APIs such as Vulkan image import.
 ## Useful Build Options
 
 - `LAMBDAUI_BUILD_DEMOS`: build standalone demos under `demos/`.
-- `LAMBDAUI_RENDERER`: select `NATIVE` or `WEBGPU`.
+- `LAMBDAUI_RENDERER`: select `AUTO`, `NATIVE`, or `WEBGPU`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` when an installed package or source checkout is not provided.
 - `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.

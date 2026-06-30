@@ -120,7 +120,7 @@ Core files:
 
 Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
 
-Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=NATIVE` keeps the existing Metal or Vulkan renderer, while `LAMBDAUI_RENDERER=WEBGPU` routes window surfaces through Dawn/WebGPU.
+Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` prefers Dawn/WebGPU when Dawn is explicitly configured or discoverable, then falls back to the existing native renderer while the port is completed. `LAMBDAUI_RENDERER=NATIVE` keeps the existing Metal or Vulkan renderer, while `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU.
 
 macOS rendering:
 
@@ -141,7 +141,7 @@ WebGPU rendering:
 - Dawn `webgpu.h` device/surface setup.
 - Dawn is discovered as an installed CMake package, added from `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched with `LAMBDAUI_DAWN_FETCH`.
 - CAMetalLayer surfaces on macOS and Wayland surfaces on Linux.
-- Initial rect/line/primitive-shape pipeline in WGSL.
+- WGSL pipelines for primitives, paths, images, glyphs, clips, render targets, and frame readback.
 
 Rendering code is split across:
 
