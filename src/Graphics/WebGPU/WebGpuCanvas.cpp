@@ -1526,7 +1526,7 @@ public:
     }
   }
 
-  WGPUDevice gpuDevice() const override { return context_.device(); }
+  WGPUDevice webGpuDevice() const override { return context_.device(); }
 
   TextSystem& textSystem() noexcept { return textSystem_; }
 

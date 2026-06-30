@@ -151,9 +151,9 @@ public:
     drawBackdropBlur(rect, radius, tint, corners);
   }
 
-  /// WebGPU device handle for image/resource creation, currently a `WGPUDevice`.
-  /// Use with `loadImage(path, canvas.gpuDevice())` when GPU-backed resources need a device.
-  virtual WGPUDevice gpuDevice() const = 0;
+  /// Borrowed WebGPU device handle for image/resource creation.
+  /// Use with `loadImage(path, canvas.webGpuDevice())` when GPU-backed resources need a device.
+  virtual WGPUDevice webGpuDevice() const = 0;
 
   virtual bool requestNextFrameCapture() = 0;
   virtual bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width,
