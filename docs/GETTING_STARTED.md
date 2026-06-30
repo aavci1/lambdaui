@@ -87,7 +87,7 @@ WebGPU APIs are always available. `webGpuCanvasHandles(canvas)` exposes borrowed
 
 - `LAMBDAUI_BUILD_DEMOS`: build standalone demos under `demos/`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
-- `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` when an installed package or source checkout is not provided.
+- `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` when an installed package or source checkout is not provided. LambdaUI skips Dawn's git submodules and lets Dawn's dependency fetcher clone the required subset.
 - `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.
 - `LAMBDAUI_DAWN_GIT_TAG`: Dawn tag, branch, or commit used by `LAMBDAUI_DAWN_FETCH`.
 - `LAMBDAUI_BUILD_TESTS`: build `lambda-tests` and register it with CTest.
