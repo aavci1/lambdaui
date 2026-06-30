@@ -131,10 +131,11 @@ The test suite uses doctest and builds as `lambda-tests` when `LAMBDAUI_BUILD_TE
 ```sh
 cmake -S . -B build -DLAMBDAUI_BUILD_TESTS=ON
 cmake --build build --target lambda-tests
+cmake --build build --target lambdaui_static_checks
 ctest --test-dir build --output-on-failure
 ```
 
-Platform-specific tests are included for the selected platform. The active renderer path is Dawn/WebGPU.
+Platform-specific tests are included for the selected platform. `lambdaui_static_checks` includes module dependency validation and the WebGPU-only backend guard. The active renderer path is Dawn/WebGPU.
 
 ## Demos
 

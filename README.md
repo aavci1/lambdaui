@@ -127,6 +127,8 @@ docs/                 Project documentation
 
 `Canvas::webGpuDevice()`, `Canvas::webGpuQueue()`, and `Canvas::webGpuRenderTargetFormat()` return borrowed Dawn handles. `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
 
+`lambdaui_static_checks` runs module dependency validation and the WebGPU-only backend guard.
+
 The build uses CMake `FetchContent` for `libtess2`, and for `doctest` when tests are enabled.
 
 ## License

@@ -143,6 +143,12 @@ add_custom_target(lambdaui_webgpu_backend_check
   VERBATIM
 )
 
+add_custom_target(lambdaui_static_checks
+  DEPENDS
+    lambdaui_module_dependency_check
+    lambdaui_webgpu_backend_check
+)
+
 if(LAMBDAUI_PLATFORM_MACOS)
   target_sources(lambdaui PRIVATE
     UI/Application.mm
