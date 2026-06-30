@@ -770,11 +770,7 @@ bool MacPopoverSurface::show(LambdaWebGpuView* parentView, Rect anchor) {
   if (!layer) {
     return false;
   }
-  canvas_ = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface{
-                                           .kind = webgpu::WebGpuNativeSurface::Kind::MetalLayer,
-                                           .display = nullptr,
-                                           .surface = (__bridge void*)layer,
-                                       },
+  canvas_ = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::metalLayer((__bridge void*)layer),
                                        owner_->handle(),
                                        Application::instance().textSystem(),
                                        size_,
@@ -1900,11 +1896,7 @@ std::unique_ptr<Canvas> MacWebGpuWindow::createCanvas(::lambdaui::Window& owner)
     layer.opaque = NO;
     layer.backgroundColor = [[NSColor clearColor] CGColor];
   }
-  return webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface{
-                                       .kind = webgpu::WebGpuNativeSurface::Kind::MetalLayer,
-                                       .display = nullptr,
-                                       .surface = layerPtr,
-                                   },
+  return webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::metalLayer(layerPtr),
                                    handle(),
                                    Application::instance().textSystem(),
                                    currentSize(),

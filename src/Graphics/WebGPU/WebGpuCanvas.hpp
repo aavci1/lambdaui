@@ -8,6 +8,9 @@
 #include <cstdint>
 #include <memory>
 
+struct wl_display;
+struct wl_surface;
+
 namespace lambdaui {
 
 class TextSystem;
@@ -21,9 +24,25 @@ struct WebGpuNativeSurface {
     WaylandSurface,
   };
 
+  static WebGpuNativeSurface metalLayer(void* layer) noexcept {
+    WebGpuNativeSurface native{};
+    native.kind = Kind::MetalLayer;
+    native.metalLayerHandle = layer;
+    return native;
+  }
+
+  static WebGpuNativeSurface wayland(wl_display* display, wl_surface* surface) noexcept {
+    WebGpuNativeSurface native{};
+    native.kind = Kind::WaylandSurface;
+    native.waylandDisplay = display;
+    native.waylandSurface = surface;
+    return native;
+  }
+
   Kind kind = Kind::None;
-  void* display = nullptr;
-  void* surface = nullptr;
+  void* metalLayerHandle = nullptr;
+  wl_display* waylandDisplay = nullptr;
+  wl_surface* waylandSurface = nullptr;
 };
 
 std::unique_ptr<Canvas> createWebGpuCanvas(WebGpuNativeSurface nativeSurface,

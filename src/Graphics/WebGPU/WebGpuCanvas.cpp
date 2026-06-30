@@ -1004,18 +1004,18 @@ WGPUSurface createSurface(WGPUInstance instance, WebGpuNativeSurface native) {
 
   switch (native.kind) {
     case WebGpuNativeSurface::Kind::MetalLayer:
-      if (!native.surface) {
+      if (!native.metalLayerHandle) {
         throw std::runtime_error("Lambda WebGPU: missing CAMetalLayer surface");
       }
-      metalLayer.layer = native.surface;
+      metalLayer.layer = native.metalLayerHandle;
       descriptor.nextInChain = &metalLayer.chain;
       break;
     case WebGpuNativeSurface::Kind::WaylandSurface:
-      if (!native.display || !native.surface) {
+      if (!native.waylandDisplay || !native.waylandSurface) {
         throw std::runtime_error("Lambda WebGPU: missing Wayland display or surface");
       }
-      wayland.display = native.display;
-      wayland.surface = native.surface;
+      wayland.display = native.waylandDisplay;
+      wayland.surface = native.waylandSurface;
       descriptor.nextInChain = &wayland.chain;
       break;
     case WebGpuNativeSurface::Kind::None:

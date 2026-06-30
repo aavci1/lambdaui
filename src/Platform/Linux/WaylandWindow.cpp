@@ -1238,14 +1238,11 @@ public:
 
   std::unique_ptr<Canvas> createCanvas(::lambdaui::Window&) override {
     nativeSurface_ = WaylandNativeSurface{display_, surface_};
-    auto canvas = webgpu::createWebGpuCanvas(
-        {.kind = webgpu::WebGpuNativeSurface::Kind::WaylandSurface,
-         .display = display_,
-         .surface = surface_},
-        handle_,
-        Application::instance().textSystem(),
-        size_,
-        wantsTransparentSurface());
+    auto canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::wayland(display_, surface_),
+                                             handle_,
+                                             Application::instance().textSystem(),
+                                             size_,
+                                             wantsTransparentSurface());
     canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
     canvas->resize(static_cast<int>(std::lround(size_.width)), static_cast<int>(std::lround(size_.height)));
     canvas_ = canvas.get();
@@ -1975,14 +1972,12 @@ private:
     }
     try {
       state.nativeSurface = WaylandNativeSurface{state.shared->display, state.surface};
-      state.canvas = webgpu::createWebGpuCanvas(
-          {.kind = webgpu::WebGpuNativeSurface::Kind::WaylandSurface,
-           .display = state.shared->display,
-           .surface = state.surface},
-          handle_,
-          Application::instance().textSystem(),
-          Size{static_cast<float>(state.width), static_cast<float>(state.height)},
-          true);
+      state.canvas = webgpu::createWebGpuCanvas(webgpu::WebGpuNativeSurface::wayland(state.shared->display,
+                                                                                     state.surface),
+                                                handle_,
+                                                Application::instance().textSystem(),
+                                                Size{static_cast<float>(state.width), static_cast<float>(state.height)},
+                                                true);
       state.canvas->updateDpiScale(dpiScaleX_, dpiScaleY_);
       state.canvas->resize(state.width, state.height);
       return true;
