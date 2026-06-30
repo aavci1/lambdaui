@@ -51,9 +51,9 @@ class SceneGraph;
 
 class OverlayManager;
 
-/// Per-backend window feature support. Query with `Window::platformCapabilities()`.
+/// Per-platform window feature support. Query with `Window::platformCapabilities()`.
 ///
-/// Backend matrix (config field → capability):
+/// Platform matrix (config field → capability):
 /// - `background.kind == Glass` → native/compositor-backed window material where available
 /// - `layerShell` / `backgroundBlur` → Wayland compositor client only
 struct PlatformWindowCapabilities {

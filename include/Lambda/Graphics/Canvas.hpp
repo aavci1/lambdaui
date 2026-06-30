@@ -46,16 +46,8 @@ public:
 
 }
 
-enum class Backend : std::uint8_t { WebGPU };
-
 struct RecordedOps {
   virtual ~RecordedOps() = default;
-  virtual Backend backend() const noexcept = 0;
-};
-
-struct RecordedOpsReplaySlice {
-  Backend backend;
-  void const* native = nullptr;
 };
 
 class Canvas {
@@ -67,7 +59,6 @@ public:
   Canvas(Canvas&&) = delete;
   Canvas& operator=(Canvas&&) = delete;
 
-  virtual Backend backend() const noexcept = 0;
   virtual unsigned int windowHandle() const = 0;
 
   virtual void resize(int width, int height) = 0;
@@ -158,8 +149,8 @@ public:
     drawBackdropBlur(rect, radius, tint, corners);
   }
 
-  /// Backend device handle for image/resource creation, currently a `WGPUDevice`.
-  /// Use with `loadImage(path, canvas.gpuDevice())` when the active backend needs a device.
+  /// WebGPU device handle for image/resource creation, currently a `WGPUDevice`.
+  /// Use with `loadImage(path, canvas.gpuDevice())` when GPU-backed resources need a device.
   virtual void* gpuDevice() const = 0;
 
   virtual bool requestNextFrameCapture() = 0;
@@ -169,10 +160,8 @@ public:
   virtual void endRecordedOpsCapture() = 0;
   virtual std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(
       std::unique_ptr<RecordedOps> recorded) = 0;
-  virtual bool replayRecordedOps(RecordedOps const& recorded,
-                                 RecordedOpsReplaySlice const* slice = nullptr) = 0;
-  virtual bool replayRecordedLocalOps(RecordedOps const& recorded,
-                                      RecordedOpsReplaySlice const* slice = nullptr) = 0;
+  virtual bool replayRecordedOps(RecordedOps const& recorded) = 0;
+  virtual bool replayRecordedLocalOps(RecordedOps const& recorded) = 0;
 
   virtual void clear(Color color = Colors::transparent) = 0;
 

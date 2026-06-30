@@ -1053,8 +1053,6 @@ class WebGpuCanvas final : public Canvas {
     std::vector<WebGpuQuadInstance> quads;
     std::vector<WebGpuPathVertex> pathVertices;
     bool containsClipState = false;
-
-    Backend backend() const noexcept override { return Backend::WebGPU; }
   };
 
   class WebGpuCanvasPreparedRenderOps final : public scenegraph::PreparedRenderOps {
@@ -1143,7 +1141,6 @@ public:
     }
   }
 
-  Backend backend() const noexcept override { return Backend::WebGPU; }
   unsigned int windowHandle() const override { return handle_; }
   WGPUDevice deviceHandle() const noexcept { return context_.device(); }
   WGPUQueue queueHandle() const noexcept { return context_.queue(); }
@@ -1392,12 +1389,12 @@ public:
     applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(rects_.size());
     rects_.push_back(instance);
-    drawOps_.push_back(WebGpuDrawOp{
-        .kind = WebGpuDrawOp::Kind::Rect,
-        .first = first,
-        .count = 1,
-        .blendMode = blendMode_,
-    });
+    WebGpuDrawOp op{};
+    op.kind = WebGpuDrawOp::Kind::Rect;
+    op.first = first;
+    op.count = 1;
+    op.blendMode = blendMode_;
+    drawOps_.push_back(std::move(op));
   }
 
   void drawPath(Path const& path,
@@ -1605,18 +1602,12 @@ public:
     return std::make_unique<WebGpuCanvasPreparedRenderOps>(std::move(*webgpuRecorded));
   }
 
-  bool replayRecordedOps(RecordedOps const& recorded, RecordedOpsReplaySlice const* slice) override {
-    if (slice && slice->backend != Backend::WebGPU) {
-      return false;
-    }
+  bool replayRecordedOps(RecordedOps const& recorded) override {
     WebGpuFrameRecorder const* webgpuRecorded = asWebGpuRecordedOps(recorded);
     return webgpuRecorded && appendRecordedOps(*webgpuRecorded, false);
   }
 
-  bool replayRecordedLocalOps(RecordedOps const& recorded, RecordedOpsReplaySlice const* slice) override {
-    if (slice && slice->backend != Backend::WebGPU) {
-      return false;
-    }
+  bool replayRecordedLocalOps(RecordedOps const& recorded) override {
     WebGpuFrameRecorder const* webgpuRecorded = asWebGpuRecordedOps(recorded);
     return webgpuRecorded && appendRecordedOps(*webgpuRecorded, true);
   }
@@ -1726,15 +1717,11 @@ private:
   }
 
   static WebGpuFrameRecorder* asWebGpuRecordedOps(RecordedOps* recorded) noexcept {
-    return recorded && recorded->backend() == Backend::WebGPU
-               ? static_cast<WebGpuFrameRecorder*>(recorded)
-               : nullptr;
+    return dynamic_cast<WebGpuFrameRecorder*>(recorded);
   }
 
   static WebGpuFrameRecorder const* asWebGpuRecordedOps(RecordedOps const& recorded) noexcept {
-    return recorded.backend() == Backend::WebGPU
-               ? static_cast<WebGpuFrameRecorder const*>(&recorded)
-               : nullptr;
+    return dynamic_cast<WebGpuFrameRecorder const*>(&recorded);
   }
 
   static bool instanceHasClip(float const (&clipHeader)[4]) noexcept {
@@ -2387,12 +2374,12 @@ private:
     applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(rects_.size());
     rects_.push_back(instance);
-    drawOps_.push_back(WebGpuDrawOp{
-        .kind = WebGpuDrawOp::Kind::Rect,
-        .first = first,
-        .count = 1,
-        .blendMode = blendMode_,
-    });
+    WebGpuDrawOp op{};
+    op.kind = WebGpuDrawOp::Kind::Rect;
+    op.first = first;
+    op.count = 1;
+    op.blendMode = blendMode_;
+    drawOps_.push_back(std::move(op));
   }
 
   void pushImageInstance(WebGpuImage const& image,
@@ -2435,13 +2422,12 @@ private:
     applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
     quads_.push_back(instance);
-    WebGpuDrawOp op{
-        .kind = WebGpuDrawOp::Kind::Image,
-        .first = first,
-        .count = 1,
-        .blendMode = blendMode_,
-        .image = &image,
-    };
+    WebGpuDrawOp op{};
+    op.kind = WebGpuDrawOp::Kind::Image;
+    op.first = first;
+    op.count = 1;
+    op.blendMode = blendMode_;
+    op.image = &image;
     try {
       op.imageRef = image.shared_from_this();
     } catch (std::bad_weak_ptr const&) {
@@ -2482,13 +2468,13 @@ private:
     applyCurrentClip(instance);
     std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
     quads_.push_back(instance);
-    drawOps_.push_back(WebGpuDrawOp{
-        .kind = WebGpuDrawOp::Kind::BackdropBlur,
-        .first = first,
-        .count = 1,
-        .blendMode = blendMode_,
-        .blurRadiusPx = std::clamp(radius * targetDpiScale(), 1.f, static_cast<float>(kWebGpuBackdropBlurMaxRadiusPx)),
-    });
+    WebGpuDrawOp op{};
+    op.kind = WebGpuDrawOp::Kind::BackdropBlur;
+    op.first = first;
+    op.count = 1;
+    op.blendMode = blendMode_;
+    op.blurRadiusPx = std::clamp(radius * targetDpiScale(), 1.f, static_cast<float>(kWebGpuBackdropBlurMaxRadiusPx));
+    drawOps_.push_back(std::move(op));
   }
 
   void appendPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) {
@@ -2562,12 +2548,12 @@ private:
 
     std::uint32_t const vertexCount = static_cast<std::uint32_t>(pathVertices_.size()) - firstVertex;
     if (vertexCount > 0) {
-      drawOps_.push_back(WebGpuDrawOp{
-          .kind = WebGpuDrawOp::Kind::Path,
-          .first = firstVertex,
-          .count = vertexCount,
-          .blendMode = blendMode_,
-      });
+      WebGpuDrawOp op{};
+      op.kind = WebGpuDrawOp::Kind::Path;
+      op.first = firstVertex;
+      op.count = vertexCount;
+      op.blendMode = blendMode_;
+      drawOps_.push_back(std::move(op));
     }
   }
 

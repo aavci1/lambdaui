@@ -86,7 +86,7 @@ class TextSystem {
     /// Drop cache entries that reference any of the given font ids (resolved font registry indices).
     virtual void invalidateForFontChange(std::span<std::uint32_t const> fontIds) { (void)fontIds; }
 
-    /// Byte budget for the paragraph shape cache (Core Text backend only). Default is implementation-defined.
+    /// Byte budget for the paragraph shape cache (Core Text implementation only). Default is implementation-defined.
     virtual void setParagraphCacheBudget(std::size_t bytes) { (void)bytes; }
 
     // -----------------------------------------------------------------
@@ -96,7 +96,7 @@ class TextSystem {
     [[nodiscard]] virtual TextCacheStats stats() const { return {}; }
 
     // -----------------------------------------------------------------
-    // Backend interface (called by GlyphAtlas — not for app code)
+    // Glyph atlas interface (not for app code)
     // -----------------------------------------------------------------
 
     virtual std::uint32_t resolveFontId(std::string_view fontFamily, float weight, bool italic) = 0;

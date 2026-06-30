@@ -302,7 +302,6 @@ class CountingBoundsNode final : public SceneNode {
 
 class DpiOnlyCanvas final : public Canvas {
   public:
-    Backend backend() const noexcept override { return Backend::WebGPU; }
     unsigned int windowHandle() const override { return 0; }
     void resize(int, int) override {}
     void updateDpiScale(float scaleX, float scaleY) override { dpiScale_ = std::max(scaleX, scaleY); }
@@ -342,8 +341,8 @@ class DpiOnlyCanvas final : public Canvas {
     void endRecordedOpsCapture() override {}
     std::unique_ptr<scenegraph::PreparedRenderOps> finalizeRecordedOps(
         std::unique_ptr<RecordedOps>) override { return nullptr; }
-    bool replayRecordedOps(RecordedOps const&, RecordedOpsReplaySlice const* = nullptr) override { return false; }
-    bool replayRecordedLocalOps(RecordedOps const&, RecordedOpsReplaySlice const* = nullptr) override { return false; }
+    bool replayRecordedOps(RecordedOps const&) override { return false; }
+    bool replayRecordedLocalOps(RecordedOps const&) override { return false; }
     void clear(Color) override {}
 
   private:
