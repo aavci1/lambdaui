@@ -152,7 +152,8 @@ public:
   }
 
   /// Borrowed WebGPU device handle for image/resource creation.
-  /// Use with `loadImage(path, canvas.webGpuDevice())` when WebGPU-backed resources need a device.
+  /// Use with `loadImage(path, canvas.webGpuDevice(), canvas.webGpuQueue())` when WebGPU-backed
+  /// resources need eager upload.
   virtual WGPUDevice webGpuDevice() const = 0;
   /// Borrowed WebGPU queue handle for the canvas device.
   virtual WGPUQueue webGpuQueue() const = 0;

@@ -125,7 +125,7 @@ docs/                 Project documentation
 - `LAMBDAUI_PROFILE_REACTIVE`: compile reactive profiling counters.
 - `LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING`: log built-in application event handlers.
 
-`Canvas::webGpuDevice()`, `Canvas::webGpuQueue()`, and `Canvas::webGpuRenderTargetFormat()` return borrowed Dawn handles. `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
+`Canvas::webGpuDevice()`, `Canvas::webGpuQueue()`, and `Canvas::webGpuRenderTargetFormat()` return borrowed Dawn handles. Pass the device and queue together to image upload helpers when eager upload is needed. `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
 
 `lambdaui_static_checks` runs module dependency validation and the WebGPU-only backend guard.
 

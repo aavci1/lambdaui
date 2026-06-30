@@ -239,7 +239,7 @@ std::shared_ptr<Image> makeBlendPreviewImage(Canvas& canvas, Size logicalSize, B
     }
   }
 
-  return Image::fromRgbaPixels(width, height, pixels, canvas.webGpuDevice());
+  return Image::fromRgbaPixels(width, height, pixels, canvas.webGpuDevice(), canvas.webGpuQueue());
 }
 
 struct BlendCell : ViewModifiers<BlendCell> {
