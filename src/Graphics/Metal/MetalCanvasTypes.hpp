@@ -147,21 +147,8 @@ struct MetalGlyphOp {
   std::uint32_t scissorH = 0;
 };
 
-struct MetalBackdropBlurOp {
-  vector_float4 rect{};
-  vector_float4 tint{};
-  vector_float4 corners{};
-  float radius = 0.f;
-  MetalRoundedClipStack roundedClip{};
-  bool scissorValid = false;
-  std::uint32_t scissorX = 0;
-  std::uint32_t scissorY = 0;
-  std::uint32_t scissorW = 0;
-  std::uint32_t scissorH = 0;
-};
-
 struct MetalOpRef {
-  enum Kind : std::uint8_t { Rect, Image, Path, Glyph, BackdropBlur } kind = Rect;
+  enum Kind : std::uint8_t { Rect, Image, Path, Glyph } kind = Rect;
   std::uint32_t index = 0;
 };
 
@@ -176,8 +163,6 @@ struct MetalRecorderSlice {
   std::uint32_t pathOpCount = 0;
   std::uint32_t glyphOpStart = 0;
   std::uint32_t glyphOpCount = 0;
-  std::uint32_t backdropBlurOpStart = 0;
-  std::uint32_t backdropBlurOpCount = 0;
   std::uint32_t pathVertexStart = 0;
   std::uint32_t pathVertexCount = 0;
   std::uint32_t glyphVertexStart = 0;
@@ -187,7 +172,6 @@ struct MetalRecorderSlice {
 static_assert(std::is_trivially_copyable_v<MetalImageOp>);
 static_assert(std::is_trivially_copyable_v<MetalPathOp>);
 static_assert(std::is_trivially_copyable_v<MetalGlyphOp>);
-static_assert(std::is_trivially_copyable_v<MetalBackdropBlurOp>);
 static_assert(std::is_trivially_copyable_v<MetalOpRef>);
 static_assert(std::is_trivially_copyable_v<MetalRecorderSlice>);
 

@@ -12,7 +12,6 @@
 
 /// Layout containers (`#include <Lambda/UI/Element.hpp>`).
 #include <Lambda/UI/Views/Alert.hpp>
-#include <Lambda/UI/Views/BackdropBlur.hpp>
 #include <Lambda/UI/Views/Badge.hpp>
 #include <Lambda/UI/Views/Button.hpp>
 #include <Lambda/UI/Views/Card.hpp>

@@ -118,7 +118,7 @@ Core files:
 
 ## Rendering
 
-Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
+Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, and cached subtrees.
 
 macOS rendering:
 

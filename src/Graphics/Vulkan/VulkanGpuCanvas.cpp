@@ -63,12 +63,6 @@ namespace {
 class VulkanCanvas;
 
 constexpr std::size_t kMaxFramesInFlight = kVulkanMaxFramesInFlight;
-constexpr int kBackdropBlurIterations = 2;
-constexpr std::uint32_t kDefaultBackdropBlurBaseDownsample = 2;
-constexpr std::uint32_t kMinBackdropBlurBaseDownsample = 1;
-constexpr std::uint32_t kMaxBackdropBlurBaseDownsample = 8;
-constexpr std::uint32_t kMaxBackdropBlurDownsample = 16;
-constexpr float kBackdropBlurRadiusBoost = 1.35f;
 
 bool renderTargetFrameCacheDisabled() {
   static bool const disabled = [] {
@@ -585,10 +579,6 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
   destroyPipelines(res.calloutPipelines);
   destroyPipelines(res.imagePipelines);
   destroyPipelines(res.imageUnpremultiplyPipelines);
-  if (res.backdropPipeline)
-    vkDestroyPipeline(device, res.backdropPipeline, nullptr);
-  if (res.backdropBlurPipeline)
-    vkDestroyPipeline(device, res.backdropBlurPipeline, nullptr);
   if (res.pathPipelineLayout)
     vkDestroyPipelineLayout(device, res.pathPipelineLayout, nullptr);
   if (res.rectPipelineLayout)
@@ -597,8 +587,6 @@ void destroySharedVulkanResources(SharedVulkanCore &core) {
     vkDestroyPipelineLayout(device, res.calloutPipelineLayout, nullptr);
   if (res.imagePipelineLayout)
     vkDestroyPipelineLayout(device, res.imagePipelineLayout, nullptr);
-  if (res.backdropPipelineLayout)
-    vkDestroyPipelineLayout(device, res.backdropPipelineLayout, nullptr);
   if (res.sampler)
     vkDestroySampler(device, res.sampler, nullptr);
   if (res.rectDescriptorLayout)
@@ -802,18 +790,6 @@ public:
     return changed;
   }
 
-  void setBackdropBlurBaseDownsample(std::uint32_t downsample) {
-    std::uint32_t const next = std::clamp(downsample,
-                                          kMinBackdropBlurBaseDownsample,
-                                          kMaxBackdropBlurBaseDownsample);
-    if (next == backdropBlurBaseDownsample_) {
-      return;
-    }
-    backdropBlurBaseDownsample_ = next;
-    backdropBlurCache_.clear();
-    renderTargetFrameCacheValid_ = false;
-  }
-
   bool setRenderTargetSpec(VulkanRenderTargetSpec const& spec) {
     if (!targetMode_ || !spec.image || !spec.view || spec.width == 0 || spec.height == 0) {
       return false;
@@ -907,10 +883,6 @@ public:
     unregisterCanvas();
     destroySwapchain();
     destroyPendingTextureUploads();
-    destroyTexture(backdropSceneTexture_);
-    destroyTexture(backdropScratchTexture_);
-    destroyTexture(backdropBlurTexture_);
-    clearBackdropBlurCache();
     for (auto &kv : imageTextures_) {
       if (kv.second) {
         destroyTexture(*kv.second);
@@ -1329,9 +1301,6 @@ public:
     queueAtlasUploadIfNeeded();
     double const atlasMs = phaseMs(start);
     start = phaseStart();
-    auto backdropRuns = prepareBackdropBlurRuns();
-    double const backdropPrepareMs = phaseMs(start);
-    start = phaseStart();
     uploadFrameBuffers();
     double const uploadMs = phaseMs(start);
 
@@ -1346,27 +1315,16 @@ public:
     clear.color.float32[3] = clearColor_.a;
     recordPendingTextureTransitions(commandBuffer);
     recordPendingTextureUploads(commandBuffer);
-    if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
-      VkImageLayout targetLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      drawOpsWithStackedBackdropBlur(commandBuffer,
-                                     swapchainImages_[imageIndex],
-                                     swapchainViews_[imageIndex],
-                                     targetLayout,
-                                     clear,
-                                     VK_ATTACHMENT_LOAD_OP_CLEAR,
-                                     backdropRuns);
-    } else {
-      transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
-                 VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer,
-                          swapchainViews_[imageIndex],
-                          swapExtent_,
-                          clear,
-                          VK_ATTACHMENT_LOAD_OP_CLEAR,
-                          currentFramebufferPixelRect());
-      drawOps(commandBuffer);
-      vkCmdEndRendering(commandBuffer);
-    }
+    transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED,
+               VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    beginColorRendering(commandBuffer,
+                        swapchainViews_[imageIndex],
+                        swapExtent_,
+                        clear,
+                        VK_ATTACHMENT_LOAD_OP_CLEAR,
+                        currentFramebufferPixelRect());
+    drawOps(commandBuffer);
+    vkCmdEndRendering(commandBuffer);
     transition(commandBuffer, swapchainImages_[imageIndex], VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     writeDebugScreenshotIfRequested(commandBuffer, swapchainImages_[imageIndex], frameFence);
@@ -1483,7 +1441,7 @@ public:
           "vulkan-present-detail",
           "window=%u image=%u ops=%zu rects=%zu quads=%zu paths=%zu "
           "waitFrame=%.3fms deferred=%.3fms acquire=%.3fms waitImage=%.3fms "
-          "atlas=%.3fms blurPrep=%.3fms upload=%.3fms record=%.3fms submit=%.3fms "
+          "atlas=%.3fms upload=%.3fms record=%.3fms submit=%.3fms "
           "screenshot=%.3fms presentFence=%d statusPresentFence=%.3fms resetPresentFence=%.3fms "
           "queuePresent=%.3fms\n",
           handle_,
@@ -1497,7 +1455,6 @@ public:
           acquireMs,
           imageFenceMs,
           atlasMs,
-          backdropPrepareMs,
           uploadMs,
           recordMs,
           submitMs,
@@ -1511,11 +1468,9 @@ public:
 
   struct RenderTargetRecordStats {
     double atlasMs = 0.0;
-    double backdropPrepareMs = 0.0;
     double uploadMs = 0.0;
     double textureUploadRecordMs = 0.0;
     double drawRecordMs = 0.0;
-    std::size_t backdropRuns = 0;
   };
 
   void recordRenderTargetCommands(VkCommandBuffer commandBuffer, VkImage targetImage,
@@ -1538,12 +1493,6 @@ public:
     queueAtlasUploadIfNeeded();
     if (stats) stats->atlasMs = phaseMs(start);
     start = phaseStart();
-    std::vector<BackdropBlurRun> backdropRuns = prepareBackdropBlurRuns();
-    if (stats) {
-      stats->backdropPrepareMs = phaseMs(start);
-      stats->backdropRuns = backdropRuns.size();
-    }
-    start = phaseStart();
     uploadFrameBuffers();
     if (stats) stats->uploadMs = phaseMs(start);
     start = phaseStart();
@@ -1560,21 +1509,11 @@ public:
     start = phaseStart();
     VkAttachmentLoadOp const loadOp =
         targetSpec_.preserveContents ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    if (!backdropRuns.empty() && backdropSceneTexture_.view && backdropScratchTexture_.view && backdropBlurTexture_.view) {
-      drawOpsWithStackedBackdropBlur(commandBuffer,
-                                     targetImage,
-                                     targetView,
-                                     targetLayout,
-                                     clear,
-                                     loadOp,
-                                     backdropRuns);
-    } else {
-      transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      targetLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-      beginColorRendering(commandBuffer, targetView, swapExtent_, clear, loadOp);
-      drawOps(commandBuffer);
-      vkCmdEndRendering(commandBuffer);
-    }
+    transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    targetLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    beginColorRendering(commandBuffer, targetView, swapExtent_, clear, loadOp);
+    drawOps(commandBuffer);
+    vkCmdEndRendering(commandBuffer);
     if (stats) stats->drawRecordMs = phaseMs(start);
     transition(commandBuffer, targetImage, targetLayout, finalLayout);
     debug::perf::recordVulkanRecordDuration(std::chrono::steady_clock::now() - recordStart);
@@ -1703,8 +1642,8 @@ public:
       if (traceResize) {
         LAMBDA_RESIZE_TRACE(
             "vulkan-render-target-detail",
-            "window=%u target=%ux%u ops=%zu rects=%zu quads=%zu paths=%zu backdropRuns=%zu "
-            "waitFrame=%.3fms deferred=%.3fms begin=%.3fms atlas=%.3fms blurPrep=%.3fms "
+            "window=%u target=%ux%u ops=%zu rects=%zu quads=%zu paths=%zu "
+            "waitFrame=%.3fms deferred=%.3fms begin=%.3fms atlas=%.3fms "
             "upload=%.3fms textureUploadRecord=%.3fms drawRecord=%.3fms end=%.3fms submit=%.3fms "
             "signal=%d\n",
             handle_,
@@ -1714,12 +1653,10 @@ public:
             rects_.size(),
             quads_.size(),
             pathVerts_.size(),
-            recordStats.backdropRuns,
             waitFrameMs,
             deferredDestroyMs,
             beginMs,
             recordStats.atlasMs,
-            recordStats.backdropPrepareMs,
             recordStats.uploadMs,
             recordStats.textureUploadRecordMs,
             recordStats.drawRecordMs,
@@ -2050,93 +1987,6 @@ public:
     }
   }
 
-  void drawBackdropBlur(Rect const &rect, float radius, Color tint, CornerRadius const &corners) override {
-    drawBackdropBlurCached(rect, rect, radius, tint, corners);
-  }
-
-  void drawBackdropBlurCached(Rect const &rect,
-                              Rect const &cacheRect,
-                              float radius,
-                              Color tint,
-                              CornerRadius const &corners) override {
-    if (radius <= 0.f || rect.width <= 0.f || rect.height <= 0.f)
-      return;
-    Rect const bounds = transformedBounds(rect);
-    if (!state_.clip.intersects(bounds))
-      return;
-
-    RecordingTarget target = recordingTarget();
-    std::uint32_t first = static_cast<std::uint32_t>(target.quads.size());
-    appendBackdropBlurQuadInstance(target, rect, tint, corners);
-    DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, 1);
-    op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
-    Rect const cacheBounds = transformedBounds(cacheRect);
-    if (cacheBounds.width > 0.f && cacheBounds.height > 0.f) {
-      op.blurCacheClip = cacheBounds;
-      op.hasBlurCacheClip = true;
-    }
-    appendSignedDrawOp(target, op);
-  }
-
-  bool drawBackdropBlurFrame(Rect const& frame,
-                             CornerRadius const& frameRadius,
-                             Rect const& cutout,
-                             float radius,
-                             Color tint) {
-    if (radius <= 0.f || frame.width <= 0.f || frame.height <= 0.f) {
-      return false;
-    }
-    if (!state_.clip.intersects(transformedBounds(frame))) {
-      return true;
-    }
-
-    float const left = std::clamp(cutout.x - frame.x, 0.f, frame.width);
-    float const top = std::clamp(cutout.y - frame.y, 0.f, frame.height);
-    float const right = std::clamp(frame.x + frame.width - (cutout.x + cutout.width), 0.f, frame.width);
-    float const bottom = std::clamp(frame.y + frame.height - (cutout.y + cutout.height), 0.f, frame.height);
-
-    RecordingTarget target = recordingTarget();
-    std::uint32_t const first = static_cast<std::uint32_t>(target.quads.size());
-    if (top > 0.f) {
-      appendBackdropBlurQuadInstance(target,
-                                     Rect::sharp(frame.x, frame.y, frame.width, top),
-                                     tint,
-                                     CornerRadius{frameRadius.topLeft, frameRadius.topRight, 0.f, 0.f});
-    }
-    if (left > 0.f && cutout.height > 0.f) {
-      appendBackdropBlurQuadInstance(target,
-                                     Rect::sharp(frame.x, cutout.y, left, cutout.height),
-                                     tint,
-                                     CornerRadius{});
-    }
-    if (right > 0.f && cutout.height > 0.f) {
-      appendBackdropBlurQuadInstance(target,
-                                     Rect::sharp(cutout.x + cutout.width, cutout.y, right, cutout.height),
-                                     tint,
-                                     CornerRadius{});
-    }
-    if (bottom > 0.f) {
-      appendBackdropBlurQuadInstance(target,
-                                     Rect::sharp(frame.x, cutout.y + cutout.height, frame.width, bottom),
-                                     tint,
-                                     CornerRadius{0.f, 0.f, frameRadius.bottomRight, frameRadius.bottomLeft});
-    }
-
-    std::uint32_t const count = static_cast<std::uint32_t>(target.quads.size()) - first;
-    if (count == 0) {
-      return true;
-    }
-    DrawOp op = makeDrawOp(DrawOp::Kind::BackdropBlur, nullptr, first, count);
-    op.blurRadius = radius * std::max(dpiScaleX_, dpiScaleY_);
-    Rect const cacheBounds = transformedBounds(frame);
-    if (cacheBounds.width > 0.f && cacheBounds.height > 0.f) {
-      op.blurCacheClip = cacheBounds;
-      op.hasBlurCacheClip = true;
-    }
-    appendSignedDrawOp(target, op);
-    return true;
-  }
-
   bool drawCalloutMaterial(Rect const &bounds,
                            Rect const &card,
                            CornerRadius const &corners,
@@ -2309,12 +2159,6 @@ private:
     std::uint32_t successfulSubmits = 0;
   };
 
-  struct CachedBackdropBlur {
-    std::uint64_t signature = 0;
-    Texture texture;
-    bool valid = false;
-  };
-
   struct RoundedClipState {
     Rect rect{};
     CornerRadius radii{};
@@ -2342,38 +2186,6 @@ private:
                              captureTarget_->pathVerts};
     }
     return RecordingTarget{ops_, quads_, rects_, pathVerts_};
-  }
-
-  void appendBackdropBlurQuadInstance(RecordingTarget& target,
-                                      Rect const& rect,
-                                      Color tint,
-                                      CornerRadius const& corners) const {
-    Point p00 = state_.transform.apply({rect.x, rect.y});
-    Point p10 = state_.transform.apply({rect.x + rect.width, rect.y});
-    Point p01 = state_.transform.apply({rect.x, rect.y + rect.height});
-    QuadInstance q{};
-    q.rect[0] = 0.f;
-    q.rect[1] = 0.f;
-    q.rect[2] = rect.width;
-    q.rect[3] = rect.height;
-    q.axisX[0] = p00.x;
-    q.axisX[1] = p00.y;
-    q.axisX[2] = p10.x - p00.x;
-    q.axisX[3] = p10.y - p00.y;
-    q.axisY[0] = p01.x - p00.x;
-    q.axisY[1] = p01.y - p00.y;
-    q.uv[0] = p00.x / std::max(1.f, static_cast<float>(width_));
-    q.uv[1] = p00.y / std::max(1.f, static_cast<float>(height_));
-    q.uv[2] = p10.x / std::max(1.f, static_cast<float>(width_));
-    q.uv[3] = p01.y / std::max(1.f, static_cast<float>(height_));
-    putColor(q.color, tint, state_.opacity);
-    CornerRadius cr = clampRadii(corners, rect.width, rect.height);
-    q.radii[0] = cr.topLeft;
-    q.radii[1] = cr.topRight;
-    q.radii[2] = cr.bottomRight;
-    q.radii[3] = cr.bottomLeft;
-    applyCurrentRoundedClip(q);
-    target.quads.push_back(q);
   }
 
   void registerCanvas() {
@@ -2411,8 +2223,6 @@ private:
            a.texture == b.texture &&
            a.first + a.count == b.first &&
            sameBatchRect(a.clip, b.clip, eps) &&
-           a.hasBlurCacheClip == b.hasBlurCacheClip &&
-           (!a.hasBlurCacheClip || sameBatchRect(a.blurCacheClip, b.blurCacheClip, eps)) &&
            a.sourceImage == b.sourceImage &&
            a.externalStorageDescriptor == b.externalStorageDescriptor &&
            a.externalVertexBuffer == b.externalVertexBuffer &&
@@ -2429,13 +2239,11 @@ private:
       std::uint64_t const previousSignature = prev.geometrySignature;
       std::uint64_t const nextSignature = op.geometrySignature;
       prev.count += op.count;
-      prev.blurRadius = std::max(prev.blurRadius, op.blurRadius);
       if (previousSignature != 0 && nextSignature != 0) {
         std::uint64_t h = 14695981039346656037ULL;
         hashValue(h, previousSignature);
         hashValue(h, nextSignature);
         hashValue(h, prev.count);
-        hashValue(h, prev.blurRadius);
         prev.geometrySignature = nonZeroSignature(h);
       } else {
         prev.geometrySignature = 0;
@@ -2799,18 +2607,12 @@ private:
     float const dy = localReplay ? state_.transform.m[7] : 0.f;
     float const opacityScale = localReplay ? state_.opacity : 1.f;
     constexpr float eps = 1e-4f;
-    bool const hasTranslatedBackdropBlur =
-        localReplay && (std::abs(dx) > eps || std::abs(dy) > eps) &&
-        std::any_of(recorded.ops.begin(), recorded.ops.end(), [](DrawOp const &op) {
-          return op.kind == DrawOp::Kind::BackdropBlur;
-        });
     bool const canUsePreparedGeometry =
         // RADV can crash while recording draws that bind prepared replay descriptors for cached composite
         // content. Keep that driver on the CPU-copy path while allowing unaffected drivers to bind replay buffers.
         recorderPreparedGeometryFastPathEnabled() &&
         (!localReplay || std::abs(opacityScale - 1.f) <= eps) &&
         (!localReplay || state_.roundedClipCount == 0) &&
-        !hasTranslatedBackdropBlur &&
         (recorded.rects.empty() ||
          (recorded.preparedRectBuffer && recorded.preparedRectDescriptor)) &&
         (recorded.quads.empty() ||
@@ -2837,7 +2639,6 @@ private:
           op.externalVertexBuffer = recorded.preparedPathVertexBuffer;
           break;
         case DrawOp::Kind::Image:
-        case DrawOp::Kind::BackdropBlur:
           op.externalStorageDescriptor = recorded.preparedQuadDescriptor;
           break;
         }
@@ -2845,9 +2646,6 @@ private:
           op.geometrySignature =
               translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
           op.clip = localReplayClip(recorded, op.clip, dx, dy);
-          if (op.hasBlurCacheClip) {
-            op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
-          }
           op.externalTranslationX = dx;
           op.externalTranslationY = dy;
         }
@@ -2888,10 +2686,7 @@ private:
     }
 
     ops_.reserve(ops_.size() + resolvedOps.size());
-    float const uvDx = localReplay ? dx / std::max(1.f, static_cast<float>(width_)) : 0.f;
-    float const uvDy = localReplay ? dy / std::max(1.f, static_cast<float>(height_)) : 0.f;
     for (DrawOp op : resolvedOps) {
-      std::uint32_t const originalFirst = op.first;
       switch (op.kind) {
       case DrawOp::Kind::Rect:
         op.first += rectBase;
@@ -2904,30 +2699,11 @@ private:
       case DrawOp::Kind::Image:
         op.first += quadBase;
         break;
-      case DrawOp::Kind::BackdropBlur:
-        op.first += quadBase;
-        if (localReplay) {
-          for (std::uint32_t i = 0; i < op.count; ++i) {
-            std::size_t const index = static_cast<std::size_t>(quadBase + originalFirst + i);
-            if (index >= quads_.size()) {
-              break;
-            }
-            QuadInstance &quad = quads_[index];
-            quad.uv[0] += uvDx;
-            quad.uv[1] += uvDy;
-            quad.uv[2] += uvDx;
-            quad.uv[3] += uvDy;
-          }
-        }
-        break;
       }
       if (localReplay) {
         op.geometrySignature =
             translatedGeometrySignature(op.geometrySignature, dx, dy, opacityScale);
         op.clip = localReplayClip(recorded, op.clip, dx, dy);
-        if (op.hasBlurCacheClip) {
-          op.blurCacheClip = translatedRect(op.blurCacheClip, dx, dy);
-        }
       }
       ops_.push_back(op);
     }
@@ -3058,15 +2834,13 @@ private:
     auto &res = resources();
     VkFormat const format = surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM
                                                                          : surfaceFormat_.format;
-    VkFormat const backdropFormat = backdropRenderTargetFormat();
     if (res.initialized) {
-      if (res.renderFormat != format || res.backdropRenderFormat != backdropFormat) {
+      if (res.renderFormat != format) {
         throw std::runtime_error("Shared Vulkan resources cannot be reused with a different surface format");
       }
       return;
     }
     res.renderFormat = format;
-    res.backdropRenderFormat = backdropFormat;
     pipelines_.createDescriptors(device_, res);
     pipelines_.createSampler(device_, res);
     createPipelineCache(*shared_);
@@ -3455,269 +3229,6 @@ private:
     vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
   }
 
-  void ensureBackdropSceneTarget() {
-    std::uint32_t const downsample = backdropBlurDownsample();
-    int const targetW = static_cast<int>(std::max(1u, (swapExtent_.width + downsample - 1u) / downsample));
-    int const targetH = static_cast<int>(std::max(1u, (swapExtent_.height + downsample - 1u) / downsample));
-    VkFormat const backdropFormat = backdropRenderTargetFormat();
-    auto ensure = [&](Texture &texture) {
-      if (texture.image && texture.width == targetW && texture.height == targetH && texture.format == backdropFormat) {
-        return;
-      }
-      destroyTexture(texture);
-      createRenderTargetTexture(texture, targetW, targetH, backdropFormat);
-      clearBackdropBlurCache();
-    };
-    ensure(backdropSceneTexture_);
-    ensure(backdropScratchTexture_);
-    ensure(backdropBlurTexture_);
-  }
-
-  void clearBackdropBlurCache() {
-    for (CachedBackdropBlur &entry : backdropBlurCache_) {
-      destroyTexture(entry.texture);
-    }
-    backdropBlurCache_.clear();
-  }
-
-  std::uint32_t appendBackdropBlurQuad(float radiusPx, float axisX, float axisY) {
-    QuadInstance q{};
-    q.rect[0] = 0.f;
-    q.rect[1] = 0.f;
-    q.rect[2] = static_cast<float>(width_);
-    q.rect[3] = static_cast<float>(height_);
-    q.axisX[0] = 0.f;
-    q.axisX[1] = 0.f;
-    q.axisX[2] = static_cast<float>(width_);
-    q.axisX[3] = 0.f;
-    q.axisY[0] = 0.f;
-    q.axisY[1] = static_cast<float>(height_);
-    q.uv[0] = 0.f;
-    q.uv[1] = 0.f;
-    q.uv[2] = 1.f;
-    q.uv[3] = 1.f;
-    q.color[0] = q.color[1] = q.color[2] = q.color[3] = 0.f;
-    q.radii[0] = radiusPx;
-    q.radii[1] = axisX;
-    q.radii[2] = axisY;
-    q.radii[3] = 0.f;
-    std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
-    quads_.push_back(q);
-    return first;
-  }
-
-  struct BackdropBlurRun {
-    std::size_t start = 0;
-    std::size_t end = 0;
-    std::uint32_t horizontalQuad = 0;
-    std::uint32_t verticalQuad = 0;
-    Rect clip{};
-  };
-
-  Rect intersectRects(Rect a, Rect b) const {
-    return lambdaui::intersectRects(a, b);
-  }
-
-  Rect quadBounds(std::uint32_t first, std::uint32_t count) const {
-    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
-    bool hasBounds = false;
-    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(quads_.size()));
-    for (std::uint32_t index = first; index < end; ++index) {
-      QuadInstance const &q = quads_[index];
-      Point const p00{q.axisX[0], q.axisX[1]};
-      Point const p10{q.axisX[0] + q.axisX[2], q.axisX[1] + q.axisX[3]};
-      Point const p01{q.axisX[0] + q.axisY[0], q.axisX[1] + q.axisY[1]};
-      Point const p11{p10.x + q.axisY[0], p10.y + q.axisY[1]};
-      float const x0 = std::min({p00.x, p10.x, p01.x, p11.x});
-      float const y0 = std::min({p00.y, p10.y, p01.y, p11.y});
-      float const x1 = std::max({p00.x, p10.x, p01.x, p11.x});
-      float const y1 = std::max({p00.y, p10.y, p01.y, p11.y});
-      Rect const next = Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
-      bounds = hasBounds ? unionRects(bounds, next) : next;
-      hasBounds = true;
-    }
-    return hasBounds ? bounds : Rect::sharp(0.f, 0.f, 0.f, 0.f);
-  }
-
-  Rect rectInstanceBounds(RectInstance const& r) const {
-    Point const p00{r.axisX[0], r.axisX[1]};
-    Point const p10{r.axisX[0] + r.axisX[2], r.axisX[1] + r.axisX[3]};
-    Point const p01{r.axisX[0] + r.axisY[0], r.axisX[1] + r.axisY[1]};
-    Point const p11{p10.x + r.axisY[0], p10.y + r.axisY[1]};
-    float const x0 = std::min({p00.x, p10.x, p01.x, p11.x});
-    float const y0 = std::min({p00.y, p10.y, p01.y, p11.y});
-    float const x1 = std::max({p00.x, p10.x, p01.x, p11.x});
-    float const y1 = std::max({p00.y, p10.y, p01.y, p11.y});
-    return Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
-  }
-
-  Rect rectBounds(std::uint32_t first, std::uint32_t count) const {
-    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
-    bool hasBounds = false;
-    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(rects_.size()));
-    for (std::uint32_t index = first; index < end; ++index) {
-      Rect const next = rectInstanceBounds(rects_[index]);
-      bounds = hasBounds ? unionRects(bounds, next) : next;
-      hasBounds = true;
-    }
-    return hasBounds ? bounds : Rect::sharp(0.f, 0.f, 0.f, 0.f);
-  }
-
-  Rect calloutBounds(std::uint32_t first, std::uint32_t count) const {
-    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
-    bool hasBounds = false;
-    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(callouts_.size()));
-    for (std::uint32_t index = first; index < end; ++index) {
-      CalloutInstance const& c = callouts_[index];
-      RectInstance r{};
-      r.axisX[0] = c.axisX[0];
-      r.axisX[1] = c.axisX[1];
-      r.axisX[2] = c.axisX[2];
-      r.axisX[3] = c.axisX[3];
-      r.axisY[0] = c.axisY[0];
-      r.axisY[1] = c.axisY[1];
-      Rect const next = rectInstanceBounds(r);
-      bounds = hasBounds ? unionRects(bounds, next) : next;
-      hasBounds = true;
-    }
-    return hasBounds ? bounds : Rect::sharp(0.f, 0.f, 0.f, 0.f);
-  }
-
-  Rect pathBounds(std::uint32_t first, std::uint32_t count) const {
-    std::uint32_t const end = std::min<std::uint32_t>(first + count, static_cast<std::uint32_t>(pathVerts_.size()));
-    if (first >= end) {
-      return Rect::sharp(0.f, 0.f, 0.f, 0.f);
-    }
-    float x0 = pathVerts_[first].x;
-    float y0 = pathVerts_[first].y;
-    float x1 = x0;
-    float y1 = y0;
-    for (std::uint32_t index = first + 1; index < end; ++index) {
-      x0 = std::min(x0, pathVerts_[index].x);
-      y0 = std::min(y0, pathVerts_[index].y);
-      x1 = std::max(x1, pathVerts_[index].x);
-      y1 = std::max(y1, pathVerts_[index].y);
-    }
-    return Rect::sharp(x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0));
-  }
-
-  bool drawOpBounds(DrawOp const& op, Rect& bounds) const {
-    if (op.externalStorageDescriptor || op.externalVertexBuffer) {
-      return false;
-    }
-    switch (op.kind) {
-    case DrawOp::Kind::Rect:
-      bounds = rectBounds(op.first, op.count);
-      return op.first + op.count <= rects_.size();
-    case DrawOp::Kind::Callout:
-      bounds = calloutBounds(op.first, op.count);
-      return op.first + op.count <= callouts_.size();
-    case DrawOp::Kind::Path:
-      bounds = pathBounds(op.first, op.count);
-      return op.first + op.count <= pathVerts_.size();
-    case DrawOp::Kind::Image:
-    case DrawOp::Kind::BackdropBlur:
-      bounds = quadBounds(op.first, op.count);
-      return op.first + op.count <= quads_.size();
-    }
-    return false;
-  }
-
-  bool drawOpAffectsBackdropClip(DrawOp const& op, Rect const& clip) const {
-    Rect bounds{};
-    if (!drawOpBounds(op, bounds)) {
-      return true;
-    }
-    Rect const clipped = intersectRects(bounds, op.clip);
-    return clipped.width > 0.f && clipped.height > 0.f && clipped.intersects(clip);
-  }
-
-  Rect backdropBlurRunClip(std::size_t start, std::size_t end, float radiusPx) const {
-    Rect bounds = Rect::sharp(0.f, 0.f, 0.f, 0.f);
-    bool hasBounds = false;
-    std::size_t const opEnd = std::min(end, ops_.size());
-    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
-      DrawOp const &op = ops_[index];
-      if (op.kind != DrawOp::Kind::BackdropBlur) continue;
-      Rect const blurBounds = op.hasBlurCacheClip ? op.blurCacheClip : quadBounds(op.first, op.count);
-      Rect opBounds = intersectRects(blurBounds, op.clip);
-      if (opBounds.width <= 0.f || opBounds.height <= 0.f) continue;
-      bounds = hasBounds ? unionRects(bounds, opBounds) : opBounds;
-      hasBounds = true;
-    }
-    if (!hasBounds) {
-      return Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_));
-    }
-    float const scale = std::max(0.001f, std::max(dpiScaleX_, dpiScaleY_));
-    float const pad = std::ceil(radiusPx / scale) + 2.f;
-    Rect const padded = Rect::sharp(bounds.x - pad,
-                                    bounds.y - pad,
-                                    bounds.width + pad * 2.f,
-                                    bounds.height + pad * 2.f);
-    return intersectRects(padded, Rect::sharp(0.f, 0.f, static_cast<float>(width_), static_cast<float>(height_)));
-  }
-
-  std::size_t nextBackdropBlurOp(std::size_t start = 0) const {
-    std::size_t const begin = std::min(start, ops_.size());
-    auto const it = std::find_if(ops_.begin() + static_cast<std::ptrdiff_t>(begin),
-                                 ops_.end(),
-                                 [](DrawOp const &op) {
-      return op.kind == DrawOp::Kind::BackdropBlur;
-    });
-    return it == ops_.end() ? ops_.size() : static_cast<std::size_t>(std::distance(ops_.begin(), it));
-  }
-
-  std::size_t backdropBlurRunEnd(std::size_t start) const {
-    std::size_t end = start;
-    while (end < ops_.size() && ops_[end].kind == DrawOp::Kind::BackdropBlur) {
-      ++end;
-    }
-    return end;
-  }
-
-  std::pair<std::uint64_t, std::uint64_t> backdropBlurRunOpCounts(std::size_t start, std::size_t end) const {
-    std::uint64_t ops = 0;
-    std::uint64_t quads = 0;
-    std::size_t const opEnd = std::min(end, ops_.size());
-    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
-      DrawOp const& op = ops_[index];
-      if (op.kind != DrawOp::Kind::BackdropBlur) {
-        continue;
-      }
-      ++ops;
-      quads += op.count;
-    }
-    return {ops, quads};
-  }
-
-  float maxBackdropBlurRadius(std::size_t start, std::size_t end) const {
-    float radius = 0.f;
-    std::size_t const opEnd = std::min(end, ops_.size());
-    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
-      DrawOp const &op = ops_[index];
-      if (op.kind == DrawOp::Kind::BackdropBlur) {
-        radius = std::max(radius, op.blurRadius);
-      }
-    }
-    return radius;
-  }
-
-  VkExtent2D backdropTextureExtent() const {
-    return VkExtent2D{
-        static_cast<std::uint32_t>(std::max(1, backdropBlurTexture_.width)),
-        static_cast<std::uint32_t>(std::max(1, backdropBlurTexture_.height)),
-    };
-  }
-
-  std::uint32_t backdropBlurDownsample() const {
-    float const scale = std::max(dpiScaleX_, dpiScaleY_);
-    float const scaleFactor = std::max(1.f, scale);
-    long const scaledDownsample =
-        std::lround(static_cast<float>(backdropBlurBaseDownsample_) * scaleFactor);
-    return static_cast<std::uint32_t>(
-        std::clamp<long>(scaledDownsample, kMinBackdropBlurBaseDownsample, kMaxBackdropBlurDownsample));
-  }
-
   void hashTextureReference(std::uint64_t &h, Texture const *texture) const {
     auto image = reinterpret_cast<std::uintptr_t>(texture ? texture->image : VK_NULL_HANDLE);
     auto view = reinterpret_cast<std::uintptr_t>(texture ? texture->view : VK_NULL_HANDLE);
@@ -3743,9 +3254,6 @@ private:
     hashValue(h, op.kind);
     hashValue(h, op.count);
     hashValue(h, op.clip);
-    hashValue(h, op.blurRadius);
-    hashValue(h, op.blurCacheClip);
-    hashValue(h, op.hasBlurCacheClip);
     hashValue(h, op.blendMode);
     hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalStorageDescriptor));
     hashValue(h, reinterpret_cast<std::uintptr_t>(op.externalVertexBuffer));
@@ -3773,7 +3281,6 @@ private:
       }
       break;
     case DrawOp::Kind::Image:
-    case DrawOp::Kind::BackdropBlur:
       for (std::uint32_t index = op.first; index < end && index < quads.size(); ++index) {
         hashValue(h, quads[index]);
       }
@@ -3801,40 +3308,6 @@ private:
     hashValue(h, drawOpGeometrySignature(op, rects_, quads_, pathVerts_));
   }
 
-  std::uint64_t backdropBlurSignature(BackdropBlurRun const &run, std::size_t runIndex) const {
-    std::uint64_t h = 14695981039346656037ULL;
-    hashValue(h, runIndex);
-    hashValue(h, width_);
-    hashValue(h, height_);
-    hashValue(h, framebufferWidth_);
-    hashValue(h, framebufferHeight_);
-    hashValue(h, swapExtent_.width);
-    hashValue(h, swapExtent_.height);
-    hashValue(h, clearColor_);
-    hashValue(h, run.clip);
-    hashValue(h, kBackdropBlurIterations);
-    hashValue(h, backdropBlurDownsample());
-    hashValue(h, kBackdropBlurRadiusBoost);
-    if (run.horizontalQuad < quads_.size()) {
-      hashValue(h, quads_[run.horizontalQuad]);
-    }
-    if (run.verticalQuad < quads_.size()) {
-      hashValue(h, quads_[run.verticalQuad]);
-    }
-    std::size_t const opEnd = std::min(run.start, ops_.size());
-    std::uint64_t affectingOps = 0;
-    for (std::size_t index = 0; index < opEnd; ++index) {
-      DrawOp const& op = ops_[index];
-      if (!drawOpAffectsBackdropClip(op, run.clip)) {
-        continue;
-      }
-      hashDrawOpGeometry(h, op);
-      ++affectingOps;
-    }
-    hashValue(h, affectingOps);
-    return h;
-  }
-
   std::uint64_t renderTargetFrameSignature() const {
     std::uint64_t h = 14695981039346656037ULL;
     hashValue(h, reinterpret_cast<std::uintptr_t>(targetSpec_.image));
@@ -3851,7 +3324,6 @@ private:
     hashValue(h, framebufferHeight_);
     hashValue(h, dpiScaleX_);
     hashValue(h, dpiScaleY_);
-    hashValue(h, backdropBlurBaseDownsample_);
     hashValue(h, clearColor_);
     hashValue(h, resources().atlasGeneration);
     hashValue(h, resources().atlasDirty);
@@ -3860,57 +3332,6 @@ private:
       hashDrawOpGeometry(h, op);
     }
     return h;
-  }
-
-  CachedBackdropBlur &ensureBackdropBlurCacheEntry(std::size_t index) {
-    if (backdropBlurCache_.size() <= index) {
-      backdropBlurCache_.resize(index + 1);
-    }
-    CachedBackdropBlur &entry = backdropBlurCache_[index];
-    VkExtent2D const extent = backdropTextureExtent();
-    VkFormat const backdropFormat = backdropRenderTargetFormat();
-    if (!entry.texture.image ||
-        entry.texture.width != static_cast<int>(extent.width) ||
-        entry.texture.height != static_cast<int>(extent.height) ||
-        entry.texture.format != backdropFormat) {
-      destroyTexture(entry.texture);
-      createRenderTargetTexture(entry.texture,
-                                static_cast<int>(extent.width),
-                                static_cast<int>(extent.height),
-                                backdropFormat);
-      entry.valid = false;
-      entry.signature = 0;
-    }
-    return entry;
-  }
-
-  std::vector<BackdropBlurRun> prepareBackdropBlurRuns() {
-    std::vector<BackdropBlurRun> runs;
-    std::size_t cursor = 0;
-    while (cursor < ops_.size()) {
-      std::size_t const start = nextBackdropBlurOp(cursor);
-      if (start >= ops_.size()) break;
-      if (runs.empty()) {
-        ensureBackdropSceneTarget();
-      }
-      std::size_t const end = backdropBlurRunEnd(start);
-      auto const [opCount, quadCount] = backdropBlurRunOpCounts(start, end);
-      float const maxRadius = maxBackdropBlurRadius(start, end);
-      float const effectiveRadius = maxRadius * kBackdropBlurRadiusBoost;
-      float const blurRadius = (effectiveRadius / static_cast<float>(backdropBlurDownsample())) /
-                               std::sqrt(static_cast<float>(kBackdropBlurIterations));
-      BackdropBlurRun run{
-          .start = start,
-          .end = end,
-          .horizontalQuad = appendBackdropBlurQuad(blurRadius, 1.f, 0.f),
-          .verticalQuad = appendBackdropBlurQuad(blurRadius, 0.f, 1.f),
-          .clip = backdropBlurRunClip(start, end, effectiveRadius),
-      };
-      debug::perf::recordBackdropBlurPreparedRun(opCount, quadCount);
-      runs.push_back(run);
-      cursor = end;
-    }
-    return runs;
   }
 
   VulkanDrawCommandContext drawCommandContext() const {
@@ -3967,187 +3388,8 @@ private:
     return PixelRect{x0, y0, x1 > x0 ? x1 - x0 : 0u, y1 > y0 ? y1 - y0 : 0u};
   }
 
-  void drawBackdropBlurPass(VkCommandBuffer commandBuffer,
-                            VulkanCommandState &state,
-                            Texture *texture,
-                            std::uint32_t first,
-                            Rect const &clip,
-                            VkExtent2D targetExtent) {
-    setViewportScissor(commandBuffer, clip, targetExtent);
-    drawVulkanBackdropBlurPass(commandBuffer, state, drawCommandContext(), texture, first);
-  }
-
-  void copyTargetToBackdropScene(VkCommandBuffer commandBuffer,
-                                 VkImage targetImage,
-                                 VkImageLayout &targetLayout,
-                                 Rect const &clip) {
-    transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    targetLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    PixelRect const srcRect = pixelRectForLogicalClip(clip);
-    VkExtent2D const backdropExtent{
-        static_cast<std::uint32_t>(std::max(1, backdropSceneTexture_.width)),
-        static_cast<std::uint32_t>(std::max(1, backdropSceneTexture_.height)),
-    };
-    PixelRect const dstRect = pixelRectForLogicalClip(clip, backdropExtent);
-    if (!srcRect.valid() || !dstRect.valid()) {
-      transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(backdropSceneTexture_);
-      return;
-    }
-    auto blit = vkStructure<VkImageBlit2>(VK_STRUCTURE_TYPE_IMAGE_BLIT_2);
-    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    blit.srcSubresource.layerCount = 1;
-    blit.srcOffsets[0] = {static_cast<std::int32_t>(srcRect.x), static_cast<std::int32_t>(srcRect.y), 0};
-    blit.srcOffsets[1] = {static_cast<std::int32_t>(srcRect.x + srcRect.width),
-                          static_cast<std::int32_t>(srcRect.y + srcRect.height),
-                          1};
-    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    blit.dstSubresource.layerCount = 1;
-    blit.dstOffsets[0] = {static_cast<std::int32_t>(dstRect.x), static_cast<std::int32_t>(dstRect.y), 0};
-    blit.dstOffsets[1] = {static_cast<std::int32_t>(dstRect.x + dstRect.width),
-                          static_cast<std::int32_t>(dstRect.y + dstRect.height),
-                          1};
-    auto blitInfo = vkStructure<VkBlitImageInfo2>(VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2);
-    blitInfo.srcImage = targetImage;
-    blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    blitInfo.dstImage = backdropSceneTexture_.image;
-    blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    blitInfo.regionCount = 1;
-    blitInfo.pRegions = &blit;
-    blitInfo.filter = VK_FILTER_LINEAR;
-    vkCmdBlitImage2(commandBuffer, &blitInfo);
-
-    transition(commandBuffer, backdropSceneTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-    ensureTextureDescriptor(backdropSceneTexture_);
-  }
-
-  Texture *blurBackdropScene(VkCommandBuffer commandBuffer,
-                             BackdropBlurRun const &run,
-                             VkClearValue const &clear,
-                             CachedBackdropBlur &cacheEntry,
-                             std::uint64_t signature) {
-    Texture *blurSource = &backdropSceneTexture_;
-    Texture *blurDestination = &cacheEntry.texture;
-    VkExtent2D const blurExtent = backdropTextureExtent();
-    PixelRect const renderArea = pixelRectForLogicalClip(run.clip, blurExtent);
-    if (!renderArea.valid()) {
-      cacheEntry.valid = false;
-      return nullptr;
-    }
-    PixelRect const sourceArea = pixelRectForLogicalClip(run.clip);
-    std::uint64_t const blurPixels = static_cast<std::uint64_t>(renderArea.width) * renderArea.height;
-    std::uint64_t const copyPixels = static_cast<std::uint64_t>(sourceArea.width) * sourceArea.height;
-    debug::perf::recordBackdropBlurRun(copyPixels,
-                                       blurPixels * 2u * static_cast<std::uint64_t>(kBackdropBlurIterations),
-                                       2u * static_cast<std::uint64_t>(kBackdropBlurIterations));
-    VulkanCommandState blurState{};
-    for (int i = 0; i < kBackdropBlurIterations; ++i) {
-      transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer,
-                          backdropScratchTexture_.view,
-                          blurExtent,
-                          clear,
-                          VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                          renderArea);
-      drawBackdropBlurPass(commandBuffer, blurState, blurSource, run.horizontalQuad, run.clip, blurExtent);
-      vkCmdEndRendering(commandBuffer);
-      transition(commandBuffer, backdropScratchTexture_, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(backdropScratchTexture_);
-
-      transition(commandBuffer, *blurDestination, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-      beginColorRendering(commandBuffer,
-                          blurDestination->view,
-                          blurExtent,
-                          clear,
-                          VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                          renderArea);
-      drawBackdropBlurPass(commandBuffer, blurState, &backdropScratchTexture_, run.verticalQuad, run.clip, blurExtent);
-      vkCmdEndRendering(commandBuffer);
-      transition(commandBuffer, *blurDestination, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-      ensureTextureDescriptor(*blurDestination);
-      blurSource = blurDestination;
-    }
-    cacheEntry.signature = signature;
-    cacheEntry.valid = true;
-    return blurDestination;
-  }
-
-  void beginTargetRendering(VkCommandBuffer commandBuffer,
-                            VkImage targetImage,
-                            VkImageView targetView,
-                            VkImageLayout &targetLayout,
-                            VkClearValue const &clear,
-                            VkAttachmentLoadOp loadOp) {
-    transition(commandBuffer, targetImage, targetLayout, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-    targetLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-    beginColorRendering(commandBuffer,
-                        targetView,
-                        swapExtent_,
-                        clear,
-                        loadOp,
-                        currentFramebufferPixelRect());
-  }
-
-  void drawOpsWithStackedBackdropBlur(VkCommandBuffer commandBuffer,
-                                      VkImage targetImage,
-                                      VkImageView targetView,
-                                      VkImageLayout &targetLayout,
-                                      VkClearValue const &clear,
-                                      VkAttachmentLoadOp initialLoadOp,
-                                      std::vector<BackdropBlurRun> const &runs) {
-    auto const start = std::chrono::steady_clock::now();
-    std::uint64_t replayedOps = 0;
-    beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, initialLoadOp);
-    std::size_t cursor = 0;
-    for (std::size_t runIndex = 0; runIndex < runs.size(); ++runIndex) {
-      BackdropBlurRun const &run = runs[runIndex];
-      if (run.start > cursor) {
-        drawOps(commandBuffer, cursor, run.start);
-        replayedOps += run.start - cursor;
-      }
-
-      CachedBackdropBlur &cacheEntry = ensureBackdropBlurCacheEntry(runIndex);
-      std::uint64_t const signature = backdropBlurSignature(run, runIndex);
-      bool const cacheHit = cacheEntry.valid && cacheEntry.signature == signature;
-      debug::perf::recordBackdropBlurCacheLookup(cacheHit);
-      Texture *blurTexture = cacheHit ? &cacheEntry.texture : nullptr;
-      if (!blurTexture) {
-        vkCmdEndRendering(commandBuffer);
-        copyTargetToBackdropScene(commandBuffer, targetImage, targetLayout, run.clip);
-        blurTexture = blurBackdropScene(commandBuffer, run, clear, cacheEntry, signature);
-        beginTargetRendering(commandBuffer, targetImage, targetView, targetLayout, clear, VK_ATTACHMENT_LOAD_OP_LOAD);
-      }
-      drawOps(commandBuffer, run.start, run.end, blurTexture);
-      replayedOps += run.end - run.start;
-      cursor = run.end;
-    }
-
-    if (cursor < ops_.size()) {
-      drawOps(commandBuffer, cursor, ops_.size());
-      replayedOps += ops_.size() - cursor;
-    }
-    vkCmdEndRendering(commandBuffer);
-    debug::perf::recordVulkanStackedBlur(std::chrono::steady_clock::now() - start, replayedOps);
-  }
-
-  bool hasBackdropBlurOps() const {
-    return std::any_of(ops_.begin(), ops_.end(), [](DrawOp const &op) {
-      return op.kind == DrawOp::Kind::BackdropBlur;
-    });
-  }
-
-  std::size_t firstBackdropBlurOp() const {
-    auto const it = std::find_if(ops_.begin(), ops_.end(), [](DrawOp const &op) {
-      return op.kind == DrawOp::Kind::BackdropBlur;
-    });
-    return it == ops_.end() ? ops_.size() : static_cast<std::size_t>(std::distance(ops_.begin(), it));
-  }
-
   void drawOps(VkCommandBuffer commandBuffer, std::size_t start = 0,
                std::size_t end = std::numeric_limits<std::size_t>::max(),
-               Texture *backdropSource = nullptr,
                VkExtent2D renderExtent = {}) {
     auto const recordStart = std::chrono::steady_clock::now();
     std::size_t const opEnd = std::min(end, ops_.size());
@@ -4193,11 +3435,6 @@ private:
         drawVulkanImageRange(commandBuffer, commandState, drawContext, op.texture, op.first,
                              op.count, op.externalStorageDescriptor, op.externalTranslationX,
                              op.externalTranslationY, op.premultipliedAlpha, op.blendMode);
-        break;
-      case DrawOp::Kind::BackdropBlur:
-        drawVulkanBackdropRange(commandBuffer, commandState, drawContext, backdropSource,
-                                op.first, op.count, op.externalStorageDescriptor,
-                                op.externalTranslationX, op.externalTranslationY);
         break;
       }
     }
@@ -4571,19 +3808,6 @@ private:
     return std::all_of(imageRenderFinished_.begin(), imageRenderFinished_.end(), [](VkSemaphore semaphore) {
       return semaphore != VK_NULL_HANDLE;
     });
-  }
-
-  VkFormat backdropRenderTargetFormat() const {
-    VkFormat constexpr preferred = VK_FORMAT_R16G16B16A16_SFLOAT;
-    VkFormatProperties properties{};
-    vkGetPhysicalDeviceFormatProperties(physical_, preferred, &properties);
-    VkFormatFeatureFlags constexpr required = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-                                              VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-                                              VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
-                                              VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
-                                              VK_FORMAT_FEATURE_BLIT_DST_BIT;
-    if ((properties.optimalTilingFeatures & required) == required) return preferred;
-    return surfaceFormat_.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_B8G8R8A8_UNORM : surfaceFormat_.format;
   }
 
   void createRenderTargetTexture(Texture &tex,
@@ -4965,11 +4189,6 @@ private:
   std::vector<VkImageView> swapchainViews_;
   std::vector<VkSemaphore> imageRenderFinished_;
   std::vector<RetiredSwapchain> retiredSwapchains_;
-  Texture backdropSceneTexture_;
-  Texture backdropScratchTexture_;
-  Texture backdropBlurTexture_;
-  std::vector<CachedBackdropBlur> backdropBlurCache_;
-  std::uint32_t backdropBlurBaseDownsample_ = kDefaultBackdropBlurBaseDownsample;
   std::array<FrameGeometryResources, kMaxFramesInFlight> frameGeometry_{};
   Buffer pendingScreenshotBuffer_;
   VkDeviceSize pendingScreenshotSize_ = 0;
@@ -5182,14 +4401,6 @@ void setVulkanCanvasResizeBoundsHint(Canvas* canvas, int logicalWidth, int logic
   }
 }
 
-bool setVulkanCanvasBackdropBlurBaseDownsample(Canvas* canvas, std::uint32_t downsample) {
-  if (auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas)) {
-    vulkan->setBackdropBlurBaseDownsample(downsample);
-    return true;
-  }
-  return false;
-}
-
 bool setVulkanCanvasImagePremultipliedAlpha(Canvas* canvas, bool enabled) {
   auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
   return vulkan ? vulkan->setImagePremultipliedAlpha(enabled) : false;
@@ -5205,16 +4416,6 @@ bool markVulkanImageContentsChanged(Image* image) {
   if (!vulkanImage) return false;
   vulkanImage->markContentChanged();
   return true;
-}
-
-bool drawVulkanBackdropBlurFrame(Canvas* canvas,
-                                 Rect const& frame,
-                                 CornerRadius const& frameRadius,
-                                 Rect const& cutout,
-                                 float radius,
-                                 Color tint) {
-  auto* vulkan = dynamic_cast<VulkanCanvas*>(canvas);
-  return vulkan && vulkan->drawBackdropBlurFrame(frame, frameRadius, cutout, radius, tint);
 }
 
 bool drawVulkanCalloutMaterial(Canvas* canvas,

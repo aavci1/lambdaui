@@ -56,8 +56,6 @@ static MetalRecorderSlice fullSlice(MetalFrameRecorder const& recorded) {
       .pathOpCount = static_cast<std::uint32_t>(recorded.pathOps.size()),
       .glyphOpStart = 0,
       .glyphOpCount = static_cast<std::uint32_t>(recorded.glyphOps.size()),
-      .backdropBlurOpStart = 0,
-      .backdropBlurOpCount = static_cast<std::uint32_t>(recorded.backdropBlurOps.size()),
       .pathVertexStart = 0,
       .pathVertexCount = static_cast<std::uint32_t>(recorded.pathVerts.size()),
       .glyphVertexStart = 0,

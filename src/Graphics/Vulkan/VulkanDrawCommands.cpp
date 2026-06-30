@@ -186,49 +186,4 @@ void drawVulkanImageRange(VkCommandBuffer commandBuffer,
   vkCmdDraw(commandBuffer, 6, count, 0, first);
 }
 
-void drawVulkanBackdropRange(VkCommandBuffer commandBuffer,
-                             VulkanCommandState& state,
-                             VulkanDrawCommandContext const& context,
-                             Texture* texture,
-                             std::uint32_t first,
-                             std::uint32_t count,
-                             VkDescriptorSet descriptor,
-                             float translationX,
-                             float translationY) {
-  if (!texture || !texture->descriptor || count == 0 || !context.resources || !context.geometry) {
-    return;
-  }
-  SharedVulkanCore::Resources const& res = *context.resources;
-  FrameGeometryResources const& geometry = *context.geometry;
-  VkDescriptorSet const storageDescriptor = descriptor ? descriptor : geometry.quadDescriptorSet;
-  if (!storageDescriptor) {
-    return;
-  }
-  bindPipeline(commandBuffer, state, res.backdropPipeline, res.backdropPipelineLayout);
-  bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 0, storageDescriptor);
-  pushDrawConstants(commandBuffer, state, context, res.backdropPipelineLayout, translationX, translationY);
-  bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 1, texture->descriptor);
-  vkCmdDraw(commandBuffer, 6, count, 0, first);
-}
-
-void drawVulkanBackdropBlurPass(VkCommandBuffer commandBuffer,
-                                VulkanCommandState& state,
-                                VulkanDrawCommandContext const& context,
-                                Texture* texture,
-                                std::uint32_t first) {
-  if (!texture || !texture->descriptor || !context.resources || !context.geometry) {
-    return;
-  }
-  SharedVulkanCore::Resources const& res = *context.resources;
-  FrameGeometryResources const& geometry = *context.geometry;
-  if (!geometry.quadDescriptorSet) {
-    return;
-  }
-  bindPipeline(commandBuffer, state, res.backdropBlurPipeline, res.backdropPipelineLayout);
-  bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 0, geometry.quadDescriptorSet);
-  pushDrawConstants(commandBuffer, state, context, res.backdropPipelineLayout);
-  bindDescriptorSet(commandBuffer, state, res.backdropPipelineLayout, 1, texture->descriptor);
-  vkCmdDraw(commandBuffer, 6, 1, 0, first);
-}
-
 } // namespace lambdaui

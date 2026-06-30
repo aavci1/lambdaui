@@ -119,7 +119,7 @@ Common categories:
 - Leaf visuals: `Text`, `Rectangle`, `Image`, `Svg`, `PathShape`, `Icon`, `Render`.
 - Layout: `VStack`, `HStack`, `ZStack`, `Grid`, `Spacer`, `Divider`, `ScrollView`, `ListView`.
 - Controls: `Button`, `IconButton`, `LinkButton`, `Checkbox`, `Toggle`, `Slider`, `SegmentedControl`, `Select`, `TextInput`, `TableView`.
-- Surfaces and feedback: `Card`, `Dialog`, `Alert`, `Popover`, `Tooltip`, `Toast`, `Badge`, `ProgressBar`, `BackdropBlur`.
+- Surfaces and feedback: `Card`, `Dialog`, `Alert`, `Popover`, `Tooltip`, `Toast`, `Badge`, `ProgressBar`.
 - Control flow: `For`, `Show`, `Switch`.
 
 The demos under `demos/` are the best place to see each control in context.

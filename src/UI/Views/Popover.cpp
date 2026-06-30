@@ -208,7 +208,6 @@ std::tuple<Reactive::SmallFn<void(Popover)>, Reactive::SmallFn<void()>, bool> us
         .offset = popoverOverlayGapOffset(resolved, gap),
         .modal = false,
         .backdropColor = resolvePopoverBackdropColor(popover.backdropColor, theme),
-        .backdropBlurRadius = resolveFloat(popover.backdropBlurRadius, theme.popoverBackdropBlurRadius),
         .dismissOnOutsideTap = popover.dismissOnOutsideTap,
         .dismissOnEscape = popover.dismissOnEscape,
         .onDismiss = popover.onDismiss,

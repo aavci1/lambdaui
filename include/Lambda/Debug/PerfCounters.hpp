@@ -52,30 +52,17 @@ struct RenderCounters {
   std::uint64_t opOrderEntries = 0;
   std::uint64_t pathVertices = 0;
   std::uint64_t glyphVertices = 0;
-  std::uint64_t backdropBlurRuns = 0;
-  std::uint64_t backdropBlurPreparedRuns = 0;
-  std::uint64_t backdropBlurOps = 0;
-  std::uint64_t backdropBlurQuads = 0;
-  std::uint64_t backdropBlurCacheHits = 0;
-  std::uint64_t backdropBlurCacheMisses = 0;
-  std::uint64_t backdropBlurPasses = 0;
-  std::uint64_t backdropBlurPixels = 0;
-  std::uint64_t backdropCopyPixels = 0;
-  std::uint64_t backdropMaxCopyPixels = 0;
-  std::uint64_t backdropMaxBlurPixels = 0;
   std::uint64_t recorderCapacityGrowths = 0;
   std::uint64_t recorderCapacityGrowthBytes = 0;
   std::uint64_t glyphAtlasGrowths = 0;
   std::uint64_t glyphAtlasGrowPixels = 0;
   std::uint64_t vulkanRecordNs = 0;
   std::uint64_t vulkanDrawOpsNs = 0;
-  std::uint64_t vulkanStackedBlurNs = 0;
   std::uint64_t vulkanPathTessellateNs = 0;
   std::uint64_t vulkanDrawOpsCalls = 0;
   std::uint64_t vulkanDrawOpsVisited = 0;
   std::uint64_t vulkanDrawOpsSubmitted = 0;
   std::uint64_t vulkanScissorChanges = 0;
-  std::uint64_t vulkanStackedOps = 0;
   std::uint64_t vulkanPathTessellations = 0;
 };
 
@@ -216,9 +203,7 @@ inline void printSummaryLine(IntervalCounters const& interval, double seconds) {
   printCompactCount(stderr, perFrame(interval.scene.preparedReplaySuccesses, interval.frames));
   std::fprintf(stderr, "/");
   printCompactCount(stderr, perFrame(interval.scene.preparedReplayFailures, interval.frames));
-  std::fprintf(stderr, "  blur %.1f/f %.1fMP/f  upload %.1fKB  text %llu/%llu\n",
-               perFrame(interval.render.backdropBlurRuns, interval.frames),
-               perFrame(interval.render.backdropBlurPixels, interval.frames) / 1'000'000.0,
+  std::fprintf(stderr, "  upload %.1fKB  text %llu/%llu\n",
                uploadKilobytesPerFrame(interval.render, interval.frames),
                static_cast<unsigned long long>(interval.text.layoutCacheHits),
                static_cast<unsigned long long>(interval.text.layoutCacheMisses));
@@ -274,13 +259,7 @@ inline void printVerboseLine(IntervalCounters const& interval, double seconds) {
   }
 
   std::fprintf(stderr,
-               " blur runs=%llu(%.2f/f) passes=%llu px=%.1fMP/f copy=%.1fMP/f"
                " uploadKB %.1f text layout=%llu hit=%llu miss=%llu",
-               static_cast<unsigned long long>(interval.render.backdropBlurRuns),
-               perFrame(interval.render.backdropBlurRuns, interval.frames),
-               static_cast<unsigned long long>(interval.render.backdropBlurPasses),
-               perFrame(interval.render.backdropBlurPixels, interval.frames) / 1'000'000.0,
-               perFrame(interval.render.backdropCopyPixels, interval.frames) / 1'000'000.0,
                uploadKilobytesPerFrame(interval.render, 1),
                static_cast<unsigned long long>(interval.text.layoutCalls),
                static_cast<unsigned long long>(interval.text.layoutCacheHits),
@@ -357,7 +336,7 @@ inline bool enabled() {
   return perfEnabled();
 }
 
-inline bool backdropBlurDiagnosticsEnabled() {
+inline bool vulkanDiagnosticsEnabled() {
   static bool const enabled = [] {
     char const* cpuTrace = std::getenv("LAMBDA_WINDOW_MANAGER_CPU_TRACE");
     return perfEnabled() || debug::envNonZero(cpuTrace);
@@ -477,7 +456,7 @@ inline void recordGlyphAtlasGrowth(std::uint64_t oldPixels, std::uint64_t newPix
 }
 
 inline void recordVulkanRecordDuration(std::chrono::nanoseconds elapsed) {
-  if (!backdropBlurDiagnosticsEnabled()) {
+  if (!vulkanDiagnosticsEnabled()) {
     return;
   }
   detail::counters().render.vulkanRecordNs += static_cast<std::uint64_t>(elapsed.count());
@@ -485,7 +464,7 @@ inline void recordVulkanRecordDuration(std::chrono::nanoseconds elapsed) {
 
 inline void recordVulkanDrawOps(std::chrono::nanoseconds elapsed, std::uint64_t visited,
                                 std::uint64_t submitted, std::uint64_t scissorChanges) {
-  if (!backdropBlurDiagnosticsEnabled()) {
+  if (!vulkanDiagnosticsEnabled()) {
     return;
   }
   auto& render = detail::counters().render;
@@ -496,57 +475,13 @@ inline void recordVulkanDrawOps(std::chrono::nanoseconds elapsed, std::uint64_t 
   render.vulkanScissorChanges += scissorChanges;
 }
 
-inline void recordVulkanStackedBlur(std::chrono::nanoseconds elapsed, std::uint64_t ops) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  auto& render = detail::counters().render;
-  render.vulkanStackedBlurNs += static_cast<std::uint64_t>(elapsed.count());
-  render.vulkanStackedOps += ops;
-}
-
 inline void recordVulkanPathTessellation(std::chrono::nanoseconds elapsed) {
-  if (!backdropBlurDiagnosticsEnabled()) {
+  if (!vulkanDiagnosticsEnabled()) {
     return;
   }
   auto& render = detail::counters().render;
   render.vulkanPathTessellateNs += static_cast<std::uint64_t>(elapsed.count());
   ++render.vulkanPathTessellations;
-}
-
-inline void recordBackdropBlurPreparedRun(std::uint64_t ops, std::uint64_t quads) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  auto& render = detail::counters().render;
-  ++render.backdropBlurPreparedRuns;
-  render.backdropBlurOps += ops;
-  render.backdropBlurQuads += quads;
-}
-
-inline void recordBackdropBlurCacheLookup(bool hit) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  auto& render = detail::counters().render;
-  if (hit) {
-    ++render.backdropBlurCacheHits;
-  } else {
-    ++render.backdropBlurCacheMisses;
-  }
-}
-
-inline void recordBackdropBlurRun(std::uint64_t copyPixels, std::uint64_t blurPixels, std::uint64_t passes) {
-  if (!backdropBlurDiagnosticsEnabled()) {
-    return;
-  }
-  auto& render = detail::counters().render;
-  ++render.backdropBlurRuns;
-  render.backdropCopyPixels += copyPixels;
-  render.backdropBlurPixels += blurPixels;
-  render.backdropBlurPasses += passes;
-  render.backdropMaxCopyPixels = std::max(render.backdropMaxCopyPixels, copyPixels);
-  render.backdropMaxBlurPixels = std::max(render.backdropMaxBlurPixels, blurPixels);
 }
 
 inline void recordTextLayoutCall() {

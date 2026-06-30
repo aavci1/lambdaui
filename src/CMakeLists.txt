@@ -78,7 +78,6 @@ set(LAMBDA_UI_SOURCES
   UI/PopupMenu.cpp
   UI/OverlaySurfaceHelpers.cpp
   UI/Views/Alert.cpp
-  UI/Views/BackdropBlur.cpp
   UI/Views/Badge.cpp
   UI/Views/Button.cpp
   UI/Views/Card.cpp
@@ -228,7 +227,7 @@ if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   set(LAMBDA_VULKAN_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/Graphics/Vulkan/generated)
   file(MAKE_DIRECTORY ${LAMBDA_VULKAN_GENERATED_DIR})
   set(_lambda_vulkan_shader_headers)
-  foreach(_lambda_shader rect.vert rect.frag callout.vert callout.frag image.vert image.frag image_unpremultiply.frag backdrop.frag backdrop_blur.frag path.vert path.frag)
+  foreach(_lambda_shader rect.vert rect.frag callout.vert callout.frag image.vert image.frag image_unpremultiply.frag path.vert path.frag)
     string(REPLACE "." "_" _lambda_shader_name ${_lambda_shader})
     set(_lambda_shader_src ${LAMBDAUI_FRAMEWORK_SOURCE_DIR}/Graphics/Vulkan/shaders/${_lambda_shader})
     set(_lambda_shader_spv ${CMAKE_CURRENT_BINARY_DIR}/vulkan-shaders/${_lambda_shader}.spv)

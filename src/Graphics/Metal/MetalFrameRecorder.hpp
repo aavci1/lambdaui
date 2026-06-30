@@ -16,7 +16,6 @@ struct MetalFrameRecorder : RecordedOps {
   std::vector<MetalImageOp> imageOps;
   std::vector<MetalPathOp> pathOps;
   std::vector<MetalGlyphOp> glyphOps;
-  std::vector<MetalBackdropBlurOp> backdropBlurOps;
   std::vector<MetalOpRef> opOrder;
   std::vector<PathVertex> pathVerts;
   std::vector<MetalGlyphVertex> glyphVerts;

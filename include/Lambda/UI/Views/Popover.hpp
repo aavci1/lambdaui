@@ -61,8 +61,6 @@ struct Popover : ViewModifiers<Popover> {
 
   /// Full-window dim behind the popover. Default `Color::theme()` uses `Theme::popoverScrimColor`.
   Color backdropColor = Color::theme();
-  /// Full-window backdrop blur radius in logical pixels.
-  float backdropBlurRadius = kFloatFromTheme;
 
   /// When set, the overlay anchor height is clamped to this value (use the trigger row height).
   std::optional<float> anchorMaxHeight{};

@@ -354,35 +354,6 @@ id<MTLRenderPipelineState> MetalDeviceResources::imagePSO(BlendMode mode, std::u
   return pso;
 }
 
-id<MTLRenderPipelineState> MetalDeviceResources::backdropPSO(std::uint32_t sampleCount) {
-  sampleCount = normalizedSampleCount(sampleCount);
-  const std::uint32_t k = pipelineKey(BlendMode::SrcOver, sampleCount, 0x424c5552u); // 'BLUR'
-  if (auto it = backdropPSOCache_.find(k); it != backdropPSOCache_.end()) {
-    return it->second;
-  }
-  id<MTLRenderPipelineState> pso =
-      makePipeline(device_, lib_, @"backdrop_vert", @"backdrop_frag", pixelFormat_, BlendMode::SrcOver,
-                   sampleCount);
-  if (!pso) {
-    throw std::runtime_error("MetalDeviceResources: backdrop pipeline creation failed");
-  }
-  backdropPSOCache_[k] = pso;
-  return pso;
-}
-
-id<MTLRenderPipelineState> MetalDeviceResources::backdropBlurPSO() {
-  if (backdropBlurPSO_) {
-    return backdropBlurPSO_;
-  }
-  backdropBlurPSO_ =
-      makePipeline(device_, lib_, @"backdrop_vert", @"backdrop_gaussian_frag", pixelFormat_,
-                   BlendMode::SrcOver, 1);
-  if (!backdropBlurPSO_) {
-    throw std::runtime_error("MetalDeviceResources: backdrop blur pipeline creation failed");
-  }
-  return backdropBlurPSO_;
-}
-
 MetalDeviceResources::MetalDeviceResources(CAMetalLayer* layer) : layer_(layer) {
   device_ = layer_.device ? layer_.device : MTLCreateSystemDefaultDevice();
   layer_.device = device_;

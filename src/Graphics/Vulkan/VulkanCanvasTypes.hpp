@@ -79,7 +79,6 @@ struct DrawOp {
   enum class Kind : std::uint8_t { Rect,
                                    Path,
                                    Image,
-                                   BackdropBlur,
                                    Callout };
   Kind kind = Kind::Rect;
   Texture *texture = nullptr;
@@ -88,9 +87,6 @@ struct DrawOp {
   std::uint32_t first = 0;
   std::uint32_t count = 0;
   Rect clip{};
-  float blurRadius = 0.f;
-  Rect blurCacheClip{};
-  bool hasBlurCacheClip = false;
   VkDescriptorSet externalStorageDescriptor = VK_NULL_HANDLE;
   VkBuffer externalVertexBuffer = VK_NULL_HANDLE;
   float externalTranslationX = 0.f;

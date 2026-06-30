@@ -120,7 +120,6 @@ std::tuple<Reactive::SmallFn<void(Alert)>, Reactive::SmallFn<void()>, bool> useA
         OverlayConfig{
             .modal = true,
             .backdropColor = backdrop,
-            .backdropBlurRadius = resolveFloat(alert.backdropBlurRadius, theme.modalBackdropBlurRadius),
             .dismissOnOutsideTap = false,
             .dismissOnEscape = dismissEsc,
             .onDismiss = hideOverlay,

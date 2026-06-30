@@ -88,7 +88,7 @@ enum class LayerShellCalloutPlacement : std::uint8_t {
 };
 
 struct GlassEffectOptions {
-  /// Preferred blur radius for platforms that expose a tunable backdrop blur.
+  /// Preferred blur radius for platforms that expose a tunable background effect.
   /// Some backends map this to the nearest native material instead.
   float blurRadius = 46.f;
   /// Base material wash applied over the blurred backdrop before the tint.

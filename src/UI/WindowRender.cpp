@@ -22,6 +22,7 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
                        Size windowSize, OverlayManager const& overlays, Runtime const* runtime,
                        WindowBackground const& background,
                        TextCacheRingBuffer& textCacheRing) {
+  Rect const windowBounds = Rect::sharp(0.f, 0.f, windowSize.width, windowSize.height);
   bool const traceResize = detail::resizeTraceEnabled();
   auto phaseStart = traceResize ? std::chrono::steady_clock::now()
                                 : std::chrono::steady_clock::time_point{};
@@ -52,12 +53,8 @@ void renderWindowFrame(scenegraph::SceneRenderer& renderer, Canvas& canvas,
     phaseStart = std::chrono::steady_clock::now();
   }
 
-  Rect const windowBounds = Rect::sharp(0.f, 0.f, windowSize.width, windowSize.height);
   for (std::unique_ptr<OverlayEntry> const& up : overlays.entries()) {
     OverlayEntry const& entry = *up;
-    if (entry.config.backdropBlurRadius > 0.f) {
-      canvas.drawBackdropBlur(windowBounds, entry.config.backdropBlurRadius, entry.config.backdropColor);
-    }
     canvas.save();
     canvas.transform(Mat3::translate(Point{entry.resolvedFrame.x, entry.resolvedFrame.y}));
     renderer.render(entry.sceneGraph);

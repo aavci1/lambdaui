@@ -1142,57 +1142,6 @@ TEST_CASE("Vulkan RenderTarget renders canvas ops into an offscreen image") {
   CHECK(pixels[center + 0] < 32);
 }
 
-TEST_CASE("Vulkan RenderTarget applies backdrop blur to previously rendered pixels") {
-  auto& vk = VulkanContext::instance();
-  vk.ensureInitialized();
-
-  FreeTypeTextSystem textSystem;
-  constexpr std::uint32_t width = 128;
-  constexpr std::uint32_t height = 64;
-  VulkanImageTarget targetImage{vk.physicalDevice(), vk.device(), width, height};
-  std::unique_ptr<Canvas> canvas = createVulkanRenderTargetCanvas(lambdaui::VulkanRenderTargetSpec{
-      .image = targetImage.image,
-      .view = targetImage.view,
-      .format = targetImage.format,
-      .width = width,
-      .height = height,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-  },
-                                                                  textSystem);
-  REQUIRE(canvas);
-
-  canvas->resize(static_cast<int>(width), static_cast<int>(height));
-  canvas->updateDpiScale(1.f, 1.f);
-  canvas->beginFrame();
-  canvas->clear(Colors::black);
-  canvas->drawRect(Rect::sharp(0.f, 0.f, 64.f, 64.f),
-                   CornerRadius{},
-                   FillStyle::solid(Colors::black),
-                   StrokeStyle::none());
-  canvas->drawRect(Rect::sharp(64.f, 0.f, 64.f, 64.f),
-                   CornerRadius{},
-                   FillStyle::solid(Colors::white),
-                   StrokeStyle::none());
-  canvas->drawBackdropBlur(Rect::sharp(16.f, 0.f, 96.f, 64.f), 18.f, Colors::transparent);
-  canvas->present();
-
-  VulkanReadbackBuffer readback{vk.physicalDevice(), vk.device(), width * height * 4u};
-  VulkanCopyContext copy{vk.device(), vk.queue(), vk.queueFamily()};
-  copy.copyImageToBuffer(targetImage.image, readback.buffer, width, height);
-
-  std::vector<std::uint8_t> pixels(width * height * 4u);
-  void* mapped = nullptr;
-  vkCheck(vkMapMemory(vk.device(), readback.memory, 0, readback.size, 0, &mapped), "vkMapMemory");
-  std::memcpy(pixels.data(), mapped, pixels.size());
-  vkUnmapMemory(vk.device(), readback.memory);
-
-  CHECK(capturedChannel(pixels, width, 60, 32, 0) > 20);
-  CHECK(capturedChannel(pixels, width, 60, 32, 0) < 235);
-  CHECK(capturedChannel(pixels, width, 68, 32, 0) > 20);
-  CHECK(capturedChannel(pixels, width, 68, 32, 0) < 235);
-}
-
 TEST_CASE("Vulkan RenderTarget renders multiple stress frames") {
   auto& vk = VulkanContext::instance();
   vk.ensureInitialized();

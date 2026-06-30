@@ -120,8 +120,6 @@ struct Theme {
 
     Color modalScrimColor = Color {0.f, 0.f, 0.f, 0.35f};
     Color popoverScrimColor = Color {0.f, 0.f, 0.f, 0.f};
-    float modalBackdropBlurRadius = 18.f;
-    float popoverBackdropBlurRadius = 0.f;
 
     /// Apple-style type roles. Use these directly or via `Font::...()` semantic tokens.
     Font largeTitleFont {.family = "", .size = 34.f, .weight = 400.f};

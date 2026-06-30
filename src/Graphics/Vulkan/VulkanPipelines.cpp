@@ -2,8 +2,6 @@
 
 #include "Graphics/Vulkan/VulkanCanvasTypes.hpp"
 #include "Graphics/Vulkan/VulkanCheck.hpp"
-#include "Graphics/Vulkan/generated/backdrop_blur_frag_spv.hpp"
-#include "Graphics/Vulkan/generated/backdrop_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/callout_frag_spv.hpp"
 #include "Graphics/Vulkan/generated/callout_vert_spv.hpp"
 #include "Graphics/Vulkan/generated/image_frag_spv.hpp"
@@ -278,8 +276,6 @@ void VulkanPipelines::createPipelines(VkDevice device, SharedVulkanCore::Resourc
   resources.calloutPipelineLayout = createPipelineLayout(device, {resources.rectDescriptorLayout}, true);
   resources.imagePipelineLayout =
       createPipelineLayout(device, {resources.quadDescriptorLayout, resources.textureDescriptorLayout}, true);
-  resources.backdropPipelineLayout =
-      createPipelineLayout(device, {resources.quadDescriptorLayout, resources.textureDescriptorLayout}, true);
   resources.pathPipelineLayout = createPipelineLayout(device, {}, true);
   for (std::size_t i = 0; i < kVulkanBlendModePipelineCount; ++i) {
     BlendMode const mode = static_cast<BlendMode>(i);
@@ -323,24 +319,6 @@ void VulkanPipelines::createPipelines(VkDevice device, SharedVulkanCore::Resourc
                                                               {},
                                                               mode);
   }
-  resources.backdropPipeline = createPipeline(device,
-                                              resources,
-                                              resources.backdropPipelineLayout,
-                                              lambda_image_vert_spv,
-                                              lambda_image_vert_spv_len,
-                                              lambda_backdrop_frag_spv,
-                                              lambda_backdrop_frag_spv_len,
-                                              {});
-  resources.backdropBlurPipeline = createPipeline(device,
-                                                  resources,
-                                                  resources.backdropPipelineLayout,
-                                                  lambda_image_vert_spv,
-                                                  lambda_image_vert_spv_len,
-                                                  lambda_backdrop_blur_frag_spv,
-                                                  lambda_backdrop_blur_frag_spv_len,
-                                                  {},
-                                                  BlendMode::SrcOver,
-                                                  resources.backdropRenderFormat);
   std::array<VkVertexInputBindingDescription, 1> binding{};
   binding[0].binding = 0;
   binding[0].stride = sizeof(VulkanPathVertex);

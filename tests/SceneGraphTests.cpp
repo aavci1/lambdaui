@@ -334,7 +334,6 @@ class DpiOnlyCanvas final : public Canvas {
     void drawTextLayout(TextLayout const&, Point) override {}
     void drawImage(Image const&, Rect const&, Rect const&, CornerRadius const&, float) override {}
     void drawImageTiled(Image const&, Rect const&, CornerRadius const&, float) override {}
-    void drawBackdropBlur(Rect const&, float, Color, CornerRadius const&) override {}
     void* gpuDevice() const override { return nullptr; }
     bool requestNextFrameCapture() override { return false; }
     bool takeCapturedFrame(std::vector<std::uint8_t>&, std::uint32_t&, std::uint32_t&) override { return false; }

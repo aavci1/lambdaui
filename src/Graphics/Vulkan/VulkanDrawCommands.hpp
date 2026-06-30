@@ -67,20 +67,4 @@ void drawVulkanImageRange(VkCommandBuffer commandBuffer,
                           bool premultipliedAlpha = false,
                           BlendMode blendMode = BlendMode::Normal);
 
-void drawVulkanBackdropRange(VkCommandBuffer commandBuffer,
-                             VulkanCommandState& state,
-                             VulkanDrawCommandContext const& context,
-                             Texture* texture,
-                             std::uint32_t first,
-                             std::uint32_t count,
-                             VkDescriptorSet descriptor = VK_NULL_HANDLE,
-                             float translationX = 0.f,
-                             float translationY = 0.f);
-
-void drawVulkanBackdropBlurPass(VkCommandBuffer commandBuffer,
-                                VulkanCommandState& state,
-                                VulkanDrawCommandContext const& context,
-                                Texture* texture,
-                                std::uint32_t first);
-
 } // namespace lambdaui

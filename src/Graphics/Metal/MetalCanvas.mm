@@ -349,14 +349,6 @@ struct RecorderCapacitySnapshot {
   std::size_t glyphSources = 0;
 };
 
-struct MetalBackdropUniforms {
-  vector_float4 rect{};
-  vector_float4 tint{};
-  vector_float4 corners{};
-  vector_float4 params{};
-  vector_float4 blurParams{};
-};
-
 struct MetalRecorderEncodeState {
   std::uint32_t uniformIndex = 0;
   std::uint32_t clipIndex = 0;
@@ -651,196 +643,33 @@ public:
     }
     glyphAtlas_->flushUploads(cmdBuf_);
 
-    bool const backdropFrame = hasBackdropBlurOps(frame_);
     id<MTLTexture> renderTargetTexture = drawable_.texture;
     std::uint32_t renderSampleCount = 1;
-    if (frameSampleCount_ > 1 && !backdropFrame) {
+    if (frameSampleCount_ > 1) {
       if (id<MTLTexture> msaaTexture = ensureLiveFrameMsaaTexture(drawable_.texture)) {
         renderTargetTexture = msaaTexture;
         renderSampleCount = frameSampleCount_;
       }
     }
 
-    bool const encodedBackdropFrame =
-        backdropFrame &&
-        encodeFrameWithBackdropBlur(renderTargetTexture, drawable_.texture, renderSampleCount);
-
-    if (!encodedBackdropFrame) {
-      MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-      pass.colorAttachments[0].texture = renderTargetTexture;
-      pass.colorAttachments[0].loadAction = MTLLoadActionClear;
-      pass.colorAttachments[0].clearColor =
-          MTLClearColorMake(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
-      if (renderSampleCount > 1) {
-        pass.colorAttachments[0].resolveTexture = drawable_.texture;
-        pass.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-      } else {
-        pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-      }
-
-      id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
-      MTLViewport vp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
-      [enc setViewport:vp];
-
-    MTLScissorRect const fullScissor = {0, 0, frameDrawablePixelsW_, frameDrawablePixelsH_};
-    MTLScissorRect lastScissor = {0, 0, 0, 0};
-    bool haveScissor = false;
-
-    id<MTLBuffer> pathBuf = metal_.pathVertexArenaBuffer();
-    id<MTLBuffer> uniformBuf = metal_.drawUniformArenaBuffer();
-    id<MTLBuffer> clipBuf = metal_.roundedClipArenaBuffer();
-    auto* uniformDst = uniformBuf ? static_cast<MetalDrawUniforms*>([uniformBuf contents]) : nullptr;
-    auto* clipDst = clipBuf ? static_cast<MetalRoundedClipStack*>([clipBuf contents]) : nullptr;
-    std::uint32_t uniformIndex = 0;
-    std::uint32_t clipIndex = 0;
-    std::size_t const opCount = frame_.opOrder.size();
-    std::size_t i = 0;
-    while (i < opCount) {
-      MetalOpRef const ref = frame_.opOrder[i];
-      if (ref.kind == MetalOpRef::BackdropBlur) {
-        ++i;
-        continue;
-      }
-      if (ref.kind == MetalOpRef::Rect) {
-        MetalRectOp const& op = frame_.rectOps[ref.index];
-        std::size_t j = i + 1;
-        while (j < opCount) {
-          MetalOpRef const nextRef = frame_.opOrder[j];
-          if (nextRef.kind != MetalOpRef::Rect) {
-            break;
-          }
-          MetalRectOp const& o2 = frame_.rectOps[nextRef.index];
-          MetalOpRef const prevRef = frame_.opOrder[j - 1];
-          MetalRectOp const& prev = frame_.rectOps[prevRef.index];
-          std::uint32_t const prevInstanceIndex =
-              prev.externalInstanceBuffer ? prev.externalInstanceIndex : prev.arenaInstanceIndex;
-          std::uint32_t const nextInstanceIndex =
-              o2.externalInstanceBuffer ? o2.externalInstanceIndex : o2.arenaInstanceIndex;
-          if (o2.externalInstanceBuffer != op.externalInstanceBuffer ||
-              o2.isLine != op.isLine || o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
-              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
-              nextInstanceIndex != prevInstanceIndex + 1) {
-            break;
-          }
-          ++j;
-        }
-        std::size_t const runLen = j - i;
-        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        id<MTLBuffer> instanceBuf =
-            op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
-                                      : metal_.instanceArenaBuffer();
-        std::uint32_t const instanceIndex =
-            op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
-        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
-        if (!op.isLine) {
-          [enc setRenderPipelineState:metal_.rectPSO(op.blendMode, renderSampleCount)];
-          [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
-          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
-          [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
-                  instanceCount:static_cast<NSUInteger>(runLen)];
-          debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
-        } else {
-          [enc setRenderPipelineState:metal_.linePSO(op.blendMode, renderSampleCount)];
-          [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-          const NSUInteger off = static_cast<NSUInteger>(instanceIndex) * sizeof(MetalRectInstance);
-          [enc setVertexBuffer:instanceBuf offset:off atIndex:1];
-          [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
-                  instanceCount:static_cast<NSUInteger>(runLen)];
-          debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Rect);
-        }
-        i = j;
-        continue;
-      }
-      if (ref.kind == MetalOpRef::Glyph) {
-        MetalGlyphOp const& op = frame_.glyphOps[ref.index];
-        std::size_t j = i + 1;
-        std::uint32_t runStart = op.glyphStart;
-        std::uint32_t runVerts = op.glyphVertexCount;
-        while (j < opCount) {
-          MetalOpRef const nextRef = frame_.opOrder[j];
-          if (nextRef.kind != MetalOpRef::Glyph) {
-            break;
-          }
-          MetalGlyphOp const& o2 = frame_.glyphOps[nextRef.index];
-          if (o2.externalVertexBuffer != op.externalVertexBuffer ||
-              o2.blendMode != op.blendMode || !sameScissorForBatch(op, o2) ||
-              !sameRoundedClipForBatch(op, o2) || !sameTranslationForBatch(op, o2) ||
-              o2.glyphStart != runStart + runVerts || nextRef.index != frame_.opOrder[j - 1].index + 1) {
-            break;
-          }
-          runVerts += o2.glyphVertexCount;
-          ++j;
-        }
-        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.glyphPSO(op.blendMode, renderSampleCount)];
-        id<MTLBuffer> gbuf =
-            op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : metal_.glyphVertexArenaBuffer();
-        const NSUInteger goff = static_cast<NSUInteger>(runStart) * sizeof(MetalGlyphVertex);
-        [enc setVertexBuffer:gbuf offset:goff atIndex:0];
-        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
-        [enc setFragmentTexture:glyphAtlas_->texture() atIndex:0];
-        [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(runVerts)];
-        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Glyph);
-        i = j;
-        continue;
-      }
-
-      if (ref.kind == MetalOpRef::Image) {
-        MetalImageOp const& op = frame_.imageOps[ref.index];
-        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        if (!op.texture) {
-          ++i;
-          continue;
-        }
-        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.imagePSO(op.blendMode, renderSampleCount)];
-        [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-        id<MTLBuffer> imageInstanceBuf =
-            op.externalInstanceBuffer ? (__bridge id<MTLBuffer>)op.externalInstanceBuffer
-                                      : metal_.imageInstanceArenaBuffer();
-        std::uint32_t const imageInstanceIndex =
-            op.externalInstanceBuffer ? op.externalInstanceIndex : op.arenaInstanceIndex;
-        const NSUInteger off = static_cast<NSUInteger>(imageInstanceIndex) * sizeof(MetalImageInstance);
-        [enc setVertexBuffer:imageInstanceBuf offset:off atIndex:1];
-        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 2);
-        [enc setFragmentTexture:(__bridge id<MTLTexture>)op.texture atIndex:0];
-        [enc setFragmentSamplerState:op.repeatSampler ? metal_.repeatSampler() : metal_.linearSampler() atIndex:0];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount
-                instanceCount:1];
-        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
-        ++i;
-        continue;
-      }
-      if (ref.kind == MetalOpRef::Path) {
-        MetalPathOp const& op = frame_.pathOps[ref.index];
-        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        if (op.pathCount == 0) {
-          ++i;
-          continue;
-        }
-        setEncoderRoundedClipBuffer(enc, clipBuf, clipDst, &clipIndex, op.roundedClip);
-        [enc setRenderPipelineState:metal_.pathPSO(op.blendMode, renderSampleCount)];
-        const NSUInteger off = static_cast<NSUInteger>(op.pathStart) * sizeof(PathVertex);
-        id<MTLBuffer> effectivePathBuf =
-            op.externalVertexBuffer ? (__bridge id<MTLBuffer>)op.externalVertexBuffer : pathBuf;
-        [enc setVertexBuffer:effectivePathBuf offset:off atIndex:0];
-        MetalDrawUniforms const uniforms = makeDrawUniforms(vw, vh, op.translation);
-        setEncoderDrawUniformBuffer(enc, uniformBuf, uniformDst, &uniformIndex, uniforms, 1);
-        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:static_cast<NSUInteger>(op.pathCount)];
-        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Path);
-        ++i;
-        continue;
-      }
-      assert(false && "unsupported Metal op ref kind");
+    MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = renderTargetTexture;
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    pass.colorAttachments[0].clearColor =
+        MTLClearColorMake(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
+    if (renderSampleCount > 1) {
+      pass.colorAttachments[0].resolveTexture = drawable_.texture;
+      pass.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+    } else {
+      pass.colorAttachments[0].storeAction = MTLStoreActionStore;
     }
 
+    id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
+    if (enc) {
+      MTLViewport vp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
+      [enc setViewport:vp];
+      encodeRecorderOps(frame_, enc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
+                        frameDrawablePixelsH_, nil, nil, renderSampleCount);
       [enc endEncoding];
     }
 
@@ -1336,37 +1165,6 @@ public:
               image.premultipliedAlpha());
   }
 
-  void drawBackdropBlur(Rect const& rect, float radius, Color tint, CornerRadius const& corners) override {
-    if (!inFrame_ || radius <= 0.f || rect.width <= 0.f || rect.height <= 0.f || quickReject(rect)) {
-      return;
-    }
-    Mat3 const& M = currentState().transform;
-    Rect mapped = M.isTranslationOnly()
-                      ? Rect::sharp(rect.x + M.m[6], rect.y + M.m[7], rect.width, rect.height)
-                      : boundsOfTransformedRect(rect, M);
-    Rect device = Rect::sharp(mapped.x * dpiScaleX_, mapped.y * dpiScaleY_, mapped.width * dpiScaleX_,
-                              mapped.height * dpiScaleY_);
-    if (device.width <= 0.f || device.height <= 0.f) {
-      return;
-    }
-
-    MetalBackdropBlurOp op{};
-    op.rect = simd_make_float4(device.x, device.y, device.width, device.height);
-    op.tint = toSimd4(tint);
-    op.corners = cornersToSimd(deviceCornerRadii(corners, M, device));
-    op.radius = radius * dpiScale_;
-    tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
-
-    MetalFrameRecorder& recorder = activeRecorder();
-    RecorderCapacitySnapshot const capacityBefore = snapshotRecorderCapacity(recorder);
-    recorder.opOrder.push_back(MetalOpRef{
-        .kind = MetalOpRef::BackdropBlur,
-        .index = static_cast<std::uint32_t>(recorder.backdropBlurOps.size()),
-    });
-    recorder.backdropBlurOps.push_back(op);
-    recordRecorderCapacityIncreases(capacityBefore, recorder);
-  }
-
   void preflightTextGlyphs(TextLayout const& layout) {
     for (auto const& placed : layout.runs) {
       TextRun const& text = placed.run;
@@ -1500,19 +1298,6 @@ private:
   id<MTLCommandBuffer> lastSubmittedCmdBuf_{nil};
   id<CAMetalDrawable> drawable_{nil};
   id<MTLTexture> liveFrameMsaaTexture_{nil};
-  id<MTLTexture> backdropSceneTexture_{nil};
-  NSUInteger backdropSceneTextureW_{0};
-  NSUInteger backdropSceneTextureH_{0};
-  id<MTLTexture> backdropScratchTexture_{nil};
-  NSUInteger backdropScratchTextureW_{0};
-  NSUInteger backdropScratchTextureH_{0};
-  id<MTLTexture> backdropBlurTexture_{nil};
-  NSUInteger backdropBlurTextureW_{0};
-  NSUInteger backdropBlurTextureH_{0};
-  std::array<id<MTLBuffer>, kFramesInFlight> backdropUniformBuffers_{};
-  std::array<NSUInteger, kFramesInFlight> backdropUniformBufferCapacities_{};
-  std::array<id<MTLBuffer>, kFramesInFlight> backdropClipBuffers_{};
-  std::array<NSUInteger, kFramesInFlight> backdropClipBufferCapacities_{};
   id<MTLBuffer> captureBuffer_{nil};
   NSUInteger captureBytesPerRow_{0};
   std::uint32_t captureWidth_{0};
@@ -1902,321 +1687,6 @@ private:
     pushImageOp(std::move(op));
   }
 
-  static bool hasBackdropBlurOps(MetalFrameRecorder const& recorder) {
-    return std::any_of(recorder.opOrder.begin(), recorder.opOrder.end(), [](MetalOpRef const& ref) {
-      return ref.kind == MetalOpRef::BackdropBlur;
-    });
-  }
-
-  static std::size_t nextBackdropBlurOp(MetalFrameRecorder const& recorder, std::size_t start = 0) {
-    std::size_t const begin = std::min(start, recorder.opOrder.size());
-    auto const it = std::find_if(recorder.opOrder.begin() + static_cast<std::ptrdiff_t>(begin),
-                                 recorder.opOrder.end(),
-                                 [](MetalOpRef const& ref) {
-      return ref.kind == MetalOpRef::BackdropBlur;
-    });
-    return it == recorder.opOrder.end()
-               ? recorder.opOrder.size()
-               : static_cast<std::size_t>(std::distance(recorder.opOrder.begin(), it));
-  }
-
-  static std::size_t backdropBlurRunEnd(MetalFrameRecorder const& recorder, std::size_t start) {
-    std::size_t end = start;
-    while (end < recorder.opOrder.size() && recorder.opOrder[end].kind == MetalOpRef::BackdropBlur) {
-      ++end;
-    }
-    return end;
-  }
-
-  static float maxBackdropBlurRadius(MetalFrameRecorder const& recorder,
-                                     std::size_t start,
-                                     std::size_t end) {
-    float radius = 0.f;
-    std::size_t const opEnd = std::min(end, recorder.opOrder.size());
-    for (std::size_t index = std::min(start, opEnd); index < opEnd; ++index) {
-      MetalOpRef const ref = recorder.opOrder[index];
-      if (ref.kind != MetalOpRef::BackdropBlur || ref.index >= recorder.backdropBlurOps.size()) continue;
-      radius = std::max(radius, recorder.backdropBlurOps[ref.index].radius);
-    }
-    return radius;
-  }
-
-  id<MTLTexture> createBackdropTexture(NSUInteger width, NSUInteger height) {
-    if (width == 0 || height == 0) {
-      return nil;
-    }
-    MTLTextureDescriptor* desc =
-        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:metal_.pixelFormat()
-                                                           width:width
-                                                          height:height
-                                                       mipmapped:NO];
-    desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-    desc.storageMode = MTLStorageModePrivate;
-    return [metal_.device() newTextureWithDescriptor:desc];
-  }
-
-  id<MTLTexture> ensureBackdropSceneTexture(NSUInteger width, NSUInteger height) {
-    if (backdropSceneTexture_ && backdropSceneTextureW_ == width && backdropSceneTextureH_ == height) {
-      return backdropSceneTexture_;
-    }
-    backdropSceneTexture_ = createBackdropTexture(width, height);
-    backdropSceneTextureW_ = backdropSceneTexture_ ? width : 0;
-    backdropSceneTextureH_ = backdropSceneTexture_ ? height : 0;
-    return backdropSceneTexture_;
-  }
-
-  id<MTLTexture> ensureBackdropScratchTexture(NSUInteger width, NSUInteger height) {
-    if (backdropScratchTexture_ && backdropScratchTextureW_ == width && backdropScratchTextureH_ == height) {
-      return backdropScratchTexture_;
-    }
-    backdropScratchTexture_ = createBackdropTexture(width, height);
-    backdropScratchTextureW_ = backdropScratchTexture_ ? width : 0;
-    backdropScratchTextureH_ = backdropScratchTexture_ ? height : 0;
-    return backdropScratchTexture_;
-  }
-
-  id<MTLTexture> ensureBackdropBlurTexture(NSUInteger width, NSUInteger height) {
-    if (backdropBlurTexture_ && backdropBlurTextureW_ == width && backdropBlurTextureH_ == height) {
-      return backdropBlurTexture_;
-    }
-    backdropBlurTexture_ = createBackdropTexture(width, height);
-    backdropBlurTextureW_ = backdropBlurTexture_ ? width : 0;
-    backdropBlurTextureH_ = backdropBlurTexture_ ? height : 0;
-    return backdropBlurTexture_;
-  }
-
-  bool ensureBackdropDrawStateBuffers(std::size_t stateCount,
-                                      id<MTLBuffer>* uniformBuffer,
-                                      id<MTLBuffer>* clipBuffer) {
-    NSUInteger const needed = static_cast<NSUInteger>(std::max<std::size_t>(1, stateCount));
-    std::size_t const frameIndex = metal_.currentFrameIndex();
-    NSUInteger& frameUniformCapacity = backdropUniformBufferCapacities_[frameIndex];
-    NSUInteger& frameClipCapacity = backdropClipBufferCapacities_[frameIndex];
-    if (needed > frameUniformCapacity) {
-      NSUInteger const newCapacity =
-          frameUniformCapacity == 0 ? needed : std::max(needed, frameUniformCapacity * 2);
-      backdropUniformBuffers_[frameIndex] =
-          [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalDrawUniforms)
-                                       options:MTLResourceStorageModeShared];
-      frameUniformCapacity = backdropUniformBuffers_[frameIndex] ? newCapacity : 0;
-    }
-    if (needed > frameClipCapacity) {
-      NSUInteger const newCapacity =
-          frameClipCapacity == 0 ? needed : std::max(needed, frameClipCapacity * 2);
-      backdropClipBuffers_[frameIndex] =
-          [metal_.device() newBufferWithLength:newCapacity * sizeof(MetalRoundedClipStack)
-                                       options:MTLResourceStorageModeShared];
-      frameClipCapacity = backdropClipBuffers_[frameIndex] ? newCapacity : 0;
-    }
-    if (uniformBuffer) {
-      *uniformBuffer = backdropUniformBuffers_[frameIndex];
-    }
-    if (clipBuffer) {
-      *clipBuffer = backdropClipBuffers_[frameIndex];
-    }
-    return backdropUniformBuffers_[frameIndex] != nil && backdropClipBuffers_[frameIndex] != nil;
-  }
-
-  static NSUInteger backdropBlurDownsample(NSUInteger width, NSUInteger height, float radius) {
-    if (width < 2 || height < 2 || radius < 2.f) {
-      return 1;
-    }
-    return 2;
-  }
-
-  void encodeBackdropQuad(id<MTLRenderCommandEncoder> enc, MetalBackdropBlurOp const& op,
-                          id<MTLTexture> sceneTexture, float viewportW, float viewportH,
-                          std::uint32_t renderSampleCount) {
-    if (!sceneTexture || op.rect.z <= 0.f || op.rect.w <= 0.f) {
-      return;
-    }
-    MetalBackdropUniforms uniforms{};
-    uniforms.rect = op.rect;
-    uniforms.tint = op.tint;
-    uniforms.corners = op.corners;
-    uniforms.params = simd_make_float4(viewportW, viewportH,
-                                       1.f / std::max<float>(1.f, viewportW),
-                                       1.f / std::max<float>(1.f, viewportH));
-    uniforms.blurParams = simd_make_float4(std::max(0.f, op.radius), 0.f, 0.f, 0.f);
-
-    [enc setRenderPipelineState:metal_.backdropPSO(renderSampleCount)];
-    [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-    [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
-    [enc setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-    [enc setFragmentTexture:sceneTexture atIndex:0];
-    [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
-    [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount];
-  }
-
-  bool encodeBackdropBlurPass(id<MTLTexture> source, id<MTLTexture> target, float radius,
-                              vector_float2 axis) {
-    if (!source || !target || [target width] == 0 || [target height] == 0) {
-      return false;
-    }
-    MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-    pass.colorAttachments[0].texture = target;
-    pass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
-    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-    id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
-    if (!enc) {
-      return false;
-    }
-    float const viewportW = static_cast<float>([target width]);
-    float const viewportH = static_cast<float>([target height]);
-    MTLViewport vp = {0, 0, viewportW, viewportH, 0.0, 1.0};
-    [enc setViewport:vp];
-
-    MetalBackdropUniforms uniforms{};
-    uniforms.rect = simd_make_float4(0.f, 0.f, viewportW, viewportH);
-    uniforms.params = simd_make_float4(viewportW, viewportH,
-                                       1.f / std::max<float>(1.f, static_cast<float>([source width])),
-                                       1.f / std::max<float>(1.f, static_cast<float>([source height])));
-    uniforms.blurParams = simd_make_float4(std::max(0.f, radius), axis.x, axis.y, 0.f);
-
-    [enc setRenderPipelineState:metal_.backdropBlurPSO()];
-    [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-    [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
-    [enc setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-    [enc setFragmentTexture:source atIndex:0];
-    [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
-    [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount];
-    [enc endEncoding];
-    debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
-    return true;
-  }
-
-  bool encodeBackdropBlur(id<MTLTexture> sceneTexture, id<MTLTexture> scratchTexture,
-                          id<MTLTexture> blurredTexture, float radius) {
-    constexpr int kIterations = 3;
-    float const passRadius = radius / std::sqrt(static_cast<float>(kIterations));
-    id<MTLTexture> source = sceneTexture;
-    for (int i = 0; i < kIterations; ++i) {
-      if (!encodeBackdropBlurPass(source, scratchTexture, passRadius, simd_make_float2(1.f, 0.f)) ||
-          !encodeBackdropBlurPass(scratchTexture, blurredTexture, passRadius, simd_make_float2(0.f, 1.f))) {
-        return false;
-      }
-      source = blurredTexture;
-    }
-    return true;
-  }
-
-  bool encodeBackdropDownsample(id<MTLTexture> source, id<MTLTexture> target) {
-    if (!source || !target || [target width] == 0 || [target height] == 0) {
-      return false;
-    }
-    MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-    pass.colorAttachments[0].texture = target;
-    pass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
-    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-
-    id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
-    if (!enc) {
-      return false;
-    }
-    float const viewportW = static_cast<float>([target width]);
-    float const viewportH = static_cast<float>([target height]);
-    MTLViewport vp = {0, 0, viewportW, viewportH, 0.0, 1.0};
-    [enc setViewport:vp];
-
-    MetalBackdropUniforms uniforms{};
-    uniforms.rect = simd_make_float4(0.f, 0.f, viewportW, viewportH);
-    uniforms.params = simd_make_float4(viewportW, viewportH,
-                                       1.f / std::max<float>(1.f, viewportW),
-                                       1.f / std::max<float>(1.f, viewportH));
-    uniforms.blurParams = simd_make_float4(0.f, 1.f, 0.f, 0.f);
-
-    [enc setRenderPipelineState:metal_.backdropBlurPSO()];
-    [enc setVertexBuffer:metal_.quadBuffer() offset:0 atIndex:0];
-    [enc setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:1];
-    [enc setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-    [enc setFragmentTexture:source atIndex:0];
-    [enc setFragmentSamplerState:metal_.linearSampler() atIndex:0];
-    [enc drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:kQuadStripCount];
-    [enc endEncoding];
-    debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
-    return true;
-  }
-
-  bool encodeFrameWithBackdropBlur(id<MTLTexture> renderTargetTexture, id<MTLTexture> resolveTexture,
-                                   std::uint32_t renderSampleCount) {
-    (void)resolveTexture;
-    if (renderSampleCount != 1) {
-      return false;
-    }
-    float const maxBlurRadius = maxBackdropBlurRadius(frame_, 0, frame_.opOrder.size());
-    NSUInteger const downsample =
-        backdropBlurDownsample(frameDrawablePixelsW_, frameDrawablePixelsH_, maxBlurRadius);
-    NSUInteger const blurWidth = std::max<NSUInteger>(1, (frameDrawablePixelsW_ + downsample - 1) / downsample);
-    NSUInteger const blurHeight = std::max<NSUInteger>(1, (frameDrawablePixelsH_ + downsample - 1) / downsample);
-    id<MTLTexture> sceneTexture = ensureBackdropSceneTexture(blurWidth, blurHeight);
-    id<MTLTexture> scratchTexture = ensureBackdropScratchTexture(blurWidth, blurHeight);
-    id<MTLTexture> blurredTexture = ensureBackdropBlurTexture(blurWidth, blurHeight);
-    if (!sceneTexture || !scratchTexture || !blurredTexture || !renderTargetTexture) {
-      return false;
-    }
-
-    id<MTLBuffer> finalUniformBuffer = nil;
-    id<MTLBuffer> finalClipBuffer = nil;
-    if (!ensureBackdropDrawStateBuffers(frame_.opOrder.size(), &finalUniformBuffer, &finalClipBuffer)) {
-      return false;
-    }
-
-    auto makeFinalPass = [&](MTLLoadAction loadAction) {
-      MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-      pass.colorAttachments[0].texture = renderTargetTexture;
-      pass.colorAttachments[0].loadAction = loadAction;
-      pass.colorAttachments[0].clearColor =
-          MTLClearColorMake(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
-      pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-      return pass;
-    };
-
-    id<MTLRenderCommandEncoder> finalEnc = [cmdBuf_ renderCommandEncoderWithDescriptor:makeFinalPass(MTLLoadActionClear)];
-    if (!finalEnc) return false;
-    MTLViewport finalVp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
-    [finalEnc setViewport:finalVp];
-
-    MetalRecorderEncodeState finalEncodeState{};
-    std::size_t cursor = 0;
-    while (cursor < frame_.opOrder.size()) {
-      std::size_t const blurStart = nextBackdropBlurOp(frame_, cursor);
-      if (blurStart > cursor) {
-        encodeRecorderOps(frame_, finalEnc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
-                          frameDrawablePixelsH_, finalUniformBuffer, finalClipBuffer, 1,
-                          nil, cursor, blurStart, &finalEncodeState);
-      }
-      if (blurStart >= frame_.opOrder.size()) {
-        cursor = frame_.opOrder.size();
-        break;
-      }
-
-      std::size_t const blurEnd = backdropBlurRunEnd(frame_, blurStart);
-      [finalEnc endEncoding];
-      finalEnc = nil;
-
-      if (!encodeBackdropDownsample(renderTargetTexture, sceneTexture)) return false;
-      float const blurRadius = maxBackdropBlurRadius(frame_, blurStart, blurEnd);
-      if (!encodeBackdropBlur(sceneTexture,
-                              scratchTexture,
-                              blurredTexture,
-                              blurRadius / static_cast<float>(downsample))) {
-        return false;
-      }
-
-      finalEnc = [cmdBuf_ renderCommandEncoderWithDescriptor:makeFinalPass(MTLLoadActionLoad)];
-      if (!finalEnc) return false;
-      [finalEnc setViewport:finalVp];
-      encodeRecorderOps(frame_, finalEnc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
-                        frameDrawablePixelsH_, finalUniformBuffer, finalClipBuffer, 1,
-                        blurredTexture, blurStart, blurEnd, &finalEncodeState);
-      cursor = blurEnd;
-    }
-
-    if (finalEnc) [finalEnc endEncoding];
-    return true;
-  }
-
   void uploadRecorder(MetalFrameRecorder& recorder) {
     metal_.uploadRectOps(recorder.rectOps);
     metal_.uploadImageOps(recorder.imageOps);
@@ -2232,7 +1702,6 @@ private:
                          id<MTLBuffer> uniformBufferOverride = nil,
                          id<MTLBuffer> clipBufferOverride = nil,
                          std::uint32_t renderSampleCount = 1,
-                         id<MTLTexture> backdropSource = nil,
                          std::size_t orderStart = 0,
                          std::size_t orderEnd = std::numeric_limits<std::size_t>::max(),
                          MetalRecorderEncodeState* encodeState = nullptr) {
@@ -2251,14 +1720,6 @@ private:
     std::size_t i = std::min(orderStart, opCount);
     while (i < opCount) {
       MetalOpRef const ref = recorder.opOrder[i];
-      if (ref.kind == MetalOpRef::BackdropBlur) {
-        MetalBackdropBlurOp const& op = recorder.backdropBlurOps[ref.index];
-        setEncoderScissorForOp(enc, op, fullScissor, &lastScissor, &haveScissor);
-        encodeBackdropQuad(enc, op, backdropSource, viewportW, viewportH, renderSampleCount);
-        debug::perf::recordDrawCall(debug::perf::RenderCounterKind::Image);
-        ++i;
-        continue;
-      }
       if (ref.kind == MetalOpRef::Rect) {
         MetalRectOp const& op = recorder.rectOps[ref.index];
         std::size_t j = i + 1;
@@ -2428,8 +1889,6 @@ private:
         .pathOpCount = static_cast<std::uint32_t>(recorded.pathOps.size()),
         .glyphOpStart = 0,
         .glyphOpCount = static_cast<std::uint32_t>(recorded.glyphOps.size()),
-        .backdropBlurOpStart = 0,
-        .backdropBlurOpCount = static_cast<std::uint32_t>(recorded.backdropBlurOps.size()),
         .pathVertexStart = 0,
         .pathVertexCount = static_cast<std::uint32_t>(recorded.pathVerts.size()),
         .glyphVertexStart = 0,
@@ -2681,7 +2140,6 @@ public:
     std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
     std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
     std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
-    std::uint32_t const frameBackdropBlurOpBase = static_cast<std::uint32_t>(frame.backdropBlurOps.size());
 
     if (slice.pathVertexCount > 0 && !externalPathBuffer) {
       frame.pathVerts.insert(frame.pathVerts.end(),
@@ -2750,13 +2208,6 @@ public:
         }
       }
     }
-    if (slice.backdropBlurOpCount > 0) {
-      frame.backdropBlurOps.insert(
-          frame.backdropBlurOps.end(),
-          recorded.backdropBlurOps.begin() + static_cast<std::ptrdiff_t>(slice.backdropBlurOpStart),
-          recorded.backdropBlurOps.begin() +
-              static_cast<std::ptrdiff_t>(slice.backdropBlurOpStart + slice.backdropBlurOpCount));
-    }
     if (slice.orderCount > 0) {
       frame.opOrder.insert(frame.opOrder.end(),
                             recorded.opOrder.begin() + static_cast<std::ptrdiff_t>(slice.orderStart),
@@ -2775,9 +2226,6 @@ public:
           break;
         case MetalOpRef::Glyph:
           ref.index = frameGlyphOpBase + (ref.index - slice.glyphOpStart);
-          break;
-        case MetalOpRef::BackdropBlur:
-          ref.index = frameBackdropBlurOpBase + (ref.index - slice.backdropBlurOpStart);
           break;
         }
       }
@@ -2835,7 +2283,6 @@ public:
     std::uint32_t const frameImageBase = static_cast<std::uint32_t>(frame.imageOps.size());
     std::uint32_t const framePathOpBase = static_cast<std::uint32_t>(frame.pathOps.size());
     std::uint32_t const frameGlyphOpBase = static_cast<std::uint32_t>(frame.glyphOps.size());
-    std::uint32_t const frameBackdropBlurOpBase = static_cast<std::uint32_t>(frame.backdropBlurOps.size());
 
     if (slice.pathVertexCount > 0 && !externalPathBuffer) {
       frame.pathVerts.reserve(frame.pathVerts.size() + slice.pathVertexCount);
@@ -2854,9 +2301,6 @@ public:
     }
     if (slice.glyphOpCount > 0) {
       frame.glyphOps.reserve(frame.glyphOps.size() + slice.glyphOpCount);
-    }
-    if (slice.backdropBlurOpCount > 0) {
-      frame.backdropBlurOps.reserve(frame.backdropBlurOps.size() + slice.backdropBlurOpCount);
     }
     if (slice.orderCount > 0) {
       frame.opOrder.reserve(frame.opOrder.size() + slice.orderCount);
@@ -2964,22 +2408,6 @@ public:
         tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
       }
     }
-    if (slice.backdropBlurOpCount > 0) {
-      std::size_t const start = static_cast<std::size_t>(slice.backdropBlurOpStart);
-      std::size_t const count = static_cast<std::size_t>(slice.backdropBlurOpCount);
-      frame.backdropBlurOps.insert(
-          frame.backdropBlurOps.end(),
-          recorded.backdropBlurOps.begin() + static_cast<std::ptrdiff_t>(start),
-          recorded.backdropBlurOps.begin() + static_cast<std::ptrdiff_t>(start + count));
-      for (std::size_t i = 0; i < count; ++i) {
-        MetalBackdropBlurOp& op = frame.backdropBlurOps[static_cast<std::size_t>(frameBackdropBlurOpBase) + i];
-        op.rect.x += translation.x;
-        op.rect.y += translation.y;
-        op.tint.w *= opacityScale;
-        tagOpWithClip(op, clipScissorValid_, clipScissor_, clipRoundedStack_);
-      }
-    }
-
     if (slice.orderCount > 0) {
       std::size_t const start = static_cast<std::size_t>(slice.orderStart);
       std::size_t const count = static_cast<std::size_t>(slice.orderCount);
@@ -2999,9 +2427,6 @@ public:
           break;
         case MetalOpRef::Glyph:
           ref.index = frameGlyphOpBase + (ref.index - slice.glyphOpStart);
-          break;
-        case MetalOpRef::BackdropBlur:
-          ref.index = frameBackdropBlurOpBase + (ref.index - slice.backdropBlurOpStart);
           break;
         }
       }
@@ -3065,23 +2490,20 @@ public:
     }
     glyphAtlas_->flushUploads(cmdBuf_);
 
-    bool const encodedBackdropFrame = hasBackdropBlurOps(frame_) && encodeFrameWithBackdropBlur(texture, texture, 1);
-    if (!encodedBackdropFrame) {
-      MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-      pass.colorAttachments[0].texture = texture;
-      pass.colorAttachments[0].loadAction = MTLLoadActionClear;
-      pass.colorAttachments[0].clearColor =
-          MTLClearColorMake(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
-      pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
+    pass.colorAttachments[0].texture = texture;
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    pass.colorAttachments[0].clearColor =
+        MTLClearColorMake(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
 
-      id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
-      if (enc) {
-        MTLViewport vp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
-        [enc setViewport:vp];
-        encodeRecorderOps(frame_, enc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
-                          frameDrawablePixelsH_);
-        [enc endEncoding];
-      }
+    id<MTLRenderCommandEncoder> enc = [cmdBuf_ renderCommandEncoderWithDescriptor:pass];
+    if (enc) {
+      MTLViewport vp = {0, 0, frameDrawableSize_.width, frameDrawableSize_.height, 0.0, 1.0};
+      [enc setViewport:vp];
+      encodeRecorderOps(frame_, enc, frameDrawableW_, frameDrawableH_, frameDrawablePixelsW_,
+                        frameDrawablePixelsH_);
+      [enc endEncoding];
     }
 
     id<MTLSharedEvent> externalEvent = targetSharedEvent();

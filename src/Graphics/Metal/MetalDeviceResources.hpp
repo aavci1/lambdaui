@@ -45,8 +45,6 @@ public:
   id<MTLRenderPipelineState> pathPSO(BlendMode mode, std::uint32_t sampleCount = 1);
   id<MTLRenderPipelineState> glyphPSO(BlendMode mode, std::uint32_t sampleCount = 1);
   id<MTLRenderPipelineState> imagePSO(BlendMode mode, std::uint32_t sampleCount = 1);
-  id<MTLRenderPipelineState> backdropPSO(std::uint32_t sampleCount = 1);
-  id<MTLRenderPipelineState> backdropBlurPSO();
   id<MTLSamplerState> linearSampler() const { return linearSampler_; }
   id<MTLSamplerState> repeatSampler() const { return repeatSampler_; }
   id<MTLBuffer> quadBuffer() const { return quadBuffer_; }
@@ -79,8 +77,6 @@ private:
   std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> pathPSOCache_;
   std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> glyphPSOCache_;
   std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> imagePSOCache_;
-  std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> backdropPSOCache_;
-  id<MTLRenderPipelineState> backdropBlurPSO_{nil};
   id<MTLBuffer> quadBuffer_{nil};
   id<MTLSamplerState> linearSampler_{nil};
   id<MTLSamplerState> repeatSampler_{nil};

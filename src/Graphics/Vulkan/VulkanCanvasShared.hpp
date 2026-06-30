@@ -86,7 +86,6 @@ struct SharedVulkanCore {
   struct Resources {
     bool initialized = false;
     VkFormat renderFormat = VK_FORMAT_UNDEFINED;
-    VkFormat backdropRenderFormat = VK_FORMAT_UNDEFINED;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout rectDescriptorLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout quadDescriptorLayout = VK_NULL_HANDLE;
@@ -95,14 +94,11 @@ struct SharedVulkanCore {
     VkPipelineLayout rectPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout calloutPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout imagePipelineLayout = VK_NULL_HANDLE;
-    VkPipelineLayout backdropPipelineLayout = VK_NULL_HANDLE;
     VkPipelineLayout pathPipelineLayout = VK_NULL_HANDLE;
     std::array<VkPipeline, kVulkanBlendModePipelineCount> rectPipelines{};
     std::array<VkPipeline, kVulkanBlendModePipelineCount> calloutPipelines{};
     std::array<VkPipeline, kVulkanBlendModePipelineCount> imagePipelines{};
     std::array<VkPipeline, kVulkanBlendModePipelineCount> imageUnpremultiplyPipelines{};
-    VkPipeline backdropPipeline = VK_NULL_HANDLE;
-    VkPipeline backdropBlurPipeline = VK_NULL_HANDLE;
     std::array<VkPipeline, kVulkanBlendModePipelineCount> pathPipelines{};
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     std::filesystem::path pipelineCacheFile;

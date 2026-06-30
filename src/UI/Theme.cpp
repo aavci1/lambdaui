@@ -439,8 +439,6 @@ Theme Theme::dark() {
 
   t.modalScrimColor = Color{0.f, 0.f, 0.f, 0.55f};
   t.popoverScrimColor = Color{0.f, 0.f, 0.f, 0.f};
-  t.modalBackdropBlurRadius = 18.f;
-  t.popoverBackdropBlurRadius = 0.f;
 
   t.toggleOnColor = t.accentColor;
   t.toggleOffColor = t.opaqueSeparatorColor;

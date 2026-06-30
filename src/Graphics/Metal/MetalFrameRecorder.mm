@@ -13,7 +13,6 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
       imageOps(std::move(other.imageOps)),
       pathOps(std::move(other.pathOps)),
       glyphOps(std::move(other.glyphOps)),
-      backdropBlurOps(std::move(other.backdropBlurOps)),
       opOrder(std::move(other.opOrder)),
       pathVerts(std::move(other.pathVerts)),
       glyphVerts(std::move(other.glyphVerts)),
@@ -32,7 +31,6 @@ MetalFrameRecorder::MetalFrameRecorder(MetalFrameRecorder&& other) noexcept
   other.imageOps.clear();
   other.pathOps.clear();
   other.glyphOps.clear();
-  other.backdropBlurOps.clear();
   other.opOrder.clear();
   other.pathVerts.clear();
   other.glyphVerts.clear();
@@ -58,7 +56,6 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   imageOps = std::move(other.imageOps);
   pathOps = std::move(other.pathOps);
   glyphOps = std::move(other.glyphOps);
-  backdropBlurOps = std::move(other.backdropBlurOps);
   opOrder = std::move(other.opOrder);
   pathVerts = std::move(other.pathVerts);
   glyphVerts = std::move(other.glyphVerts);
@@ -77,7 +74,6 @@ MetalFrameRecorder& MetalFrameRecorder::operator=(MetalFrameRecorder&& other) no
   other.imageOps.clear();
   other.pathOps.clear();
   other.glyphOps.clear();
-  other.backdropBlurOps.clear();
   other.opOrder.clear();
   other.pathVerts.clear();
   other.glyphVerts.clear();
@@ -126,7 +122,6 @@ void MetalFrameRecorder::clear() {
   imageOps.clear();
   pathOps.clear();
   glyphOps.clear();
-  backdropBlurOps.clear();
   opOrder.clear();
   pathVerts.clear();
   glyphVerts.clear();

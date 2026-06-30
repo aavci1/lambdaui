@@ -66,8 +66,6 @@ struct Alert : ViewModifiers<Alert> {
   Color messageColor = Color::theme();
   /// Full-window scrim color behind the alert.
   Color backdropColor = Color::theme();
-  /// Full-window backdrop blur radius in logical pixels.
-  float backdropBlurRadius = kFloatFromTheme;
   /// Uniform card corner radius (`kFloatFromTheme` = `Theme::radiusXLarge`). Not a `CornerRadius`
   /// struct field — all corners share one value; asymmetric cards need a custom element.
   float cornerRadius = kFloatFromTheme;
