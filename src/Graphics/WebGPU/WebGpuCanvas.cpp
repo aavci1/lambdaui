@@ -1195,6 +1195,24 @@ public:
     clip_ = viewportBounds();
   }
 
+  WebGpuCanvas(TextSystem& textSystem,
+               Size logicalSize,
+               std::uint32_t pixelWidth,
+               std::uint32_t pixelHeight,
+               WGPUDevice device,
+               WGPUQueue queue)
+      : textSystem_(textSystem),
+        size_(logicalSize),
+        context_(device, queue),
+        surfaceFormat_(WGPUTextureFormat_RGBA8Unorm),
+        surfaceCopySrcSupported_(true),
+        offscreenPixelWidth_(std::max(1u, pixelWidth)),
+        offscreenPixelHeight_(std::max(1u, pixelHeight)) {
+    dpiScale_ = std::max(logicalSize.width > 0.f ? static_cast<float>(offscreenPixelWidth_) / logicalSize.width : 1.f,
+                         logicalSize.height > 0.f ? static_cast<float>(offscreenPixelHeight_) / logicalSize.height : 1.f);
+    clip_ = viewportBounds();
+  }
+
   ~WebGpuCanvas() override {
     releaseFrameObjects();
     clearPendingFrameCapture();
@@ -1599,6 +1617,9 @@ public:
   }
 
   void* gpuDevice() const override { return context_.device(); }
+
+  WGPUDevice webGpuDevice() const noexcept { return context_.device(); }
+  WGPUQueue webGpuQueue() const noexcept { return context_.queue(); }
 
   TextSystem& textSystem() noexcept { return textSystem_; }
 
@@ -3426,7 +3447,12 @@ std::shared_ptr<Image> rasterizeToWebGpuImage(Canvas& canvas,
   std::uint32_t const pixelWidth = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.width * scale)));
   std::uint32_t const pixelHeight = std::max(1u, static_cast<std::uint32_t>(std::ceil(logicalSize.height * scale)));
 
-  WebGpuCanvas target(webgpuCanvas->textSystem(), logicalSize, pixelWidth, pixelHeight);
+  WebGpuCanvas target(webgpuCanvas->textSystem(),
+                      logicalSize,
+                      pixelWidth,
+                      pixelHeight,
+                      webgpuCanvas->webGpuDevice(),
+                      webgpuCanvas->webGpuQueue());
   target.updateDpiScale(scale, scale);
   target.beginFrame();
   target.clear(Colors::transparent);

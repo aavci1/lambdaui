@@ -1606,6 +1606,10 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
       [w toggleFullScreen:nil];
     });
   }
+  // Dawn's legacy native backend can crash inside AppKit's NSDisplayLink forwarder
+  // when the callback is paused/resumed during WebGPU frame presentation. Keep
+  // WebGPU on the CVDisplayLink scheduler until the Dawn backend is modernized.
+#if !LAMBDAUI_WEBGPU
   if (@available(macOS 14.0, *)) {
     d->displayLink_ = [d->metalView_ displayLinkWithTarget:d->metalView_
                                                   selector:@selector(lambdaHandleDisplayLink:)];
@@ -1614,6 +1618,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
       [d->displayLink_ setPaused:YES];
     }
   }
+#endif
   if (!d->displayLink_) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -2121,8 +2126,7 @@ CVReturn MacMetalWindow::onDisplayLinkTick() {
     dispatchAndFlush();
     return kCVReturnSuccess;
   }
-  CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, dispatchAndFlush);
-  CFRunLoopWakeUp(CFRunLoopGetMain());
+  dispatch_async(dispatch_get_main_queue(), dispatchAndFlush);
   return kCVReturnSuccess;
 }
 
