@@ -40,6 +40,9 @@ set(LAMBDAUI_DAWN_GIT_TAG "main" CACHE STRING
 set(LAMBDAUI_RENDERER "AUTO" CACHE STRING
     "LambdaUI renderer: AUTO, NATIVE or WEBGPU.")
 set_property(CACHE LAMBDAUI_RENDERER PROPERTY STRINGS AUTO NATIVE WEBGPU)
+option(LAMBDAUI_ENABLE_NATIVE_RENDERERS
+  "Allow the legacy Metal/Vulkan renderers while Dawn/WebGPU replaces the native backends."
+  ON)
 set(LAMBDAUI_RENDERER_NATIVE OFF)
 set(LAMBDAUI_RENDERER_WEBGPU OFF)
 if(LAMBDAUI_RENDERER STREQUAL "AUTO")
@@ -54,12 +57,21 @@ if(LAMBDAUI_RENDERER STREQUAL "AUTO")
     if(TARGET dawn::webgpu_dawn)
       set(LAMBDAUI_RENDERER_WEBGPU ON)
       message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected WEBGPU because Dawn was found.")
-    else()
+    elseif(LAMBDAUI_ENABLE_NATIVE_RENDERERS)
       set(LAMBDAUI_RENDERER_NATIVE ON)
       message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected NATIVE because Dawn was not found.")
+    else()
+      message(FATAL_ERROR
+        "LambdaUI: LAMBDAUI_RENDERER=AUTO could not select WEBGPU because Dawn was not found "
+        "and LAMBDAUI_ENABLE_NATIVE_RENDERERS=OFF. Configure Dawn with CMAKE_PREFIX_PATH, "
+        "LAMBDAUI_DAWN_SOURCE_DIR, or LAMBDAUI_DAWN_FETCH=ON.")
     endif()
   endif()
 elseif(LAMBDAUI_RENDERER STREQUAL "NATIVE")
+  if(NOT LAMBDAUI_ENABLE_NATIVE_RENDERERS)
+    message(FATAL_ERROR
+      "LambdaUI: LAMBDAUI_RENDERER=NATIVE requires LAMBDAUI_ENABLE_NATIVE_RENDERERS=ON.")
+  endif()
   set(LAMBDAUI_RENDERER_NATIVE ON)
 elseif(LAMBDAUI_RENDERER STREQUAL "WEBGPU")
   set(LAMBDAUI_RENDERER_WEBGPU ON)
