@@ -144,6 +144,7 @@ WebGPU rendering:
 - WGSL pipelines for primitives, paths, images, glyphs, clips, render targets, and frame readback.
 - Offscreen render targets can allocate internal WebGPU textures or render into caller-owned `WGPUTextureView` targets.
 - Consumers can query borrowed `WGPUDevice`, `WGPUQueue`, and render format handles from a WebGPU canvas.
+- Backdrop blur snapshots previously rendered pixels into WebGPU textures, runs separable blur passes, then composites the masked region.
 
 Rendering code is split across:
 

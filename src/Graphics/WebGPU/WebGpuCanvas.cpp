@@ -235,6 +235,7 @@ inline constexpr std::size_t kRoundedClipMaskCapacity = 4;
 inline constexpr std::size_t kRoundedClipEntryCount = kRoundedClipMaskCapacity * 2;
 inline constexpr std::size_t kWebGpuBlendModePipelineCount = static_cast<std::size_t>(BlendMode::Xor) + 1u;
 inline constexpr std::uint32_t kWebGpuCopyBytesPerRowAlignment = 256;
+inline constexpr std::uint32_t kWebGpuBackdropBlurMaxRadiusPx = 64;
 
 struct WebGpuRectInstance {
   float rect[4]{};
@@ -259,6 +260,14 @@ struct WebGpuFrameUniforms {
 };
 
 static_assert(sizeof(WebGpuFrameUniforms) == 16);
+
+struct WebGpuBlurUniforms {
+  float direction[2]{};
+  float radiusPx = 0.f;
+  float padding = 0.f;
+};
+
+static_assert(sizeof(WebGpuBlurUniforms) == 16);
 
 struct WebGpuQuadInstance {
   float rect[4]{};
@@ -568,6 +577,60 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     discard;
   }
   return sampled;
+}
+)wgsl";
+
+char const kBlurShaderWgsl[] = R"wgsl(
+struct BlurUniforms {
+  direction: vec2<f32>,
+  radiusPx: f32,
+  padding: f32,
+};
+
+@group(0) @binding(0) var blurSampler: sampler;
+@group(0) @binding(1) var sourceTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> blur: BlurUniforms;
+
+struct VertexOut {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+};
+
+fn unit_vertex(index: u32) -> vec2<f32> {
+  switch index {
+    case 0u: { return vec2<f32>(0.0, 0.0); }
+    case 1u: { return vec2<f32>(1.0, 0.0); }
+    case 2u: { return vec2<f32>(1.0, 1.0); }
+    case 3u: { return vec2<f32>(0.0, 0.0); }
+    case 4u: { return vec2<f32>(1.0, 1.0); }
+    default: { return vec2<f32>(0.0, 1.0); }
+  }
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
+  let unit = unit_vertex(vertexIndex);
+  var out: VertexOut;
+  out.position = vec4<f32>(unit.x * 2.0 - 1.0, 1.0 - unit.y * 2.0, 0.0, 1.0);
+  out.uv = unit;
+  return out;
+}
+
+@fragment
+fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+  let textureSize = textureDimensions(sourceTexture);
+  let dims = max(vec2<f32>(f32(textureSize.x), f32(textureSize.y)), vec2<f32>(1.0, 1.0));
+  let step = blur.direction * max(blur.radiusPx, 1.0) / 4.0 / dims;
+  var color = textureSample(sourceTexture, blurSampler, in.uv) * 0.2270270270;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv + step * 1.0) * 0.1945945946;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv - step * 1.0) * 0.1945945946;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv + step * 2.0) * 0.1216216216;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv - step * 2.0) * 0.1216216216;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv + step * 3.0) * 0.0540540541;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv - step * 3.0) * 0.0540540541;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv + step * 4.0) * 0.0162162162;
+  color = color + textureSample(sourceTexture, blurSampler, in.uv - step * 4.0) * 0.0162162162;
+  return color;
 }
 )wgsl";
 
@@ -972,6 +1035,7 @@ class WebGpuCanvas final : public Canvas {
       Rect,
       Image,
       Path,
+      BackdropBlur,
     };
 
     Kind kind = Kind::Rect;
@@ -980,6 +1044,7 @@ class WebGpuCanvas final : public Canvas {
     BlendMode blendMode = BlendMode::Normal;
     WebGpuImage const* image = nullptr;
     std::shared_ptr<Image const> imageRef;
+    float blurRadiusPx = 0.f;
   };
 
   struct WebGpuFrameRecorder final : RecordedOps {
@@ -1069,6 +1134,7 @@ public:
     releaseFrameObjects();
     clearPendingFrameCapture();
     releaseExternalRenderTarget();
+    releaseBackdropTargets();
     releaseOffscreenTarget();
     releaseDrawResources();
     if (surface_) {
@@ -1092,13 +1158,16 @@ public:
     size_ = {static_cast<float>(width), static_cast<float>(height)};
     if (surface_) {
       configureSurface();
+      releaseBackdropTargets();
     } else if (externalRenderTargetView_) {
       offscreenPixelWidth_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width * dpiScale_)));
       offscreenPixelHeight_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height * dpiScale_)));
+      releaseBackdropTargets();
     } else {
       offscreenPixelWidth_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width * dpiScale_)));
       offscreenPixelHeight_ = std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height * dpiScale_)));
       releaseOffscreenTarget();
+      releaseBackdropTargets();
     }
     if (!frameActive_) {
       clip_ = viewportBounds();
@@ -1449,11 +1518,15 @@ public:
     }
   }
   void drawBackdropBlur(Rect const& rect, float radius, Color tint, CornerRadius const& corners) override {
-    (void)radius;
-    if (!frameActive_ || rect.width <= 0.f || rect.height <= 0.f || tint.a <= 0.001f) {
+    if (!frameActive_ || rect.width <= 0.f || rect.height <= 0.f) {
       return;
     }
-    pushRectInstance(rect, corners, FillStyle::solid(tint), StrokeStyle::none(), opacity_);
+    if (radius > 0.f && !externalRenderTargetView_) {
+      pushBackdropBlurInstance(rect, corners, radius);
+    }
+    if (tint.a > 0.001f) {
+      pushRectInstance(rect, corners, FillStyle::solid(tint), StrokeStyle::none(), opacity_);
+    }
   }
 
   void* gpuDevice() const override { return context_.device(); }
@@ -1507,6 +1580,7 @@ public:
           op.first -= captureRectStart_;
           break;
         case WebGpuDrawOp::Kind::Image:
+        case WebGpuDrawOp::Kind::BackdropBlur:
           op.first -= captureQuadStart_;
           break;
         case WebGpuDrawOp::Kind::Path:
@@ -1600,6 +1674,26 @@ private:
     return Rect::sharp(0.f, 0.f, std::max(1.f, size_.width), std::max(1.f, size_.height));
   }
 
+  std::uint32_t targetPixelWidth() const noexcept {
+    if (surface_) {
+      return std::max(1u, static_cast<std::uint32_t>(std::lround(size_.width)));
+    }
+    return std::max(1u, offscreenPixelWidth_);
+  }
+
+  std::uint32_t targetPixelHeight() const noexcept {
+    if (surface_) {
+      return std::max(1u, static_cast<std::uint32_t>(std::lround(size_.height)));
+    }
+    return std::max(1u, offscreenPixelHeight_);
+  }
+
+  float targetDpiScale() const noexcept {
+    float const sx = static_cast<float>(targetPixelWidth()) / std::max(1.f, size_.width);
+    float const sy = static_cast<float>(targetPixelHeight()) / std::max(1.f, size_.height);
+    return std::max(sx, sy);
+  }
+
   Rect transformedBounds(Rect rect) const {
     return boundsOfTransformedRect(rect, transform_);
   }
@@ -1661,6 +1755,12 @@ private:
       return instanceHasClip(inst.clipHeader);
     });
     if (quadClip) {
+      return true;
+    }
+    bool const backdropBlur = std::any_of(recorded.drawOps.begin(), recorded.drawOps.end(), [](WebGpuDrawOp const& op) {
+      return op.kind == WebGpuDrawOp::Kind::BackdropBlur;
+    });
+    if (backdropBlur) {
       return true;
     }
     return std::any_of(recorded.pathVertices.begin(), recorded.pathVertices.end(), [](WebGpuPathVertex const& vertex) {
@@ -1790,6 +1890,7 @@ private:
           op.first += rectBase;
           break;
         case WebGpuDrawOp::Kind::Image:
+        case WebGpuDrawOp::Kind::BackdropBlur:
           op.first += quadBase;
           break;
         case WebGpuDrawOp::Kind::Path:
@@ -1931,74 +2032,133 @@ private:
     }
   }
 
+  WGPUTexture createBackdropTexture(char const* label, WGPUTextureUsage usage) {
+    WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
+    descriptor.label = stringView(label);
+    descriptor.usage = usage;
+    descriptor.dimension = WGPUTextureDimension_2D;
+    descriptor.size = WGPUExtent3D{
+        .width = backdropPixelWidth_,
+        .height = backdropPixelHeight_,
+        .depthOrArrayLayers = 1,
+    };
+    descriptor.format = surfaceFormat_;
+    descriptor.mipLevelCount = 1;
+    descriptor.sampleCount = 1;
+    WGPUTexture texture = wgpuDeviceCreateTexture(context_.device(), &descriptor);
+    if (!texture) {
+      throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur texture");
+    }
+    return texture;
+  }
+
+  WGPUTextureView createBackdropView(WGPUTexture texture, char const* label) {
+    WGPUTextureViewDescriptor descriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
+    descriptor.label = stringView(label);
+    WGPUTextureView view = wgpuTextureCreateView(texture, &descriptor);
+    if (!view) {
+      throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur texture view");
+    }
+    return view;
+  }
+
+  void ensureBackdropTargets() {
+    std::uint32_t const width = targetPixelWidth();
+    std::uint32_t const height = targetPixelHeight();
+    if (backdropSourceTexture_ && backdropPixelWidth_ == width && backdropPixelHeight_ == height) {
+      return;
+    }
+    releaseBackdropTargets();
+    backdropPixelWidth_ = width;
+    backdropPixelHeight_ = height;
+
+    backdropSourceTexture_ = createBackdropTexture("LambdaUI WebGPU Backdrop Source",
+                                                  WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding);
+    backdropSourceView_ = createBackdropView(backdropSourceTexture_, "LambdaUI WebGPU Backdrop Source View");
+    backdropScratchTexture_ = createBackdropTexture("LambdaUI WebGPU Backdrop Scratch",
+                                                   WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding);
+    backdropScratchView_ = createBackdropView(backdropScratchTexture_, "LambdaUI WebGPU Backdrop Scratch View");
+    backdropBlurTexture_ = createBackdropTexture("LambdaUI WebGPU Backdrop Blur",
+                                                WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding);
+    backdropBlurView_ = createBackdropView(backdropBlurTexture_, "LambdaUI WebGPU Backdrop Blur View");
+  }
+
+  WGPURenderPassEncoder beginFrameRenderPass(WGPULoadOp loadOp, char const* label) {
+    WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+    colorAttachment.view = currentView_;
+    colorAttachment.loadOp = loadOp;
+    colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.clearValue = toWebGpuColor(clearColor_);
+
+    WGPURenderPassDescriptor passDescriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+    passDescriptor.label = stringView(label);
+    passDescriptor.colorAttachmentCount = 1;
+    passDescriptor.colorAttachments = &colorAttachment;
+    return wgpuCommandEncoderBeginRenderPass(commandEncoder_, &passDescriptor);
+  }
+
+  void drawOpRange(WGPURenderPassEncoder pass, std::size_t start, std::size_t end) {
+    if (!pass) {
+      return;
+    }
+    WGPURenderPipeline activePipeline = nullptr;
+    for (std::size_t i = start; i < end && i < drawOps_.size(); ++i) {
+      WebGpuDrawOp const& op = drawOps_[i];
+      switch (op.kind) {
+        case WebGpuDrawOp::Kind::Rect:
+          if (!rectBindGroup_) {
+            break;
+          }
+          if (WGPURenderPipeline pipeline = ensureRectPipeline(op.blendMode); activePipeline != pipeline) {
+            wgpuRenderPassEncoderSetPipeline(pass, pipeline);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, rectBindGroup_, 0, nullptr);
+            activePipeline = pipeline;
+          }
+          wgpuRenderPassEncoderDraw(pass, 6, op.count, 0, op.first);
+          break;
+        case WebGpuDrawOp::Kind::Image:
+          drawImageOp(pass, op, activePipeline, nullptr);
+          break;
+        case WebGpuDrawOp::Kind::Path:
+          if (!pathBuffer_) {
+            break;
+          }
+          if (WGPURenderPipeline pipeline = ensurePathPipeline(op.blendMode); activePipeline != pipeline) {
+            wgpuRenderPassEncoderSetPipeline(pass, pipeline);
+            activePipeline = pipeline;
+          }
+          wgpuRenderPassEncoderSetVertexBuffer(pass, 0, pathBuffer_, 0, pathBufferCapacity_);
+          wgpuRenderPassEncoderDraw(pass, op.count, 1, op.first, 0);
+          break;
+        case WebGpuDrawOp::Kind::BackdropBlur:
+          break;
+      }
+    }
+  }
+
   void encodeFramePass() {
     ensureFrameObjects();
     uploadRectResources();
     uploadImageResources();
     uploadPathResources();
 
-    WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-    colorAttachment.view = currentView_;
-    colorAttachment.loadOp = WGPULoadOp_Clear;
-    colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.clearValue = toWebGpuColor(clearColor_);
-
-    WGPURenderPassDescriptor passDescriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
-    passDescriptor.label = stringView("LambdaUI WebGPU Clear Pass");
-    passDescriptor.colorAttachmentCount = 1;
-    passDescriptor.colorAttachments = &colorAttachment;
-
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(commandEncoder_, &passDescriptor);
-    if (pass) {
-      WGPURenderPipeline activePipeline = nullptr;
-      for (WebGpuDrawOp const& op : drawOps_) {
-        switch (op.kind) {
-          case WebGpuDrawOp::Kind::Rect:
-            if (!rectBindGroup_) {
-              break;
-            }
-            if (WGPURenderPipeline pipeline = ensureRectPipeline(op.blendMode); activePipeline != pipeline) {
-              wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-              wgpuRenderPassEncoderSetBindGroup(pass, 0, rectBindGroup_, 0, nullptr);
-              activePipeline = pipeline;
-            }
-            wgpuRenderPassEncoderDraw(pass, 6, op.count, 0, op.first);
-            break;
-          case WebGpuDrawOp::Kind::Image:
-            if (!imageFrameBindGroup_ || !op.image) {
-              break;
-            }
-            if (WGPURenderPipeline pipeline = ensureImagePipeline(op.blendMode); activePipeline != pipeline) {
-              wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-              wgpuRenderPassEncoderSetBindGroup(pass, 0, imageFrameBindGroup_, 0, nullptr);
-              activePipeline = pipeline;
-            }
-            try {
-              WGPUTextureView const view = op.image->textureView(context_.device(), context_.queue());
-              if (!view) {
-                break;
-              }
-              WGPUBindGroup textureBindGroup = createImageTextureBindGroup(view);
-              wgpuRenderPassEncoderSetBindGroup(pass, 1, textureBindGroup, 0, nullptr);
-              wgpuRenderPassEncoderDraw(pass, 6, op.count, 0, op.first);
-              wgpuBindGroupRelease(textureBindGroup);
-            } catch (std::exception const& e) {
-              std::fprintf(stderr, "Lambda WebGPU: image upload failed: %s\n", e.what());
-            }
-            break;
-          case WebGpuDrawOp::Kind::Path:
-            if (!pathBuffer_) {
-              break;
-            }
-            if (WGPURenderPipeline pipeline = ensurePathPipeline(op.blendMode); activePipeline != pipeline) {
-              wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-              activePipeline = pipeline;
-            }
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, pathBuffer_, 0, pathBufferCapacity_);
-            wgpuRenderPassEncoderDraw(pass, op.count, 1, op.first, 0);
-            break;
-        }
+    WGPURenderPassEncoder pass = beginFrameRenderPass(WGPULoadOp_Clear, "LambdaUI WebGPU Frame Pass");
+    std::size_t segmentStart = 0;
+    for (std::size_t i = 0; i < drawOps_.size(); ++i) {
+      if (drawOps_[i].kind != WebGpuDrawOp::Kind::BackdropBlur) {
+        continue;
       }
+      drawOpRange(pass, segmentStart, i);
+      if (pass) {
+        wgpuRenderPassEncoderEnd(pass);
+        wgpuRenderPassEncoderRelease(pass);
+      }
+      encodeBackdropBlurOp(drawOps_[i]);
+      pass = beginFrameRenderPass(WGPULoadOp_Load, "LambdaUI WebGPU Frame Continue Pass");
+      segmentStart = i + 1;
+    }
+    drawOpRange(pass, segmentStart, drawOps_.size());
+    if (pass) {
       wgpuRenderPassEncoderEnd(pass);
       wgpuRenderPassEncoderRelease(pass);
     }
@@ -2153,6 +2313,35 @@ private:
     }
   }
 
+  void releaseBackdropTargets() noexcept {
+    if (backdropSourceView_) {
+      wgpuTextureViewRelease(backdropSourceView_);
+      backdropSourceView_ = nullptr;
+    }
+    if (backdropSourceTexture_) {
+      wgpuTextureRelease(backdropSourceTexture_);
+      backdropSourceTexture_ = nullptr;
+    }
+    if (backdropScratchView_) {
+      wgpuTextureViewRelease(backdropScratchView_);
+      backdropScratchView_ = nullptr;
+    }
+    if (backdropScratchTexture_) {
+      wgpuTextureRelease(backdropScratchTexture_);
+      backdropScratchTexture_ = nullptr;
+    }
+    if (backdropBlurView_) {
+      wgpuTextureViewRelease(backdropBlurView_);
+      backdropBlurView_ = nullptr;
+    }
+    if (backdropBlurTexture_) {
+      wgpuTextureRelease(backdropBlurTexture_);
+      backdropBlurTexture_ = nullptr;
+    }
+    backdropPixelWidth_ = 0;
+    backdropPixelHeight_ = 0;
+  }
+
   void releaseExternalRenderTarget() noexcept {
     if (externalRenderTargetView_) {
       wgpuTextureViewRelease(externalRenderTargetView_);
@@ -2259,6 +2448,47 @@ private:
       op.imageRef.reset();
     }
     drawOps_.push_back(std::move(op));
+  }
+
+  void pushBackdropBlurInstance(Rect const& rect, CornerRadius const& corners, float radius) {
+    if (clip_.width <= 0.f || clip_.height <= 0.f || !clip_.intersects(transformedBounds(rect))) {
+      return;
+    }
+
+    Point const p0 = transform_.apply({rect.x, rect.y});
+    Point const p1 = transform_.apply({rect.x + rect.width, rect.y});
+    Point const p3 = transform_.apply({rect.x, rect.y + rect.height});
+    WebGpuQuadInstance instance{};
+    instance.rect[2] = rect.width;
+    instance.rect[3] = rect.height;
+    instance.axisX[0] = p0.x;
+    instance.axisX[1] = p0.y;
+    instance.axisX[2] = p1.x - p0.x;
+    instance.axisX[3] = p1.y - p0.y;
+    instance.axisY[0] = p3.x - p0.x;
+    instance.axisY[1] = p3.y - p0.y;
+    float const viewportWidth = std::max(1.f, size_.width);
+    float const viewportHeight = std::max(1.f, size_.height);
+    instance.uv[0] = rect.x / viewportWidth;
+    instance.uv[1] = rect.y / viewportHeight;
+    instance.uv[2] = (rect.x + rect.width) / viewportWidth;
+    instance.uv[3] = (rect.y + rect.height) / viewportHeight;
+    putColor(instance.color, Colors::white, opacity_);
+    CornerRadius const radii = clampedRadii(corners, rect.width, rect.height);
+    instance.radii[0] = radii.topLeft;
+    instance.radii[1] = radii.topRight;
+    instance.radii[2] = radii.bottomRight;
+    instance.radii[3] = radii.bottomLeft;
+    applyCurrentClip(instance);
+    std::uint32_t const first = static_cast<std::uint32_t>(quads_.size());
+    quads_.push_back(instance);
+    drawOps_.push_back(WebGpuDrawOp{
+        .kind = WebGpuDrawOp::Kind::BackdropBlur,
+        .first = first,
+        .count = 1,
+        .blendMode = blendMode_,
+        .blurRadiusPx = std::clamp(radius * targetDpiScale(), 1.f, static_cast<float>(kWebGpuBackdropBlurMaxRadiusPx)),
+    });
   }
 
   void appendPath(Path const& path, FillStyle const& fill, StrokeStyle const& stroke) {
@@ -2475,6 +2705,245 @@ private:
                          0,
                          pathVertices_.data(),
                          pathVertices_.size() * sizeof(WebGpuPathVertex));
+  }
+
+  void drawImageOp(WGPURenderPassEncoder pass,
+                   WebGpuDrawOp const& op,
+                   WGPURenderPipeline& activePipeline,
+                   WGPUTextureView textureViewOverride) {
+    if (!imageFrameBindGroup_) {
+      return;
+    }
+    if (WGPURenderPipeline pipeline = ensureImagePipeline(op.blendMode); activePipeline != pipeline) {
+      wgpuRenderPassEncoderSetPipeline(pass, pipeline);
+      wgpuRenderPassEncoderSetBindGroup(pass, 0, imageFrameBindGroup_, 0, nullptr);
+      activePipeline = pipeline;
+    }
+    try {
+      WGPUTextureView view = textureViewOverride;
+      if (!view) {
+        if (!op.image) {
+          return;
+        }
+        view = op.image->textureView(context_.device(), context_.queue());
+      }
+      if (!view) {
+        return;
+      }
+      WGPUBindGroup textureBindGroup = createImageTextureBindGroup(view);
+      wgpuRenderPassEncoderSetBindGroup(pass, 1, textureBindGroup, 0, nullptr);
+      wgpuRenderPassEncoderDraw(pass, 6, op.count, 0, op.first);
+      wgpuBindGroupRelease(textureBindGroup);
+    } catch (std::exception const& e) {
+      std::fprintf(stderr, "Lambda WebGPU: image upload failed: %s\n", e.what());
+    }
+  }
+
+  bool backdropCopySupported() const noexcept {
+    return currentTexture_ && !externalRenderTargetView_ && (!surface_ || surfaceCopySrcSupported_);
+  }
+
+  void copyCurrentTargetToBackdropSource() {
+    WGPUTexelCopyTextureInfo source = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+    source.texture = currentTexture_;
+    source.aspect = WGPUTextureAspect_All;
+    WGPUTexelCopyTextureInfo destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+    destination.texture = backdropSourceTexture_;
+    destination.aspect = WGPUTextureAspect_All;
+    WGPUExtent3D copySize = WGPU_EXTENT_3D_INIT;
+    copySize.width = backdropPixelWidth_;
+    copySize.height = backdropPixelHeight_;
+    copySize.depthOrArrayLayers = 1;
+    wgpuCommandEncoderCopyTextureToTexture(commandEncoder_, &source, &destination, &copySize);
+  }
+
+  void ensureBlurSampler() {
+    if (blurSampler_) {
+      return;
+    }
+    WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
+    descriptor.label = stringView("LambdaUI WebGPU Backdrop Blur Sampler");
+    descriptor.addressModeU = WGPUAddressMode_ClampToEdge;
+    descriptor.addressModeV = WGPUAddressMode_ClampToEdge;
+    descriptor.addressModeW = WGPUAddressMode_ClampToEdge;
+    descriptor.magFilter = WGPUFilterMode_Linear;
+    descriptor.minFilter = WGPUFilterMode_Linear;
+    descriptor.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+    blurSampler_ = wgpuDeviceCreateSampler(context_.device(), &descriptor);
+    if (!blurSampler_) {
+      throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur sampler");
+    }
+  }
+
+  void ensureBlurUniformBuffer() {
+    ensureBuffer(blurUniformBuffer_,
+                 blurUniformBufferCapacity_,
+                 sizeof(WebGpuBlurUniforms),
+                 WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
+                 "LambdaUI WebGPU Backdrop Blur Uniforms");
+  }
+
+  WGPUBindGroup createBlurBindGroup(WGPUTextureView sourceView) {
+    ensureBlurSampler();
+    ensureBlurUniformBuffer();
+    (void)ensureBlurPipeline();
+    WGPUBindGroupEntry entries[3] = {
+        WGPU_BIND_GROUP_ENTRY_INIT,
+        WGPU_BIND_GROUP_ENTRY_INIT,
+        WGPU_BIND_GROUP_ENTRY_INIT,
+    };
+    entries[0].binding = 0;
+    entries[0].sampler = blurSampler_;
+    entries[1].binding = 1;
+    entries[1].textureView = sourceView;
+    entries[2].binding = 2;
+    entries[2].buffer = blurUniformBuffer_;
+    entries[2].size = sizeof(WebGpuBlurUniforms);
+
+    WGPUBindGroupDescriptor descriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+    descriptor.label = stringView("LambdaUI WebGPU Backdrop Blur Bind Group");
+    descriptor.layout = blurBindGroupLayout_;
+    descriptor.entryCount = 3;
+    descriptor.entries = entries;
+    WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(context_.device(), &descriptor);
+    if (!bindGroup) {
+      throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur bind group");
+    }
+    return bindGroup;
+  }
+
+  WGPURenderPipeline ensureBlurPipeline() {
+    if (blurPipelineFormat_ != WGPUTextureFormat_Undefined && blurPipelineFormat_ != surfaceFormat_) {
+      releaseBlurPipeline();
+    }
+    if (blurPipeline_) {
+      return blurPipeline_;
+    }
+    if (!blurBindGroupLayout_) {
+      WGPUBindGroupLayoutEntry entries[3] = {
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+          WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+      };
+      entries[0].binding = 0;
+      entries[0].visibility = WGPUShaderStage_Fragment;
+      entries[0].sampler.type = WGPUSamplerBindingType_Filtering;
+      entries[1].binding = 1;
+      entries[1].visibility = WGPUShaderStage_Fragment;
+      entries[1].texture.sampleType = WGPUTextureSampleType_Float;
+      entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+      entries[2].binding = 2;
+      entries[2].visibility = WGPUShaderStage_Fragment;
+      entries[2].buffer.type = WGPUBufferBindingType_Uniform;
+      entries[2].buffer.minBindingSize = sizeof(WebGpuBlurUniforms);
+
+      WGPUBindGroupLayoutDescriptor descriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+      descriptor.label = stringView("LambdaUI WebGPU Backdrop Blur Bind Group Layout");
+      descriptor.entryCount = 3;
+      descriptor.entries = entries;
+      blurBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(context_.device(), &descriptor);
+      if (!blurBindGroupLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur bind group layout");
+      }
+    }
+    if (!blurPipelineLayout_) {
+      WGPUPipelineLayoutDescriptor descriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+      descriptor.label = stringView("LambdaUI WebGPU Backdrop Blur Pipeline Layout");
+      descriptor.bindGroupLayoutCount = 1;
+      descriptor.bindGroupLayouts = &blurBindGroupLayout_;
+      blurPipelineLayout_ = wgpuDeviceCreatePipelineLayout(context_.device(), &descriptor);
+      if (!blurPipelineLayout_) {
+        throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur pipeline layout");
+      }
+    }
+
+    WGPUShaderSourceWGSL shaderSource = WGPU_SHADER_SOURCE_WGSL_INIT;
+    shaderSource.code = stringView(kBlurShaderWgsl);
+    WGPUShaderModuleDescriptor shaderDescriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
+    shaderDescriptor.label = stringView("LambdaUI WebGPU Backdrop Blur Shader");
+    shaderDescriptor.nextInChain = &shaderSource.chain;
+    WGPUShaderModule shader = wgpuDeviceCreateShaderModule(context_.device(), &shaderDescriptor);
+    if (!shader) {
+      throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur shader module");
+    }
+
+    WGPUColorTargetState colorTarget = WGPU_COLOR_TARGET_STATE_INIT;
+    colorTarget.format = surfaceFormat_;
+    colorTarget.writeMask = WGPUColorWriteMask_All;
+
+    WGPUFragmentState fragment = WGPU_FRAGMENT_STATE_INIT;
+    fragment.module = shader;
+    fragment.entryPoint = stringView("fs_main");
+    fragment.targetCount = 1;
+    fragment.targets = &colorTarget;
+
+    WGPURenderPipelineDescriptor descriptor = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
+    descriptor.label = stringView("LambdaUI WebGPU Backdrop Blur Pipeline");
+    descriptor.layout = blurPipelineLayout_;
+    descriptor.vertex.module = shader;
+    descriptor.vertex.entryPoint = stringView("vs_main");
+    descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    descriptor.fragment = &fragment;
+
+    blurPipeline_ = wgpuDeviceCreateRenderPipeline(context_.device(), &descriptor);
+    wgpuShaderModuleRelease(shader);
+    if (!blurPipeline_) {
+      throw std::runtime_error("Lambda WebGPU: failed to create backdrop blur pipeline");
+    }
+    blurPipelineFormat_ = surfaceFormat_;
+    return blurPipeline_;
+  }
+
+  void drawBlurPass(WGPUTextureView sourceView, WGPUTextureView destinationView, float axisX, float axisY, float radiusPx) {
+    WebGpuBlurUniforms uniforms{};
+    uniforms.direction[0] = axisX;
+    uniforms.direction[1] = axisY;
+    uniforms.radiusPx = radiusPx;
+    ensureBlurUniformBuffer();
+    wgpuQueueWriteBuffer(context_.queue(), blurUniformBuffer_, 0, &uniforms, sizeof(uniforms));
+    WGPUBindGroup bindGroup = createBlurBindGroup(sourceView);
+
+    WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+    colorAttachment.view = destinationView;
+    colorAttachment.loadOp = WGPULoadOp_Clear;
+    colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.clearValue = WGPUColor{0.0, 0.0, 0.0, 0.0};
+
+    WGPURenderPassDescriptor passDescriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+    passDescriptor.label = stringView("LambdaUI WebGPU Backdrop Blur Pass");
+    passDescriptor.colorAttachmentCount = 1;
+    passDescriptor.colorAttachments = &colorAttachment;
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(commandEncoder_, &passDescriptor);
+    if (pass) {
+      wgpuRenderPassEncoderSetPipeline(pass, ensureBlurPipeline());
+      wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+      wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+      wgpuRenderPassEncoderEnd(pass);
+      wgpuRenderPassEncoderRelease(pass);
+    }
+    wgpuBindGroupRelease(bindGroup);
+  }
+
+  void drawBackdropBlurResult(WebGpuDrawOp const& op) {
+    WGPURenderPassEncoder pass = beginFrameRenderPass(WGPULoadOp_Load, "LambdaUI WebGPU Backdrop Composite Pass");
+    if (!pass) {
+      return;
+    }
+    WGPURenderPipeline activePipeline = nullptr;
+    drawImageOp(pass, op, activePipeline, backdropBlurView_);
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
+  }
+
+  void encodeBackdropBlurOp(WebGpuDrawOp const& op) {
+    if (!backdropCopySupported() || !commandEncoder_ || op.count == 0 || op.blurRadiusPx <= 0.f) {
+      return;
+    }
+    ensureBackdropTargets();
+    copyCurrentTargetToBackdropSource();
+    drawBlurPass(backdropSourceView_, backdropScratchView_, 1.f, 0.f, op.blurRadiusPx);
+    drawBlurPass(backdropScratchView_, backdropBlurView_, 0.f, 1.f, op.blurRadiusPx);
+    drawBackdropBlurResult(op);
   }
 
   void ensureRectBindGroup() {
@@ -2921,10 +3390,27 @@ private:
     pathPipelineFormat_ = WGPUTextureFormat_Undefined;
   }
 
+  void releaseBlurPipeline() noexcept {
+    if (blurPipeline_) {
+      wgpuRenderPipelineRelease(blurPipeline_);
+      blurPipeline_ = nullptr;
+    }
+    if (blurPipelineLayout_) {
+      wgpuPipelineLayoutRelease(blurPipelineLayout_);
+      blurPipelineLayout_ = nullptr;
+    }
+    if (blurBindGroupLayout_) {
+      wgpuBindGroupLayoutRelease(blurBindGroupLayout_);
+      blurBindGroupLayout_ = nullptr;
+    }
+    blurPipelineFormat_ = WGPUTextureFormat_Undefined;
+  }
+
   void releaseDrawResources() noexcept {
     releaseRectPipeline();
     releaseImagePipeline();
     releasePathPipeline();
+    releaseBlurPipeline();
     if (rectBuffer_) {
       wgpuBufferRelease(rectBuffer_);
       rectBuffer_ = nullptr;
@@ -2949,11 +3435,20 @@ private:
       wgpuSamplerRelease(imageSampler_);
       imageSampler_ = nullptr;
     }
+    if (blurSampler_) {
+      wgpuSamplerRelease(blurSampler_);
+      blurSampler_ = nullptr;
+    }
+    if (blurUniformBuffer_) {
+      wgpuBufferRelease(blurUniformBuffer_);
+      blurUniformBuffer_ = nullptr;
+    }
     rectBufferCapacity_ = 0;
     quadBufferCapacity_ = 0;
     frameUniformBufferCapacity_ = 0;
     imageFrameUniformBufferCapacity_ = 0;
     pathBufferCapacity_ = 0;
+    blurUniformBufferCapacity_ = 0;
   }
 
   WebGpuNativeSurface nativeSurface_{};
@@ -2969,6 +3464,15 @@ private:
   WGPUTexture offscreenTexture_ = nullptr;
   std::uint32_t offscreenPixelWidth_ = 0;
   std::uint32_t offscreenPixelHeight_ = 0;
+
+  WGPUTexture backdropSourceTexture_ = nullptr;
+  WGPUTextureView backdropSourceView_ = nullptr;
+  WGPUTexture backdropScratchTexture_ = nullptr;
+  WGPUTextureView backdropScratchView_ = nullptr;
+  WGPUTexture backdropBlurTexture_ = nullptr;
+  WGPUTextureView backdropBlurView_ = nullptr;
+  std::uint32_t backdropPixelWidth_ = 0;
+  std::uint32_t backdropPixelHeight_ = 0;
 
   WGPUTexture currentTexture_ = nullptr;
   WGPUTextureView currentView_ = nullptr;
@@ -3024,6 +3528,14 @@ private:
   WGPUTextureFormat pathPipelineFormat_ = WGPUTextureFormat_Undefined;
   WGPUBuffer pathBuffer_ = nullptr;
   std::uint64_t pathBufferCapacity_ = 0;
+
+  WGPUBindGroupLayout blurBindGroupLayout_ = nullptr;
+  WGPUPipelineLayout blurPipelineLayout_ = nullptr;
+  WGPURenderPipeline blurPipeline_ = nullptr;
+  WGPUTextureFormat blurPipelineFormat_ = WGPUTextureFormat_Undefined;
+  WGPUSampler blurSampler_ = nullptr;
+  WGPUBuffer blurUniformBuffer_ = nullptr;
+  std::uint64_t blurUniformBufferCapacity_ = 0;
 
   bool frameCaptureRequested_ = false;
   bool capturedFrameAvailable_ = false;
