@@ -7,7 +7,6 @@
 
 #include <Lambda/Graphics/Image.hpp>
 #include <Lambda/Graphics/TextSystem.hpp>
-#include <Lambda/Graphics/WebGpuContext.hpp>
 
 #include <algorithm>
 #include <array>
@@ -3620,33 +3619,9 @@ std::unique_ptr<Canvas> createWebGpuExternalRenderTargetCanvas(TextSystem& textS
                                         format);
 }
 
-WebGpuCanvasHandles canvasHandles(Canvas const& canvas) noexcept {
-  return WebGpuCanvasHandles{
-      .device = canvas.webGpuDevice(),
-      .queue = canvas.webGpuQueue(),
-      .renderTargetFormat = canvas.webGpuRenderTargetFormat(),
-  };
-}
-
 } // namespace lambdaui::webgpu
 
 namespace lambdaui {
-
-WebGpuCanvasHandles webGpuCanvasHandles(Canvas const& canvas) noexcept {
-  return webgpu::canvasHandles(canvas);
-}
-
-WGPUDevice webGpuDevice(Canvas const& canvas) noexcept {
-  return canvas.webGpuDevice();
-}
-
-WGPUQueue webGpuQueue(Canvas const& canvas) noexcept {
-  return canvas.webGpuQueue();
-}
-
-WGPUTextureFormat webGpuRenderTargetFormat(Canvas const& canvas) noexcept {
-  return canvas.webGpuRenderTargetFormat();
-}
 
 std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width,
                                              std::uint32_t height,
