@@ -118,9 +118,9 @@ Core files:
 
 ## Rendering
 
-Rendering flows through the backend-neutral `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
+Rendering flows through the WebGPU-backed `Canvas` interface. The scene renderer traverses retained nodes and emits draw operations for fills, strokes, images, text, paths, clips, opacity, transforms, backdrop effects, and cached subtrees.
 
-Renderer selection is split from platform selection. `LAMBDAUI_RENDERER=AUTO` selects Dawn/WebGPU when Dawn is explicitly configured or discoverable. `LAMBDAUI_RENDERER=WEBGPU` requires Dawn and routes window surfaces through WebGPU. The legacy native renderer selection path has been removed from CMake.
+Platform selection is independent of renderer setup. Every build uses Dawn/WebGPU; Dawn is discovered through `CMAKE_PREFIX_PATH`, added from `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched with `LAMBDAUI_DAWN_FETCH`.
 
 macOS rendering:
 
@@ -175,9 +175,9 @@ Useful files:
 
 `EventQueue` is the application-visible dispatch path for lifecycle, window, input, timer, and custom events. It has a fixed bucket order and drains pending events until all buckets are empty. See [Event Queue](EVENTS.md).
 
-## Platform Backends
+## Platforms
 
-Platform selection is controlled by `LAMBDAUI_PLATFORM`; renderer selection is controlled by `LAMBDAUI_RENDERER`.
+Platform selection is controlled by `LAMBDAUI_PLATFORM`. Rendering always uses Dawn/WebGPU.
 
 `MACOS`:
 
@@ -190,11 +190,6 @@ Platform selection is controlled by `LAMBDAUI_PLATFORM`; renderer selection is c
 - Uses Wayland client protocols and `src/Platform/Linux/Wayland*`.
 - Uses Dawn/WebGPU for rendering.
 - Supports xdg-shell and several optional protocols for scaling, layer-shell, background effects, pointer constraints, activation, and related behavior.
-- Defines `LAMBDAUI_WEBGPU=1`.
-
-`WEBGPU` renderer:
-
-- Uses Dawn for GPU device, queue, surface, and WebGPU command encoding.
 - Defines `LAMBDAUI_WEBGPU=1`.
 
 ## Runtime Resources

@@ -24,62 +24,34 @@ set(LAMBDAUI_FRAMEWORK_VENDOR_DIR "${LAMBDAUI_FRAMEWORK_DIR}/vendor")
 include(${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaApp.cmake)
 
 set(LAMBDAUI_PLATFORM "AUTO" CACHE STRING
-    "LambdaUI backend: AUTO, MACOS, LINUX_WAYLAND.")
+    "LambdaUI platform: AUTO, MACOS, LINUX_WAYLAND.")
 set_property(CACHE LAMBDAUI_PLATFORM PROPERTY STRINGS AUTO MACOS LINUX_WAYLAND)
 
-set(LAMBDAUI_DAWN_SOURCE_DIR "" CACHE PATH
-  "Optional path to a Dawn source checkout. When empty, LambdaUI uses find_package(Dawn).")
-option(LAMBDAUI_DAWN_FETCH
-  "Fetch Dawn from source with CMake FetchContent when no installed package or source checkout is provided."
-  OFF)
-set(LAMBDAUI_DAWN_GIT_REPOSITORY "https://dawn.googlesource.com/dawn" CACHE STRING
-  "Git repository used when LAMBDAUI_DAWN_FETCH is enabled.")
-set(LAMBDAUI_DAWN_GIT_TAG "main" CACHE STRING
-  "Git tag, branch, or commit used when LAMBDAUI_DAWN_FETCH is enabled.")
-
-set(LAMBDAUI_RENDERER "AUTO" CACHE STRING
-    "LambdaUI renderer: AUTO or WEBGPU.")
-set_property(CACHE LAMBDAUI_RENDERER PROPERTY STRINGS AUTO WEBGPU)
-set(LAMBDAUI_RENDERER_WEBGPU OFF)
-if(LAMBDAUI_RENDERER STREQUAL "AUTO")
-  if(LAMBDAUI_DAWN_SOURCE_DIR OR LAMBDAUI_DAWN_FETCH)
-    set(LAMBDAUI_RENDERER_WEBGPU ON)
-    message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected WEBGPU because Dawn is explicitly configured.")
-  else()
-    find_package(Dawn CONFIG QUIET)
-    if(NOT TARGET dawn::webgpu_dawn AND TARGET webgpu_dawn)
-      add_library(dawn::webgpu_dawn ALIAS webgpu_dawn)
-    endif()
-    if(TARGET dawn::webgpu_dawn)
-      set(LAMBDAUI_RENDERER_WEBGPU ON)
-      message(STATUS "LambdaUI: LAMBDAUI_RENDERER=AUTO selected WEBGPU because Dawn was found.")
-    else()
-      message(FATAL_ERROR
-        "LambdaUI: LAMBDAUI_RENDERER=AUTO could not select WEBGPU because Dawn was not found. "
-        "Configure Dawn with CMAKE_PREFIX_PATH, LAMBDAUI_DAWN_SOURCE_DIR, or "
-        "LAMBDAUI_DAWN_FETCH=ON.")
-    endif()
+foreach(_legacy_renderer_var IN ITEMS
+    LAMBDAUI_RENDERER
+    LAMBDAUI_RENDERER_WEBGPU
+    LAMBDAUI_ENABLE_NATIVE_RENDERERS
+    LAMBDAUI_METAL
+    LAMBDAUI_VULKAN)
+  if(DEFINED ${_legacy_renderer_var})
+    message(FATAL_ERROR
+      "LambdaUI: ${_legacy_renderer_var} has been removed. Rendering always uses Dawn/WebGPU; "
+      "configure Dawn with CMAKE_PREFIX_PATH, LAMBDAUI_DAWN_SOURCE_DIR, or LAMBDAUI_DAWN_FETCH=ON.")
   endif()
-elseif(LAMBDAUI_RENDERER STREQUAL "NATIVE")
-  message(FATAL_ERROR
-    "LambdaUI: LAMBDAUI_RENDERER=NATIVE has been removed. Configure Dawn and use WEBGPU.")
-elseif(LAMBDAUI_RENDERER STREQUAL "WEBGPU")
-  set(LAMBDAUI_RENDERER_WEBGPU ON)
-else()
-  message(FATAL_ERROR "LambdaUI: LAMBDAUI_RENDERER=${LAMBDAUI_RENDERER} is not implemented yet.")
-endif()
+endforeach()
+unset(_legacy_renderer_var)
 
 if(LAMBDAUI_PLATFORM STREQUAL "AUTO")
   if(APPLE)
     set(LAMBDAUI_PLATFORM_MACOS ON)
     set(LAMBDAUI_PLATFORM "MACOS" CACHE STRING
-      "LambdaUI backend: AUTO, MACOS, LINUX_WAYLAND." FORCE)
+      "LambdaUI platform: AUTO, MACOS, LINUX_WAYLAND." FORCE)
   elseif(UNIX)
     set(LAMBDAUI_PLATFORM_LINUX_WAYLAND ON)
     set(LAMBDAUI_PLATFORM "LINUX_WAYLAND" CACHE STRING
-      "LambdaUI backend: AUTO, MACOS, LINUX_WAYLAND." FORCE)
+      "LambdaUI platform: AUTO, MACOS, LINUX_WAYLAND." FORCE)
   else()
-    message(FATAL_ERROR "LambdaUI: no default backend for this host.")
+    message(FATAL_ERROR "LambdaUI: no default platform for this host.")
   endif()
 elseif(LAMBDAUI_PLATFORM STREQUAL "MACOS")
   if(NOT APPLE)

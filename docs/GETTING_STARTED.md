@@ -71,28 +71,25 @@ cmake -S . -B build-linux-webgpu -DLAMBDAUI_PLATFORM=LINUX_WAYLAND -DLAMBDAUI_DA
 
 `AUTO` selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
 
-The renderer switch is `LAMBDAUI_RENDERER`:
+Rendering always uses Dawn/WebGPU. Configure Dawn with an installed package, a source checkout, or FetchContent:
 
 ```sh
-cmake -S . -B build -DLAMBDAUI_RENDERER=AUTO
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=AUTO -DCMAKE_PREFIX_PATH=/path/to/dawn/install
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
+cmake -S . -B build-webgpu -DCMAKE_PREFIX_PATH=/path/to/dawn/install
+cmake -S . -B build-webgpu -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
+cmake -S . -B build-webgpu -DLAMBDAUI_DAWN_FETCH=ON
 ```
 
-`AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`. If Dawn is not available, configure fails with Dawn setup guidance. WebGPU builds define `LAMBDAUI_WEBGPU=1`.
+Dawn can be discovered through `CMAKE_PREFIX_PATH`, supplied through `LAMBDAUI_DAWN_SOURCE_DIR`, or fetched with `LAMBDAUI_DAWN_FETCH=ON`. If Dawn is not available, configure fails with Dawn setup guidance. Builds define `LAMBDAUI_WEBGPU=1`.
 
 Renderer defines exported to consumers:
 
-- `LAMBDAUI_WEBGPU=1` on supported renderer builds.
+- `LAMBDAUI_WEBGPU=1` on all LambdaUI builds.
 
 Use this define to guard WebGPU-specific APIs. WebGPU builds expose borrowed Dawn handles through `webGpuCanvasHandles(canvas)` for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
 
 ## Useful Build Options
 
 - `LAMBDAUI_BUILD_DEMOS`: build standalone demos under `demos/`.
-- `LAMBDAUI_RENDERER`: select `AUTO` or `WEBGPU`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` when an installed package or source checkout is not provided.
 - `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.

@@ -122,9 +122,7 @@ add_library(lambdaui SHARED
 )
 add_library(lambdaui::lambdaui ALIAS lambdaui)
 
-if(LAMBDAUI_RENDERER_WEBGPU)
-  include(${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaDawn.cmake)
-endif()
+include(${LAMBDAUI_FRAMEWORK_CMAKE_DIR}/LambdaDawn.cmake)
 
 set_target_properties(lambdaui PROPERTIES
   VERSION ${PROJECT_VERSION}
@@ -138,7 +136,7 @@ add_custom_target(lambdaui_module_dependency_check
   VERBATIM
 )
 
-if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
+if(LAMBDAUI_PLATFORM_MACOS)
   target_sources(lambdaui PRIVATE
     UI/Application.mm
     Graphics/CoreTextSystem.mm
@@ -189,17 +187,13 @@ elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   target_sources(lambdaui PRIVATE
     UI/Application.cpp
     Graphics/Linux/FreeTypeTextSystem.cpp
+    Graphics/WebGPU/WebGpuContext.cpp
+    Graphics/WebGPU/WebGpuCanvas.cpp
+    Graphics/WebGPU/WebGpuRenderTarget.cpp
     Platform/Linux/Common/XkbState.cpp
     Platform/Linux/WaylandApplication.cpp
     Platform/Linux/WaylandWindow.cpp
   )
-  if(LAMBDAUI_RENDERER_WEBGPU)
-    target_sources(lambdaui PRIVATE
-      Graphics/WebGPU/WebGpuContext.cpp
-      Graphics/WebGPU/WebGpuCanvas.cpp
-      Graphics/WebGPU/WebGpuRenderTarget.cpp
-    )
-  endif()
   target_link_libraries(lambdaui PRIVATE lambda_wayland_client_protocols)
 endif()
 
@@ -241,7 +235,7 @@ if(LAMBDAUI_ENABLE_PARAGRAPH_CACHE_PARALLEL_ASSERT)
   target_compile_definitions(lambdaui PRIVATE LAMBDAUI_PARAGRAPH_CACHE_PARALLEL_ASSERT=1)
 endif()
 
-if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_WEBGPU)
+if(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
   target_compile_definitions(lambdaui PUBLIC LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_LINUX_WAYLAND=1)
   target_include_directories(lambdaui PRIVATE ${LAMBDA_WAYLAND_PROTOCOL_DIR})
   target_link_libraries(lambdaui PUBLIC dawn::webgpu_dawn PRIVATE
@@ -254,7 +248,7 @@ if(LAMBDAUI_PLATFORM_LINUX_WAYLAND AND LAMBDAUI_RENDERER_WEBGPU)
     PkgConfig::LIBRSVG
     PkgConfig::ZLIB
     ${CMAKE_DL_LIBS})
-elseif(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
+elseif(LAMBDAUI_PLATFORM_MACOS)
   target_compile_definitions(lambdaui PUBLIC LAMBDAUI_WEBGPU=1 PRIVATE LAMBDAUI_PLATFORM_MACOS=1)
   target_link_libraries(lambdaui PUBLIC dawn::webgpu_dawn PRIVATE
     "-framework Cocoa"

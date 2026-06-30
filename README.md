@@ -36,19 +36,18 @@ Run a demo:
 ./build/demos/hello-world
 ```
 
-Choose a backend explicitly when needed:
+Choose a platform or Dawn source explicitly when needed:
 
 ```sh
 cmake -S . -B build-macos-webgpu -DLAMBDAUI_PLATFORM=MACOS -DLAMBDAUI_DAWN_FETCH=ON
 cmake -S . -B build-linux-webgpu -DLAMBDAUI_PLATFORM=LINUX_WAYLAND -DLAMBDAUI_DAWN_FETCH=ON
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=AUTO -DCMAKE_PREFIX_PATH=/path/to/dawn/install
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DCMAKE_PREFIX_PATH=/path/to/dawn/install
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
-cmake -S . -B build-webgpu -DLAMBDAUI_RENDERER=WEBGPU -DLAMBDAUI_DAWN_FETCH=ON
+cmake -S . -B build-webgpu -DCMAKE_PREFIX_PATH=/path/to/dawn/install
+cmake -S . -B build-webgpu -DLAMBDAUI_DAWN_SOURCE_DIR=/path/to/dawn
+cmake -S . -B build-webgpu -DLAMBDAUI_DAWN_FETCH=ON
 ```
 
 `LAMBDAUI_PLATFORM=AUTO` is the default. It selects `MACOS` on Apple hosts and `LINUX_WAYLAND` on Linux/Unix hosts.
-`LAMBDAUI_RENDERER=AUTO` is the default. It selects `WEBGPU` when Dawn is explicitly configured or discoverable through `CMAKE_PREFIX_PATH`; otherwise configure fails with Dawn setup guidance.
+Rendering always uses Dawn/WebGPU. Configure Dawn through `CMAKE_PREFIX_PATH`, `LAMBDAUI_DAWN_SOURCE_DIR`, or `LAMBDAUI_DAWN_FETCH=ON`; otherwise configure fails with Dawn setup guidance.
 
 ## Minimal App
 
@@ -114,7 +113,6 @@ docs/                 Project documentation
 ## Important CMake Options
 
 - `LAMBDAUI_PLATFORM`: `AUTO`, `MACOS`, or `LINUX_WAYLAND`.
-- `LAMBDAUI_RENDERER`: `AUTO` or `WEBGPU`.
 - `LAMBDAUI_DAWN_SOURCE_DIR`: optional Dawn source checkout for WebGPU builds.
 - `LAMBDAUI_DAWN_FETCH`: fetch Dawn with CMake `FetchContent` for WebGPU builds.
 - `LAMBDAUI_DAWN_GIT_REPOSITORY`: Dawn repository used by `LAMBDAUI_DAWN_FETCH`.
@@ -127,8 +125,8 @@ docs/                 Project documentation
 - `LAMBDAUI_PROFILE_REACTIVE`: compile reactive profiling counters.
 - `LAMBDAUI_ENABLE_DEFAULT_EVENT_LOGGING`: log built-in application event handlers.
 
-The CMake target exports `LAMBDAUI_WEBGPU=1` for supported renderer builds.
-For WebGPU builds, `webGpuCanvasHandles(canvas)` returns borrowed Dawn handles, and `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
+The CMake target exports `LAMBDAUI_WEBGPU=1`.
+`webGpuCanvasHandles(canvas)` returns borrowed Dawn handles, and `WebGpuRenderTargetSpec` can render into an internal target or a caller-owned `WGPUTextureView`.
 
 The build uses CMake `FetchContent` for `libtess2`, and for `doctest` when tests are enabled.
 
