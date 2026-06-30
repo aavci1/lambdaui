@@ -152,6 +152,10 @@ public:
   /// Borrowed WebGPU device handle for image/resource creation.
   /// Use with `loadImage(path, canvas.webGpuDevice())` when WebGPU-backed resources need a device.
   virtual WGPUDevice webGpuDevice() const = 0;
+  /// Borrowed WebGPU queue handle for the canvas device.
+  virtual WGPUQueue webGpuQueue() const = 0;
+  /// Current WebGPU render target format for pipeline/resource compatibility.
+  virtual WGPUTextureFormat webGpuRenderTargetFormat() const = 0;
 
   virtual bool requestNextFrameCapture() = 0;
   virtual bool takeCapturedFrame(std::vector<std::uint8_t>& out, std::uint32_t& width,

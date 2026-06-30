@@ -1139,10 +1139,6 @@ public:
     }
   }
 
-  WGPUDevice deviceHandle() const noexcept { return context_.device(); }
-  WGPUQueue queueHandle() const noexcept { return context_.queue(); }
-  WGPUTextureFormat renderTargetFormat() const noexcept { return surfaceFormat_; }
-
   void resize(int width, int height) override {
     width = std::max(1, width);
     height = std::max(1, height);
@@ -1524,6 +1520,8 @@ public:
   }
 
   WGPUDevice webGpuDevice() const override { return context_.device(); }
+  WGPUQueue webGpuQueue() const override { return context_.queue(); }
+  WGPUTextureFormat webGpuRenderTargetFormat() const override { return surfaceFormat_; }
 
   TextSystem& textSystem() noexcept { return textSystem_; }
 
@@ -3567,14 +3565,10 @@ std::unique_ptr<Canvas> createWebGpuExternalRenderTargetCanvas(TextSystem& textS
 }
 
 WebGpuCanvasHandles canvasHandles(Canvas const& canvas) noexcept {
-  auto const* webgpuCanvas = dynamic_cast<WebGpuCanvas const*>(&canvas);
-  if (!webgpuCanvas) {
-    return {};
-  }
   return WebGpuCanvasHandles{
-      .device = webgpuCanvas->deviceHandle(),
-      .queue = webgpuCanvas->queueHandle(),
-      .renderTargetFormat = webgpuCanvas->renderTargetFormat(),
+      .device = canvas.webGpuDevice(),
+      .queue = canvas.webGpuQueue(),
+      .renderTargetFormat = canvas.webGpuRenderTargetFormat(),
   };
 }
 
@@ -3645,15 +3639,15 @@ WebGpuCanvasHandles webGpuCanvasHandles(Canvas const& canvas) noexcept {
 }
 
 WGPUDevice webGpuDevice(Canvas const& canvas) noexcept {
-  return webGpuCanvasHandles(canvas).device;
+  return canvas.webGpuDevice();
 }
 
 WGPUQueue webGpuQueue(Canvas const& canvas) noexcept {
-  return webGpuCanvasHandles(canvas).queue;
+  return canvas.webGpuQueue();
 }
 
 WGPUTextureFormat webGpuRenderTargetFormat(Canvas const& canvas) noexcept {
-  return webGpuCanvasHandles(canvas).renderTargetFormat;
+  return canvas.webGpuRenderTargetFormat();
 }
 
 std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width,

@@ -334,6 +334,8 @@ class DpiOnlyCanvas final : public Canvas {
     void drawImageTiled(Image const&, Rect const&, CornerRadius const&, float) override {}
     void drawBackdropBlur(Rect const&, float, Color, CornerRadius const&) override {}
     WGPUDevice webGpuDevice() const override { return nullptr; }
+    WGPUQueue webGpuQueue() const override { return nullptr; }
+    WGPUTextureFormat webGpuRenderTargetFormat() const override { return WGPUTextureFormat_Undefined; }
     bool requestNextFrameCapture() override { return false; }
     bool takeCapturedFrame(std::vector<std::uint8_t>&, std::uint32_t&, std::uint32_t&) override { return false; }
     std::unique_ptr<RecordedOps> beginRecordedOpsCapture() override { return nullptr; }
