@@ -33,11 +33,11 @@
 #include <vector>
 
 namespace lambdaui {
-class MacMetalWindow;
+class MacWebGpuWindow;
 class MacPopoverSurface;
 class Window;
-::lambdaui::Window* lambdaWindowForPlatform(MacMetalWindow* platform);
-CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
+::lambdaui::Window* lambdaWindowForPlatform(MacWebGpuWindow* platform);
+CVReturn lambdaHandleDisplayLinkTick(MacWebGpuWindow* platform);
 } // namespace lambdaui
 
 /// Private AppKit class methods; stable in practice for diagonal window-resize cursors.
@@ -46,9 +46,9 @@ CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
 + (NSCursor*)_windowResizeNorthWestSouthEastCursor;
 @end
 
-@interface LambdaMetalView : NSView <NSTextInputClient>
-@property(nonatomic, assign) lambdaui::MacMetalWindow* lambdaPlatform;
-- (CAMetalLayer*)lambdaMetalLayer;
+@interface LambdaWebGpuView : NSView <NSTextInputClient>
+@property(nonatomic, assign) lambdaui::MacWebGpuWindow* lambdaPlatform;
+- (CAMetalLayer*)lambdaWebGpuLayer;
 - (void)updateDrawableSize;
 - (BOOL)lambdaWantsTextInput;
 - (void)lambdaHandleDisplayLink:(id)displayLink;
@@ -65,45 +65,45 @@ CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform);
 
 @interface LambdaPopoverView : NSView <NSTextInputClient>
 @property(nonatomic, assign) lambdaui::MacPopoverSurface* surface;
-- (CAMetalLayer*)lambdaMetalLayer;
+- (CAMetalLayer*)lambdaWebGpuLayer;
 - (void)updateDrawableSize;
 @end
 
 @interface LambdaPopoverDelegate : NSObject <NSPopoverDelegate>
-@property(nonatomic, assign) lambdaui::MacMetalWindow* platform;
+@property(nonatomic, assign) lambdaui::MacWebGpuWindow* platform;
 @property(nonatomic, assign) std::uint64_t popoverId;
 @end
 
 namespace lambdaui {
 namespace detail {
-void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {});
-void postTextInput(LambdaMetalView* view, std::string text);
+void postInputFromView(LambdaWebGpuView* view, InputEvent::Kind kind, NSEvent* e, std::string text = {});
+void postTextInput(LambdaWebGpuView* view, std::string text);
 } // namespace detail
 } // namespace lambdaui
 
-@implementation LambdaMetalView
+@implementation LambdaWebGpuView
 
 /// NSView may use `NSViewBackingLayer` unless we supply the CAMetalLayer Dawn expects.
 - (CALayer*)makeBackingLayer {
-  CAMetalLayer* metalLayer = [CAMetalLayer layer];
-  metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
-  metalLayer.contentsGravity = kCAGravityTopLeft;
-  metalLayer.opaque = NO;
-  metalLayer.backgroundColor = [[NSColor clearColor] CGColor];
+  CAMetalLayer* renderLayer = [CAMetalLayer layer];
+  renderLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+  renderLayer.contentsGravity = kCAGravityTopLeft;
+  renderLayer.opaque = NO;
+  renderLayer.backgroundColor = [[NSColor clearColor] CGColor];
   // Keep enough drawables available to avoid main-thread stalls on nextDrawable during live resize.
-  metalLayer.maximumDrawableCount = 3;
-  metalLayer.allowsNextDrawableTimeout = YES;
+  renderLayer.maximumDrawableCount = 3;
+  renderLayer.allowsNextDrawableTimeout = YES;
   if (@available(macOS 10.13, *)) {
     // Keep CAMetalLayer presentation display-synced; Lambda's frame scheduler controls when frames are encoded.
-    metalLayer.displaySyncEnabled = YES;
+    renderLayer.displaySyncEnabled = YES;
   }
 
   // `presentsWithTransaction` is toggled only around resize-driven flush (see windowDidResize). Leaving it
   // always YES can defer the first composite until a later CA transaction and cause an intermittent blank window.
-  metalLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
-  metalLayer.needsDisplayOnBoundsChange = YES;
+  renderLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+  renderLayer.needsDisplayOnBoundsChange = YES;
 
-  return metalLayer;
+  return renderLayer;
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect {
@@ -125,7 +125,7 @@ void postTextInput(LambdaMetalView* view, std::string text);
   // Intentionally empty.
 }
 
-- (CAMetalLayer*)lambdaMetalLayer {
+- (CAMetalLayer*)lambdaWebGpuLayer {
   CALayer* layer = self.layer;
   if ([layer isKindOfClass:[CAMetalLayer class]]) {
     return static_cast<CAMetalLayer*>(layer);
@@ -148,9 +148,9 @@ void postTextInput(LambdaMetalView* view, std::string text);
 
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
-  if (metalLayer && self.window) {
-    metalLayer.contentsScale = self.window.backingScaleFactor;
+  CAMetalLayer* renderLayer = [self lambdaWebGpuLayer];
+  if (renderLayer && self.window) {
+    renderLayer.contentsScale = self.window.backingScaleFactor;
   }
   [self updateDrawableSize];
   [self updateTrackingAreas];
@@ -158,16 +158,16 @@ void postTextInput(LambdaMetalView* view, std::string text);
 
 - (void)viewDidChangeBackingProperties {
   [super viewDidChangeBackingProperties];
-  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
-  if (metalLayer && self.window) {
-    metalLayer.contentsScale = self.window.backingScaleFactor;
+  CAMetalLayer* renderLayer = [self lambdaWebGpuLayer];
+  if (renderLayer && self.window) {
+    renderLayer.contentsScale = self.window.backingScaleFactor;
   }
   [self updateDrawableSize];
 }
 
 - (void)updateDrawableSize {
-  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
-  if (!metalLayer) {
+  CAMetalLayer* renderLayer = [self lambdaWebGpuLayer];
+  if (!renderLayer) {
     return;
   }
   CGFloat scale = [self lambdaBackingScale];
@@ -176,8 +176,8 @@ void postTextInput(LambdaMetalView* view, std::string text);
   CGFloat h = (std::max)(bounds.height * scale, static_cast<CGFloat>(1.0));
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
-  metalLayer.contentsGravity = kCAGravityTopLeft;
-  metalLayer.drawableSize = CGSizeMake(w, h);
+  renderLayer.contentsGravity = kCAGravityTopLeft;
+  renderLayer.drawableSize = CGSizeMake(w, h);
   [CATransaction commit];
 }
 
@@ -278,7 +278,7 @@ void postTextInput(LambdaMetalView* view, std::string text);
 }
 
 - (BOOL)lambdaWantsTextInput {
-  lambdaui::MacMetalWindow* platform = self.lambdaPlatform;
+  lambdaui::MacWebGpuWindow* platform = self.lambdaPlatform;
   lambdaui::Window* window = lambdaui::lambdaWindowForPlatform(platform);
   return window && window->wantsTextInput();
 }
@@ -292,7 +292,7 @@ void postTextInput(LambdaMetalView* view, std::string text);
 
 - (void)lambdaHandleDisplayLink:(id)displayLink {
   (void)displayLink;
-  lambdaui::MacMetalWindow* platform = self.lambdaPlatform;
+  lambdaui::MacWebGpuWindow* platform = self.lambdaPlatform;
   if (!platform) {
     return;
   }
@@ -332,7 +332,7 @@ void postTextInput(LambdaMetalView* view, std::string text);
 @end
 
 @interface LambdaWindowDelegate : NSObject <NSWindowDelegate>
-@property (nonatomic, assign) lambdaui::MacMetalWindow* platform;
+@property (nonatomic, assign) lambdaui::MacWebGpuWindow* platform;
 @end
 
 namespace lambdaui {
@@ -399,10 +399,10 @@ std::int64_t nowSteadyClockNanos() {
 
 } // namespace
 
-class MacMetalWindow : public platform::Window, public platform::WindowEventPump {
+class MacWebGpuWindow : public platform::Window, public platform::WindowEventPump {
 public:
-  explicit MacMetalWindow(const WindowConfig& config);
-  ~MacMetalWindow() override;
+  explicit MacWebGpuWindow(const WindowConfig& config);
+  ~MacWebGpuWindow() override;
 
   void setLambdaWindow(::lambdaui::Window* window) override;
   void show() override;
@@ -448,7 +448,7 @@ public:
   void handlePopoverClosed(PopoverSurfaceId id);
 
   /// Enables CAMetalLayer transaction presentation only for resize flushes.
-  void setMetalLayerPresentsWithTransaction(bool enable);
+  void setRenderLayerPresentsWithTransaction(bool enable);
   void positionNativeWindowControls();
 
 private:
@@ -462,14 +462,14 @@ private:
 
 class MacPopoverSurface {
 public:
-  MacPopoverSurface(MacMetalWindow* owner, PopoverSurfaceId id, Popover popover);
+  MacPopoverSurface(MacWebGpuWindow* owner, PopoverSurfaceId id, Popover popover);
   ~MacPopoverSurface();
 
   MacPopoverSurface(MacPopoverSurface const&) = delete;
   MacPopoverSurface& operator=(MacPopoverSurface const&) = delete;
 
   PopoverSurfaceId id() const noexcept { return id_; }
-  bool show(LambdaMetalView* parentView, Rect anchor);
+  bool show(LambdaWebGpuView* parentView, Rect anchor);
   void reposition(Popover const& popover, Rect anchor);
   void close();
   void notifyNativeClosed();
@@ -491,7 +491,7 @@ private:
     explicit EventScope(MacPopoverSurface& surface) : surface(surface) { ++surface.dispatchDepth_; }
     ~EventScope() {
       if (--surface.dispatchDepth_ == 0 && surface.closeAfterEvent_ && surface.owner_) {
-        MacMetalWindow* owner = surface.owner_;
+        MacWebGpuWindow* owner = surface.owner_;
         PopoverSurfaceId const id = surface.id_;
         owner->dismissPopover(id);
       }
@@ -502,10 +502,10 @@ private:
   Point pointForEvent(NSEvent* event) const;
   NSRectEdge preferredEdge() const;
 
-  MacMetalWindow* owner_ = nullptr;
+  MacWebGpuWindow* owner_ = nullptr;
   PopoverSurfaceId id_{};
   Popover popover_{};
-  LambdaMetalView* parentView_ = nil;
+  LambdaWebGpuView* parentView_ = nil;
   NSPopover* nativePopover_ = nil;
   NSViewController* controller_ = nil;
   LambdaPopoverView* view_ = nil;
@@ -521,18 +521,18 @@ private:
 CVReturn displayLinkOutputCallback(CVDisplayLinkRef /*displayLink*/, CVTimeStamp const* /*now*/,
                                    CVTimeStamp const* /*outputTime*/, CVOptionFlags /*flagsIn*/,
                                    CVOptionFlags* /*flagsOut*/, void* userInfo) {
-  auto* platform = static_cast<MacMetalWindow*>(userInfo);
+  auto* platform = static_cast<MacWebGpuWindow*>(userInfo);
   if (!platform) {
     return kCVReturnSuccess;
   }
   return platform->onDisplayLinkTick();
 }
 
-struct MacMetalWindow::Impl {
+struct MacWebGpuWindow::Impl {
   NSWindow* window_{nil};
   NSVisualEffectView* materialView_{nil};
   NSView* tintView_{nil};
-  LambdaMetalView* metalView_{nil};
+  LambdaWebGpuView* webGpuView_{nil};
   LambdaWindowDelegate* delegate_{nil};
   ::lambdaui::Window* lambdaWindow_{nullptr};
   unsigned int handle_{0};
@@ -587,8 +587,8 @@ bool lambdaDebugInputMacPost() {
   return debug::inputEnabled();
 }
 
-void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e, std::string text) {
-  MacMetalWindow* p = view.lambdaPlatform;
+void postInputFromView(LambdaWebGpuView* view, InputEvent::Kind kind, NSEvent* e, std::string text) {
+  MacWebGpuWindow* p = view.lambdaPlatform;
   if (!p || !p->lambdaWindow()) {
     if (lambdaDebugInputMacPost()) {
       std::fprintf(stderr, "[lambda:input:mac] postInputFromView: no platform/window (dropped)\n");
@@ -672,8 +672,8 @@ void postInputFromView(LambdaMetalView* view, InputEvent::Kind kind, NSEvent* e,
   Application::instance().eventQueue().post(ie);
 }
 
-void postTextInput(LambdaMetalView* view, std::string text) {
-  MacMetalWindow* p = view.lambdaPlatform;
+void postTextInput(LambdaWebGpuView* view, std::string text) {
+  MacWebGpuWindow* p = view.lambdaPlatform;
   if (!p || !p->lambdaWindow()) {
     return;
   }
@@ -696,7 +696,7 @@ NSRect nsRect(Rect rect) {
                     static_cast<CGFloat>(std::max(1.f, rect.height)));
 }
 
-Size popoverMaxSize(MacMetalWindow* owner, Popover const& popover) {
+Size popoverMaxSize(MacWebGpuWindow* owner, Popover const& popover) {
   if (popover.maxSize) {
     return Size{std::max(1.f, popover.maxSize->width), std::max(1.f, popover.maxSize->height)};
   }
@@ -706,7 +706,7 @@ Size popoverMaxSize(MacMetalWindow* owner, Popover const& popover) {
 
 } // namespace
 
-MacPopoverSurface::MacPopoverSurface(MacMetalWindow* owner, PopoverSurfaceId id, Popover popover)
+MacPopoverSurface::MacPopoverSurface(MacWebGpuWindow* owner, PopoverSurfaceId id, Popover popover)
     : owner_(owner), id_(id), popover_(std::move(popover)) {
   ::lambdaui::Window* window = owner_ ? owner_->lambdaWindow() : nullptr;
   EnvironmentBinding environment = window ? window->environmentBinding() : EnvironmentBinding{};
@@ -740,7 +740,7 @@ MacPopoverSurface::~MacPopoverSurface() {
   host_.reset();
 }
 
-bool MacPopoverSurface::show(LambdaMetalView* parentView, Rect anchor) {
+bool MacPopoverSurface::show(LambdaWebGpuView* parentView, Rect anchor) {
   if (!owner_ || !owner_->lambdaWindow() || !parentView || !host_) {
     return false;
   }
@@ -766,7 +766,7 @@ bool MacPopoverSurface::show(LambdaMetalView* parentView, Rect anchor) {
   controller_.view = view_;
   nativePopover_.contentViewController = controller_;
 
-  CAMetalLayer* layer = [view_ lambdaMetalLayer];
+  CAMetalLayer* layer = [view_ lambdaWebGpuLayer];
   if (!layer) {
     return false;
   }
@@ -947,18 +947,18 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 @implementation LambdaPopoverView
 
 - (CALayer*)makeBackingLayer {
-  CAMetalLayer* metalLayer = [CAMetalLayer layer];
-  metalLayer.opaque = NO;
-  metalLayer.backgroundColor = [[NSColor clearColor] CGColor];
-  metalLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
-  metalLayer.maximumDrawableCount = 3;
-  metalLayer.allowsNextDrawableTimeout = YES;
+  CAMetalLayer* renderLayer = [CAMetalLayer layer];
+  renderLayer.opaque = NO;
+  renderLayer.backgroundColor = [[NSColor clearColor] CGColor];
+  renderLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
+  renderLayer.maximumDrawableCount = 3;
+  renderLayer.allowsNextDrawableTimeout = YES;
   if (@available(macOS 10.13, *)) {
-    metalLayer.displaySyncEnabled = YES;
+    renderLayer.displaySyncEnabled = YES;
   }
-  metalLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
-  metalLayer.needsDisplayOnBoundsChange = YES;
-  return metalLayer;
+  renderLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+  renderLayer.needsDisplayOnBoundsChange = YES;
+  return renderLayer;
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect {
@@ -973,7 +973,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   return self;
 }
 
-- (CAMetalLayer*)lambdaMetalLayer {
+- (CAMetalLayer*)lambdaWebGpuLayer {
   CALayer* layer = self.layer;
   if ([layer isKindOfClass:[CAMetalLayer class]]) {
     return static_cast<CAMetalLayer*>(layer);
@@ -993,9 +993,9 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)viewDidMoveToWindow {
   [super viewDidMoveToWindow];
-  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
-  if (metalLayer && self.window) {
-    metalLayer.contentsScale = self.window.backingScaleFactor;
+  CAMetalLayer* renderLayer = [self lambdaWebGpuLayer];
+  if (renderLayer && self.window) {
+    renderLayer.contentsScale = self.window.backingScaleFactor;
   }
   [self updateDrawableSize];
   [self updateTrackingAreas];
@@ -1003,21 +1003,21 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)viewDidChangeBackingProperties {
   [super viewDidChangeBackingProperties];
-  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
-  if (metalLayer && self.window) {
-    metalLayer.contentsScale = self.window.backingScaleFactor;
+  CAMetalLayer* renderLayer = [self lambdaWebGpuLayer];
+  if (renderLayer && self.window) {
+    renderLayer.contentsScale = self.window.backingScaleFactor;
   }
   [self updateDrawableSize];
 }
 
 - (void)updateDrawableSize {
-  CAMetalLayer* metalLayer = [self lambdaMetalLayer];
-  if (!metalLayer) {
+  CAMetalLayer* renderLayer = [self lambdaWebGpuLayer];
+  if (!renderLayer) {
     return;
   }
   CGFloat const scale = [self lambdaBackingScale];
   CGSize const bounds = self.bounds.size;
-  metalLayer.drawableSize = CGSizeMake((std::max)(bounds.width * scale, static_cast<CGFloat>(1.0)),
+  renderLayer.drawableSize = CGSizeMake((std::max)(bounds.width * scale, static_cast<CGFloat>(1.0)),
                                        (std::max)(bounds.height * scale, static_cast<CGFloat>(1.0)));
 }
 
@@ -1164,7 +1164,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)popoverDidClose:(NSNotification*)notification {
   (void)notification;
-  lambdaui::MacMetalWindow* platform = self.platform;
+  lambdaui::MacWebGpuWindow* platform = self.platform;
   if (platform) {
     platform->handlePopoverClosed(lambdaui::PopoverSurfaceId{self.popoverId});
   }
@@ -1176,7 +1176,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)windowWillClose:(NSNotification*)notification {
   (void)notification;
-  lambdaui::MacMetalWindow* platform = self.platform;
+  lambdaui::MacWebGpuWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -1196,7 +1196,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
-  lambdaui::MacMetalWindow* platform = self.platform;
+  lambdaui::MacWebGpuWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -1216,14 +1216,14 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
   lambdaui::Application::instance().requestRedraw();
   fw->canvas().resize(static_cast<int>(std::lround(currentSize.width)),
                       static_cast<int>(std::lround(currentSize.height)));
-  platform->setMetalLayerPresentsWithTransaction(true);
+  platform->setRenderLayerPresentsWithTransaction(true);
   lambdaui::Application::instance().flushRedraw();
-  platform->setMetalLayerPresentsWithTransaction(false);
+  platform->setRenderLayerPresentsWithTransaction(false);
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
   (void)notification;
-  lambdaui::MacMetalWindow* platform = self.platform;
+  lambdaui::MacWebGpuWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -1238,7 +1238,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)windowDidResignKey:(NSNotification*)notification {
   (void)notification;
-  lambdaui::MacMetalWindow* platform = self.platform;
+  lambdaui::MacWebGpuWindow* platform = self.platform;
   if (!platform) {
     return;
   }
@@ -1252,7 +1252,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification {
   NSWindow* win = static_cast<NSWindow*>(notification.object);
-  lambdaui::MacMetalWindow* platform = self.platform;
+  lambdaui::MacWebGpuWindow* platform = self.platform;
   if (!platform || !platform->lambdaWindow()) {
     return;
   }
@@ -1264,7 +1264,7 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 @end
 
-@implementation LambdaMetalView (LambdaInput)
+@implementation LambdaWebGpuView (LambdaInput)
 
 - (void)mouseDown:(NSEvent*)event {
   lambdaui::detail::postInputFromView(self, lambdaui::InputEvent::Kind::PointerDown, event);
@@ -1314,18 +1314,18 @@ NSRectEdge MacPopoverSurface::preferredEdge() const {
 
 namespace lambdaui {
 
-::lambdaui::Window* lambdaWindowForPlatform(MacMetalWindow* platform) {
+::lambdaui::Window* lambdaWindowForPlatform(MacWebGpuWindow* platform) {
   return platform ? platform->lambdaWindow() : nullptr;
 }
 
-CVReturn lambdaHandleDisplayLinkTick(MacMetalWindow* platform) {
+CVReturn lambdaHandleDisplayLinkTick(MacWebGpuWindow* platform) {
   if (!platform) {
     return kCVReturnSuccess;
   }
   return platform->onDisplayLinkTick();
 }
 
-::lambdaui::Window* MacMetalWindow::lambdaWindow() const {
+::lambdaui::Window* MacWebGpuWindow::lambdaWindow() const {
   return d ? d->lambdaWindow_ : nullptr;
 }
 
@@ -1349,7 +1349,7 @@ void setStandardWindowButtonsHidden(NSWindow* window, BOOL hidden) {
 
 } // namespace
 
-void MacMetalWindow::applyTitlebarMode() {
+void MacWebGpuWindow::applyTitlebarMode() {
   if (!d || !d->window_) {
     return;
   }
@@ -1375,13 +1375,13 @@ void MacMetalWindow::applyTitlebarMode() {
   positionNativeWindowControls();
 }
 
-void MacMetalWindow::positionNativeWindowControls() {
-  if (!d || !d->window_ || !d->metalView_ ||
+void MacWebGpuWindow::positionNativeWindowControls() {
+  if (!d || !d->window_ || !d->webGpuView_ ||
       d->titlebarMode_ != WindowTitlebarMode::Integrated) {
     return;
   }
 
-  NSView* contentView = d->metalView_;
+  NSView* contentView = d->webGpuView_;
   NSWindowButton const buttons[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
   for (NSWindowButton buttonType : buttons) {
     NSButton* button = [d->window_ standardWindowButton:buttonType];
@@ -1402,8 +1402,8 @@ void MacMetalWindow::positionNativeWindowControls() {
   }
 }
 
-void MacMetalWindow::applyBackground() {
-  if (!d || !d->window_ || !d->metalView_) {
+void MacWebGpuWindow::applyBackground() {
+  if (!d || !d->window_ || !d->webGpuView_) {
     return;
   }
 
@@ -1416,12 +1416,12 @@ void MacMetalWindow::applyBackground() {
 
     if (!d->materialView_) {
       NSView* currentContent = [d->window_ contentView];
-      NSRect bounds = currentContent ? [currentContent bounds] : [d->metalView_ bounds];
+      NSRect bounds = currentContent ? [currentContent bounds] : [d->webGpuView_ bounds];
       d->materialView_ = [[NSVisualEffectView alloc] initWithFrame:bounds];
       d->materialView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-      [d->metalView_ removeFromSuperview];
+      [d->webGpuView_ removeFromSuperview];
       [d->window_ setContentView:d->materialView_];
-      d->metalView_.frame = d->materialView_.bounds;
+      d->webGpuView_.frame = d->materialView_.bounds;
     }
 
     d->materialView_.blendingMode = NSVisualEffectBlendingModeBehindWindow;
@@ -1444,9 +1444,9 @@ void MacMetalWindow::applyBackground() {
                                    green:std::clamp(tint.g, 0.f, 1.f)
                                     blue:std::clamp(tint.b, 0.f, 1.f)
                                    alpha:std::clamp(tint.a, 0.f, 1.f)] CGColor];
-    [d->metalView_ removeFromSuperview];
-    d->metalView_.frame = d->materialView_.bounds;
-    [d->materialView_ addSubview:d->metalView_
+    [d->webGpuView_ removeFromSuperview];
+    d->webGpuView_.frame = d->materialView_.bounds;
+    [d->materialView_ addSubview:d->webGpuView_
                        positioned:NSWindowAbove
                        relativeTo:d->tintView_];
   } else {
@@ -1455,10 +1455,10 @@ void MacMetalWindow::applyBackground() {
       d->tintView_ = nil;
     }
     if (d->materialView_) {
-      [d->metalView_ removeFromSuperview];
+      [d->webGpuView_ removeFromSuperview];
       NSRect bounds = d->materialView_.bounds;
-      d->metalView_.frame = bounds;
-      [d->window_ setContentView:d->metalView_];
+      d->webGpuView_.frame = bounds;
+      [d->window_ setContentView:d->webGpuView_];
       d->materialView_ = nil;
     }
     [d->window_ setOpaque:d->background_.kind != WindowBackgroundKind::Transparent];
@@ -1469,11 +1469,11 @@ void MacMetalWindow::applyBackground() {
   positionNativeWindowControls();
 }
 
-MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
+MacWebGpuWindow::MacWebGpuWindow(const WindowConfig& config) : d(std::make_unique<Impl>()) {
   d->handle_ = gNextHandle.fetch_add(1, std::memory_order_relaxed);
   d->lambdaWindow_ = nullptr;
   d->window_ = nil;
-  d->metalView_ = nil;
+  d->webGpuView_ = nil;
   d->materialView_ = nil;
   d->delegate_ = nil;
   d->titlebarMode_ = config.titlebar;
@@ -1514,10 +1514,10 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   // Avoid scaling a stale snapshot during live resize; WebGPU content must update each frame.
   d->window_.preservesContentDuringLiveResize = NO;
 
-  d->metalView_ = [[LambdaMetalView alloc] initWithFrame:[[d->window_ contentView] bounds]];
-  d->metalView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  d->metalView_.lambdaPlatform = this;
-  [d->window_ setContentView:d->metalView_];
+  d->webGpuView_ = [[LambdaWebGpuView alloc] initWithFrame:[[d->window_ contentView] bounds]];
+  d->webGpuView_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  d->webGpuView_.lambdaPlatform = this;
+  [d->window_ setContentView:d->webGpuView_];
   applyBackground();
   positionNativeWindowControls();
 
@@ -1538,7 +1538,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
     });
   }
   if (@available(macOS 14.0, *)) {
-    d->displayLink_ = [d->metalView_ displayLinkWithTarget:d->metalView_
+    d->displayLink_ = [d->webGpuView_ displayLinkWithTarget:d->webGpuView_
                                                   selector:@selector(lambdaHandleDisplayLink:)];
     if (d->displayLink_) {
       [d->displayLink_ addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
@@ -1557,7 +1557,7 @@ MacMetalWindow::MacMetalWindow(const WindowConfig& config) : d(std::make_unique<
   // `makeKeyAndOrderFront` is deferred to `show()` so `windowDidBecomeKey` runs after `setLambdaWindow`.
 }
 
-MacMetalWindow::~MacMetalWindow() {
+MacWebGpuWindow::~MacWebGpuWindow() {
   if (d && d->displayLink_) {
     [d->displayLink_ invalidate];
     d->displayLink_ = nil;
@@ -1577,11 +1577,11 @@ MacMetalWindow::~MacMetalWindow() {
     [d->window_ setDelegate:nil];
   }
   if (d) {
-    if (d->metalView_) {
-      d->metalView_.lambdaPlatform = nullptr;
+    if (d->webGpuView_) {
+      d->webGpuView_.lambdaPlatform = nullptr;
     }
     d->delegate_ = nil;
-    d->metalView_ = nil;
+    d->webGpuView_ = nil;
     d->tintView_ = nil;
     d->materialView_ = nil;
     d->window_ = nil;
@@ -1589,20 +1589,20 @@ MacMetalWindow::~MacMetalWindow() {
   d.reset();
 }
 
-void MacMetalWindow::setLambdaWindow(::lambdaui::Window* window) {
+void MacWebGpuWindow::setLambdaWindow(::lambdaui::Window* window) {
   d->lambdaWindow_ = window;
 }
 
-void MacMetalWindow::show() {
-  if (!d->window_ || !d->metalView_) {
+void MacWebGpuWindow::show() {
+  if (!d->window_ || !d->webGpuView_) {
     return;
   }
   positionNativeWindowControls();
   [d->window_ makeKeyAndOrderFront:nil];
-  [d->window_ makeFirstResponder:d->metalView_];
+  [d->window_ makeFirstResponder:d->webGpuView_];
 }
 
-void MacMetalWindow::resize(const Size& newSize) {
+void MacWebGpuWindow::resize(const Size& newSize) {
   if (!d->window_) {
     return;
   }
@@ -1611,7 +1611,7 @@ void MacMetalWindow::resize(const Size& newSize) {
   positionNativeWindowControls();
 }
 
-void MacMetalWindow::setMinSize(Size size) {
+void MacWebGpuWindow::setMinSize(Size size) {
   if (!d->window_) {
     return;
   }
@@ -1619,7 +1619,7 @@ void MacMetalWindow::setMinSize(Size size) {
                                            static_cast<CGFloat>(std::max(0.f, size.height)))];
 }
 
-void MacMetalWindow::setMaxSize(Size size) {
+void MacWebGpuWindow::setMaxSize(Size size) {
   if (!d->window_) {
     return;
   }
@@ -1628,7 +1628,7 @@ void MacMetalWindow::setMaxSize(Size size) {
   [d->window_ setContentMaxSize:NSMakeSize(maxW, maxH)];
 }
 
-void MacMetalWindow::setFullscreen(bool fullscreen) {
+void MacWebGpuWindow::setFullscreen(bool fullscreen) {
   if (!d->window_) {
     return;
   }
@@ -1639,7 +1639,7 @@ void MacMetalWindow::setFullscreen(bool fullscreen) {
   [d->window_ toggleFullScreen:nil];
 }
 
-void MacMetalWindow::setTitle(const std::string& title) {
+void MacWebGpuWindow::setTitle(const std::string& title) {
   if (!d->window_) {
     return;
   }
@@ -1650,7 +1650,7 @@ void MacMetalWindow::setTitle(const std::string& title) {
   [d->window_ setTitle:nsTitle];
 }
 
-void MacMetalWindow::setTitlebarMode(WindowTitlebarMode mode) {
+void MacWebGpuWindow::setTitlebarMode(WindowTitlebarMode mode) {
   if (d->titlebarMode_ == mode) {
     return;
   }
@@ -1658,17 +1658,17 @@ void MacMetalWindow::setTitlebarMode(WindowTitlebarMode mode) {
   applyTitlebarMode();
 }
 
-WindowTitlebarMode MacMetalWindow::titlebarMode() const {
+WindowTitlebarMode MacWebGpuWindow::titlebarMode() const {
   return d ? d->titlebarMode_ : WindowTitlebarMode::System;
 }
 
-void MacMetalWindow::setBackground(WindowBackground const& background) {
+void MacWebGpuWindow::setBackground(WindowBackground const& background) {
   if (!d) return;
   d->background_ = background;
   applyBackground();
 }
 
-WindowChromeMetrics MacMetalWindow::chromeMetrics() const {
+WindowChromeMetrics MacWebGpuWindow::chromeMetrics() const {
   WindowChromeMetrics metrics{};
   if (!d || !d->window_) {
     return metrics;
@@ -1681,11 +1681,11 @@ WindowChromeMetrics MacMetalWindow::chromeMetrics() const {
 
   metrics.titlebarHeight = static_cast<float>(kLambdaTitlebarHeight);
   metrics.systemControlsVisible = d->titlebarMode_ == WindowTitlebarMode::Integrated;
-  if (!metrics.systemControlsVisible || !d->metalView_) {
+  if (!metrics.systemControlsVisible || !d->webGpuView_) {
     return metrics;
   }
 
-  NSView* contentView = d->metalView_;
+  NSView* contentView = d->webGpuView_;
   bool hasRect = false;
   NSRect reserved = NSZeroRect;
   NSWindowButton const buttons[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
@@ -1709,14 +1709,14 @@ WindowChromeMetrics MacMetalWindow::chromeMetrics() const {
   return metrics;
 }
 
-void MacMetalWindow::rememberPointerDownEvent(NSEvent* event) {
+void MacWebGpuWindow::rememberPointerDownEvent(NSEvent* event) {
   if (!d) {
     return;
   }
   d->lastPointerDownEvent_ = event;
 }
 
-void MacMetalWindow::beginWindowDrag(std::uint32_t platformSerial) {
+void MacWebGpuWindow::beginWindowDrag(std::uint32_t platformSerial) {
   (void)platformSerial;
   if (!d || !d->window_ || !d->lastPointerDownEvent_) {
     return;
@@ -1724,14 +1724,14 @@ void MacMetalWindow::beginWindowDrag(std::uint32_t platformSerial) {
   [d->window_ performWindowDragWithEvent:d->lastPointerDownEvent_];
 }
 
-void MacMetalWindow::beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial) {
+void MacWebGpuWindow::beginWindowResize(WindowResizeEdge edge, std::uint32_t platformSerial) {
   (void)edge;
   (void)platformSerial;
 }
 
-bool MacMetalWindow::showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial) {
+bool MacWebGpuWindow::showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t platformSerial) {
   (void)platformSerial;
-  if (!d || !d->metalView_ || menu.items.empty()) {
+  if (!d || !d->webGpuView_ || menu.items.empty()) {
     return false;
   }
 
@@ -1747,25 +1747,25 @@ bool MacMetalWindow::showPopupMenu(PopupMenu menu, Rect anchor, std::uint32_t pl
 
   CGFloat const x = static_cast<CGFloat>(std::max(0.f, anchor.x));
   CGFloat const y = static_cast<CGFloat>(std::max(0.f, anchor.y + anchor.height + 4.f));
-  [nsMenu popUpMenuPositioningItem:nil atLocation:NSMakePoint(x, y) inView:d->metalView_];
+  [nsMenu popUpMenuPositioningItem:nil atLocation:NSMakePoint(x, y) inView:d->webGpuView_];
   return true;
 }
 
-PopoverSurfaceId MacMetalWindow::showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial) {
+PopoverSurfaceId MacWebGpuWindow::showPopover(Popover popover, Rect anchor, std::uint32_t platformSerial) {
   (void)platformSerial;
-  if (!d || !d->metalView_ || !d->lambdaWindow_ || !d->window_ || ![d->window_ isVisible]) {
+  if (!d || !d->webGpuView_ || !d->lambdaWindow_ || !d->window_ || ![d->window_ isVisible]) {
     return kInvalidPopoverSurfaceId;
   }
   PopoverSurfaceId const id{d->nextPopoverId_++};
   auto surface = std::make_unique<MacPopoverSurface>(this, id, std::move(popover));
-  if (!surface->show(d->metalView_, anchor)) {
+  if (!surface->show(d->webGpuView_, anchor)) {
     return kInvalidPopoverSurfaceId;
   }
   d->popovers_.push_back(std::move(surface));
   return id;
 }
 
-void MacMetalWindow::repositionPopover(PopoverSurfaceId id, Popover const& popover, Rect anchor) {
+void MacWebGpuWindow::repositionPopover(PopoverSurfaceId id, Popover const& popover, Rect anchor) {
   if (!d || !id.isValid()) {
     return;
   }
@@ -1778,7 +1778,7 @@ void MacMetalWindow::repositionPopover(PopoverSurfaceId id, Popover const& popov
   }
 }
 
-void MacMetalWindow::dismissPopover(PopoverSurfaceId id) {
+void MacWebGpuWindow::dismissPopover(PopoverSurfaceId id) {
   if (!d || !id.isValid()) {
     return;
   }
@@ -1797,7 +1797,7 @@ void MacMetalWindow::dismissPopover(PopoverSurfaceId id) {
   d->popovers_.erase(it);
 }
 
-void MacMetalWindow::handlePopoverClosed(PopoverSurfaceId id) {
+void MacWebGpuWindow::handlePopoverClosed(PopoverSurfaceId id) {
   if (!d || !id.isValid()) {
     return;
   }
@@ -1816,15 +1816,15 @@ void MacMetalWindow::handlePopoverClosed(PopoverSurfaceId id) {
   d->popovers_.erase(it);
 }
 
-Size MacMetalWindow::currentSize() const {
-  if (!d->window_ || !d->metalView_) {
+Size MacWebGpuWindow::currentSize() const {
+  if (!d->window_ || !d->webGpuView_) {
     return {};
   }
-  NSRect bounds = d->metalView_.bounds;
+  NSRect bounds = d->webGpuView_.bounds;
   return Size{static_cast<float>(bounds.size.width), static_cast<float>(bounds.size.height)};
 }
 
-std::optional<Rect> MacMetalWindow::currentFrame() const {
+std::optional<Rect> MacWebGpuWindow::currentFrame() const {
   if (!d->window_) {
     return std::nullopt;
   }
@@ -1835,7 +1835,7 @@ std::optional<Rect> MacMetalWindow::currentFrame() const {
                      static_cast<float>(frame.size.height));
 }
 
-void MacMetalWindow::setFrame(Rect frame) {
+void MacWebGpuWindow::setFrame(Rect frame) {
   if (!d->window_ || frame.width <= 0.f || frame.height <= 0.f) {
     return;
   }
@@ -1862,35 +1862,35 @@ void MacMetalWindow::setFrame(Rect frame) {
   [d->window_ setFrame:nsFrame display:NO];
 }
 
-bool MacMetalWindow::isFullscreen() const {
+bool MacWebGpuWindow::isFullscreen() const {
   if (!d->window_) {
     return false;
   }
   return ([d->window_ styleMask] & NSWindowStyleMaskFullScreen) != 0;
 }
 
-unsigned int MacMetalWindow::handle() const {
+unsigned int MacWebGpuWindow::handle() const {
   return d->handle_;
 }
 
-void* MacMetalWindow::nativeGraphicsSurface() const {
-  if (!d->metalView_) {
+void* MacWebGpuWindow::nativeGraphicsSurface() const {
+  if (!d->webGpuView_) {
     return nullptr;
   }
-  return (__bridge void*)d->metalView_.layer;
+  return (__bridge void*)d->webGpuView_.layer;
 }
 
-void MacMetalWindow::setMetalLayerPresentsWithTransaction(bool enable) {
-  if (!d->metalView_) {
+void MacWebGpuWindow::setRenderLayerPresentsWithTransaction(bool enable) {
+  if (!d->webGpuView_) {
     return;
   }
-  CAMetalLayer* ml = [d->metalView_ lambdaMetalLayer];
+  CAMetalLayer* ml = [d->webGpuView_ lambdaWebGpuLayer];
   if (ml) {
     ml.presentsWithTransaction = enable ? YES : NO;
   }
 }
 
-std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambdaui::Window& owner) {
+std::unique_ptr<Canvas> MacWebGpuWindow::createCanvas(::lambdaui::Window& owner) {
   (void)owner;
   void* layerPtr = nativeGraphicsSurface();
   if (!layerPtr) {
@@ -1911,7 +1911,7 @@ std::unique_ptr<Canvas> MacMetalWindow::createCanvas(::lambdaui::Window& owner) 
                                    false);
 }
 
-void MacMetalWindow::processEvents() {
+void MacWebGpuWindow::processEvents() {
   if (!d->window_) {
     return;
   }
@@ -1924,7 +1924,7 @@ void MacMetalWindow::processEvents() {
   }
 }
 
-void MacMetalWindow::waitForEvents(int timeoutMs) {
+void MacWebGpuWindow::waitForEvents(int timeoutMs) {
   if (!d->window_) {
     return;
   }
@@ -1945,7 +1945,7 @@ void MacMetalWindow::waitForEvents(int timeoutMs) {
   }
 }
 
-void MacMetalWindow::wakeEventLoop() {
+void MacWebGpuWindow::wakeEventLoop() {
   if (!NSApp) {
     return;
   }
@@ -1970,7 +1970,7 @@ void MacMetalWindow::wakeEventLoop() {
   CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
-void MacMetalWindow::requestAnimationFrame() {
+void MacWebGpuWindow::requestAnimationFrame() {
   bool const wasRequested = d->frameRequested_.exchange(true, std::memory_order_acq_rel);
   if (wasRequested) {
     return;
@@ -1990,11 +1990,11 @@ void MacMetalWindow::requestAnimationFrame() {
   }
 }
 
-void MacMetalWindow::acknowledgeAnimationFrameTick() {
+void MacWebGpuWindow::acknowledgeAnimationFrameTick() {
   d->frameEventQueued_.store(false, std::memory_order_release);
 }
 
-void MacMetalWindow::completeAnimationFrame(bool needsAnotherFrame) {
+void MacWebGpuWindow::completeAnimationFrame(bool needsAnotherFrame) {
   d->frameRequested_.store(needsAnotherFrame, std::memory_order_release);
   if (d->displayLink_) {
     if (!needsAnotherFrame) {
@@ -2013,7 +2013,7 @@ void MacMetalWindow::completeAnimationFrame(bool needsAnotherFrame) {
   }
 }
 
-CVReturn MacMetalWindow::onDisplayLinkTick() {
+CVReturn MacWebGpuWindow::onDisplayLinkTick() {
   Reactive::detail::profile::frameBoundary();
   if (!d->frameRequested_.load(std::memory_order_acquire)) {
     return kCVReturnSuccess;
@@ -2046,7 +2046,7 @@ CVReturn MacMetalWindow::onDisplayLinkTick() {
   return kCVReturnSuccess;
 }
 
-void MacMetalWindow::setModernDisplayLinkPaused(bool paused) {
+void MacWebGpuWindow::setModernDisplayLinkPaused(bool paused) {
   id link = d ? d->displayLink_ : nil;
   if (!link) {
     return;
@@ -2062,7 +2062,7 @@ void MacMetalWindow::setModernDisplayLinkPaused(bool paused) {
   CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
-void MacMetalWindow::setCursor(Cursor kind) {
+void MacWebGpuWindow::setCursor(Cursor kind) {
   if (kind == d->currentCursor_) return;
   d->currentCursor_ = kind;
 
@@ -2090,7 +2090,7 @@ void MacMetalWindow::setCursor(Cursor kind) {
   }
 }
 
-PlatformWindowCapabilities MacMetalWindow::capabilities() const {
+PlatformWindowCapabilities MacWebGpuWindow::capabilities() const {
   return {
       .supportsWindowGlass = true,
   };
@@ -2099,7 +2099,7 @@ PlatformWindowCapabilities MacMetalWindow::capabilities() const {
 namespace platform {
 
 std::unique_ptr<Window> createWindow(const WindowConfig& config) {
-  return std::make_unique<MacMetalWindow>(config);
+  return std::make_unique<MacWebGpuWindow>(config);
 }
 
 } // namespace platform

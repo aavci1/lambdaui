@@ -146,7 +146,7 @@ if(LAMBDAUI_PLATFORM_MACOS AND LAMBDAUI_RENDERER_WEBGPU)
     Graphics/WebGPU/WebGpuCanvas.cpp
     Graphics/WebGPU/WebGpuRenderTarget.cpp
     Platform/Mac/MacApplication.mm
-    Platform/Mac/MacMetalWindow.mm
+    Platform/Mac/MacWebGpuWindow.mm
     Platform/Mac/MacClipboard.mm
   )
 elseif(LAMBDAUI_PLATFORM_LINUX_WAYLAND)
