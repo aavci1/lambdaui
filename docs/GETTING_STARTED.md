@@ -93,7 +93,7 @@ Platform defines exported to consumers:
 - `LAMBDAUI_NATIVE_RENDERERS=1`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=1`, `LAMBDAUI_WEBGPU=0` on native Linux Wayland builds.
 - `LAMBDAUI_NATIVE_RENDERERS=0`, `LAMBDAUI_METAL=0`, `LAMBDAUI_VULKAN=0`, `LAMBDAUI_WEBGPU=1` on WebGPU builds.
 
-Use these defines to guard platform-specific APIs. Legacy Metal/Vulkan entry points such as Vulkan image import require both `LAMBDAUI_NATIVE_RENDERERS=1` and their backend define. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
+Use these defines to guard platform-specific APIs. Legacy Metal/Vulkan entry points such as Vulkan image import require both `LAMBDAUI_NATIVE_RENDERERS=1` and their backend define. WebGPU builds expose borrowed Dawn handles through `webGpuCanvasHandles(canvas)` for resource creation. WebGPU render targets use `WebGpuRenderTargetSpec`; set its `device` and `textureView` fields to render into a caller-owned Dawn/WebGPU texture view.
 
 ## Useful Build Options
 

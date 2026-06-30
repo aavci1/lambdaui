@@ -7,6 +7,7 @@
 
 #include <Lambda/Graphics/Image.hpp>
 #include <Lambda/Graphics/TextSystem.hpp>
+#include <Lambda/Graphics/WebGpuContext.hpp>
 
 #include <algorithm>
 #include <array>
@@ -1078,6 +1079,9 @@ public:
 
   Backend backend() const noexcept override { return Backend::WebGPU; }
   unsigned int windowHandle() const override { return handle_; }
+  WGPUDevice deviceHandle() const noexcept { return context_.device(); }
+  WGPUQueue queueHandle() const noexcept { return context_.queue(); }
+  WGPUTextureFormat renderTargetFormat() const noexcept { return surfaceFormat_; }
 
   void resize(int width, int height) override {
     width = std::max(1, width);
@@ -3069,6 +3073,18 @@ std::unique_ptr<Canvas> createWebGpuExternalRenderTargetCanvas(TextSystem& textS
                                         format);
 }
 
+WebGpuCanvasHandles canvasHandles(Canvas const& canvas) noexcept {
+  auto const* webgpuCanvas = dynamic_cast<WebGpuCanvas const*>(&canvas);
+  if (!webgpuCanvas) {
+    return {};
+  }
+  return WebGpuCanvasHandles{
+      .device = webgpuCanvas->deviceHandle(),
+      .queue = webgpuCanvas->queueHandle(),
+      .renderTargetFormat = webgpuCanvas->renderTargetFormat(),
+  };
+}
+
 void unpremultiplyRgbaPixels(std::vector<std::uint8_t>& pixels) {
   for (std::size_t i = 0; i + 3u < pixels.size(); i += 4u) {
     std::uint8_t const alpha = pixels[i + 3u];
@@ -3131,6 +3147,22 @@ std::shared_ptr<Image> rasterizeToWebGpuImage(Canvas& canvas,
 
 #if LAMBDAUI_WEBGPU
 namespace lambdaui {
+
+WebGpuCanvasHandles webGpuCanvasHandles(Canvas const& canvas) noexcept {
+  return webgpu::canvasHandles(canvas);
+}
+
+WGPUDevice webGpuDevice(Canvas const& canvas) noexcept {
+  return webGpuCanvasHandles(canvas).device;
+}
+
+WGPUQueue webGpuQueue(Canvas const& canvas) noexcept {
+  return webGpuCanvasHandles(canvas).queue;
+}
+
+WGPUTextureFormat webGpuRenderTargetFormat(Canvas const& canvas) noexcept {
+  return webGpuCanvasHandles(canvas).renderTargetFormat;
+}
 
 std::shared_ptr<Image> Image::fromRgbaPixels(std::uint32_t width,
                                              std::uint32_t height,

@@ -23,6 +23,7 @@
 #include <Lambda/Graphics/RenderTarget.hpp>
 #include <Lambda/Graphics/SvgPath.hpp>
 #include <Lambda/Graphics/Styles.hpp>
+#include <Lambda/Graphics/WebGpuContext.hpp>
 #include <Lambda/Graphics/VulkanContext.hpp>
 #include <Lambda/SceneGraph/SceneNode.hpp>
 #include <Lambda/SceneGraph/ImageNode.hpp>

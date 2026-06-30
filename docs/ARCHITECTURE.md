@@ -143,6 +143,7 @@ WebGPU rendering:
 - CAMetalLayer surfaces on macOS and Wayland surfaces on Linux.
 - WGSL pipelines for primitives, paths, images, glyphs, clips, render targets, and frame readback.
 - Offscreen render targets can allocate internal WebGPU textures or render into caller-owned `WGPUTextureView` targets.
+- Consumers can query borrowed `WGPUDevice`, `WGPUQueue`, and render format handles from a WebGPU canvas.
 
 Rendering code is split across:
 
